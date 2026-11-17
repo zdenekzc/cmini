@@ -1,10 +1,16 @@
-# CMini - maly prekladac jazyka C s tridami
+# CMini - a small C compiler with classes
 
-CMini is a compiler for a subset of C++ (classes, inheritance, virtual methods,
-references, predefined types `Sequence<T>` and `Dictionary<K,V>`, `std::string`, `cout`).
+CMini is a compiler for a subset of C++:
+
+- classes
+- single inheritance
+- references
+- predefined types `Sequence<T>`, `Dictionary<K,V>` and `std::string`
 
 - Generates x86-64 code.
 - Translates the source text to plain C (`-C`).
+
+The code generator `instr.c` produces the x86-64 code, and `translate.c` translates the source to plain C. Both files were written by AI.
 
 It is written in C and compiles itself (self-hosting).
 
