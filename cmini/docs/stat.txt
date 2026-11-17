@@ -1,0 +1,25 @@
+stat.c - what the statement parser (stat.c) adds to c-parser
+==========================================================
+
+stat.c is the statement parser of CMini. Compared with stat.cc of the earlier
+project c-parser (/abc/c-parser) it has one new part (comments removed when the
+code was compared). The file grew from 350 to 471 lines (7 -> 9 functions).
+
+New functions in stat.c: IsCondDecl, CondDecl.
+
+
+1. Declaration in a condition
+------------------------------
+
+New functions: IsCondDecl, CondDecl (stat.c).
+
+In an if, while or switch condition a variable can be declared with an
+initialiser:
+
+    if (T x = e) ...        while (T x = e) ...        switch (T x = e) ...
+
+CondDecl makes a block { T x = e; } with its own scope; the statement inside is
+parsed in that scope and the block is closed after it. The expression that is
+the value of the condition is the variable x itself. IsCondDecl decides that a
+condition starts with a declaration (and not with a functional cast like
+string (x) or with T::f ()).

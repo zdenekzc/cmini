@@ -1,0 +1,102 @@
+expr.c - what the expression parser (expr.c) adds to c-parser
+===========================================================
+
+expr.c is the expression parser of CMini. Compared with expr.cc of the earlier
+project c-parser (/abc/c-parser) it has these new parts (comments removed when
+the code was compared).
+
+Summary of the new functions in expr.c:
+
+    std::string        IsStringLike, StringMethod, StringConstruct,
+                       StringResult, CheckStringOperand
+    containers         IsContainer, ContainerMethod
+    cout, cerr, endl   IsStreamName, IsStreamMarker, StreamMarker, StreamOut,
+                       StreamCall, OutCall
+    casts, classes     CastNode, DynamicCastNode, IsPolymorphic, IsBaseOf
+    other              ImplicitFunction, InitTypes, IsDecl, IsType, SameType,
+                       MethodParam, NumConst, TypeName, postfix_tail, declarator,
+                       declaration_specifiers, Std
+
+Size: expr.c is 1870 lines without comments against 1042 in c-parser (58 -> 88
+functions).
+
+
+1. std::string
+--------------
+
+New functions: IsStdString, IsStringLike, IsStringName (decl.c), StringMethod,
+StringConstruct, StringResult, CheckStringOperand (expr.c).
+
+  - the type "string" and "std::string" are recognised (IsStringName in decl.c,
+    IsStdString in expr.c);
+  - member functions: c_str (), length (), size (), empty (), substr (pos = 0,
+    n = npos), find (s, pos = 0), rfind (s, pos = npos), clear (). reserve is
+    accepted and has no effect (StringMethod);
+  - operators + += = == != < <= > >= (CheckStringOperand, the operands must be
+    a string, a char pointer or a character);
+  - constructors string s (p, n) (n characters from p) and string (n, c)
+    (n times the character c) (StringConstruct);
+  - a string in a char array argument: CheckStringOperand also accepts a char
+    array (char msg [512]).
+
+The runtime representation is a char pointer; the code generator and the C
+translator call the runtime library functions for these operations (see
+cmini/docs/instr.txt, section 14, and cmini/docs/translate.txt, section 7).
+
+2. Sequence <T> and Dictionary <K, V>
+-------------------------------------
+
+New functions: IsContainer, IsContainerName, ContainerArg, ContainerType
+(decl.c, expr.c), ContainerMethod (expr.c).
+
+  - the names Sequence and Dictionary are built-in template types. They are
+    recognised by name (IsContainerName), unless the program declares its own
+    type with that name;
+  - their element types are given in the declaration: Sequence <int>,
+    Dictionary <string, int>, nested in classes and as members;
+  - the methods of Sequence and Dictionary are built into the parser and
+    checked by ContainerMethod (see cmini/docs/instr.txt, section 14, for the
+    code that is generated for them).
+
+3. cout, cerr, endl
+-------------------
+
+New functions: IsStreamName, IsStreamMarker, StreamMarker, StreamOut,
+StreamCall, OutCall (expr.c).
+
+  - cout << a << b << endl; is parsed as a chain of output operations. In
+    primary expressions cout, cerr and endl are only a marker (an identifier
+    without an object); shift_expr turns the chain into calls (StreamOut);
+  - each operand is printed by a call of printf (stdout) or dprintf (2, ..., for
+    cerr). The format is chosen by the type of the operand (StreamCall):
+    the format is chosen by the type of the operand (see StreamCall for the
+    cases); endl gives a newline;
+  - a declared variable named cout takes precedence over the marker (it is not
+    a stream then);
+  - cerr is tied to cout: stdout is flushed first (fflush (0)).
+
+Output with cout is not a call of the C++ library; it is printf. There are no
+other streams (fstream and general iostreams are not supported; see
+README.md).
+
+4. Casts and polymorphic classes
+--------------------------------
+
+New functions: CastNode, DynamicCastNode, IsPolymorphic, IsBaseOf (expr.c).
+
+  - static_cast <T> (e) and (T) e: CastNode (the type is the name of a type
+    with pointers and qualifiers, see TypeName);
+  - dynamic_cast <T *> (p) and dynamic_cast <T &> (x): DynamicCastNode. The
+    check is made at run time with the class information of the object (see
+    cmini/docs/translate.txt, section 4);
+  - a cast to a base class without a runtime check is marked by "^" (id of the
+    node) in the comment of DynamicCastNode;
+  - IsPolymorphic: a class with virtual methods (also inherited); IsBaseOf
+    decides whether a class is a base of another class.
+
+Where to look for what (expr.c):
+
+    std::string operations             StringMethod, StringConstruct, CheckStringOperand
+    Sequence and Dictionary methods    ContainerMethod
+    cout, cerr, endl                   StreamOut, StreamCall, OutCall
+    casts                              CastNode, DynamicCastNode
