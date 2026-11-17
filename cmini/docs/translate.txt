@@ -1,0 +1,262 @@
+translate.c - the translator from CMini to C
+============================================
+
+This document explains cmini/translate.c: what it does, how the output C
+program is built, and how the parts of the file fit together. Line numbers
+refer to the file as it is in the repository now. The detailed rules are in
+the comments next to each function; this text gives the overview.
+
+
+1. Purpose and place in the compiler
+------------------------------------
+
+translate.c is the second back end of CMini. Instead of machine code (instr.c)
+it writes a C program (C99) that uses the runtime library cminirt.h and
+cminirt.c. It is started with the -C switch of cmini.bin:
+
+    cmini.bin -C [-I directory] [-iquote directory] [-D name[=value]]
+              [-o output.c] file.cc
+
+Without -o the C text goes to standard output. The result is compiled with gcc
+or TinyCC; cminirt.c must be linked with it.
+
+The translator uses the same front end as the code generator:
+
+    source.cc --> lexer (lexer.c, lex.c) --> declarations (decl.c, expr.c,
+                  stat.c, sem.c) --> lists of declarations (glist, classlist,
+                  printlist) --> translate.c --> C text
+
+So translate.c does not parse the source itself. It walks the declarations and
+the statements that the parser has built (struct Object, struct Type,
+struct Expr, struct Stat from decl.h) and prints their C equivalent.
+
+The file is written in plain C, and it is itself translated by cmini
+(test_instr_lexer.bin -0). Because of this, the code avoids variadic functions
+and uses small helper macros (see section 2).
+
+
+2. Output text
+--------------
+
+All text is produced by a few helpers (lines 51-210):
+
+    Fmt (format, ...)      formatted text in newly allocated memory
+    PutF (format, ...)     formatted text into the current output section
+    Put, PutLn             text / text and a new line
+    PutFmtBuf              text from the shared buffer FmtBuf (FMT_MAX bytes)
+    BufAddChr, BufText     the BUF type: growing text buffer (text, len, cap, ind)
+
+The output is not written in one pass. The program is split into six BUF
+sections, which are printed in this order at the end (Translate, line ~3194):
+
+    SecTypedef   typedef struct T T;
+    SecTypes     type definitions and constants
+    SecProto     function prototypes
+    SecVars      global variables and virtual method tables
+    SecFuncs     functions from the source text
+    SecGen       generated functions (constructors, new, delete, cm_global_init)
+
+Section (BUF *) switches the current output buffer and returns the old one.
+Every piece of generated code is put into the right section by switching to it
+first (for example, Proto puts a prototype into SecProto). BeginCapture and
+EndCapture collect text into a string instead of a section.
+
+Indentation is kept in the variable Ind (Ind ++ / Ind --).
+
+
+3. Input, system headers and includes
+-------------------------------------
+
+  - TrStart (line ~3364) reads the source text (ReadFile), sets the file name,
+    predefines __CPARSER__ = 1, and initialises the lexer and the declarations.
+  - TrIncludeDir (-I, -iquote) and TrDefine (-D) pass options to the lexer.
+  - InternFile remembers the file each declaration came from (Origin).
+  - SystemHeader decides whether a declaration comes from a replacement system
+    header (cmini/ownheaders/, for example cstdio). For those declarations the
+    translator does not print a definition; it prints #include <stdio.h>
+    instead (AddHeader). MarkSysTypes marks types that come from system headers.
+  - Translate prints the standard headers (stdio.h, stdlib.h, string.h,
+    stddef.h, stdint.h, stdbool.h, ctype.h, assert.h), then every extra header
+    that was requested, and cminirt.h. If unistd.h is used, _POSIX_C_SOURCE is
+    defined first (fork, mkdtemp and similar need it).
+
+
+4. Naming in the generated C
+----------------------------
+
+  class T             struct T with all members; the base members come first,
+                      so a T-derived pointer can be cast to a base pointer
+  method T::f         T_f (T * this, ...)
+  constructor         T_ctor (T * this) returns this (CtorRef, CtorParams)
+  destructor          T_dtor (DtorRef)
+  new T (...)         T_new (...), new array T_new_array (NewArrayRef)
+  delete p            T_delete (p) (DeleteRef)
+  virtual table       T_vtbl; a virtual call goes through T_f_virtual
+                      (DispatchRef, VtableRef); the class information used by
+                      dynamic_cast is T_cm_info (InfoRef)
+  std::string         cm_string (char *; "" for an empty string)
+  Sequence<T>         cm_Seq and macros CM_SEQ_AT, CM_SEQ_ADD, ... (cminirt.h)
+  Dictionary<K,V>     cm_Dict and macros CM_DICT_REF, CM_DICT_GET, ... (cminirt.h)
+  reference T & x     pointer T * x; uses are written as (*x)
+  global constructor  cm_global_init (CM_CONSTRUCTOR), run before main
+  global destructors  registered with atexit, at the end of cm_global_init
+
+The names are made by ClsName, MethodName, FName and FuncName.
+
+
+5. The main steps (Translate)
+-----------------------------
+
+Translate (line ~3194) runs these steps in order:
+
+  a) RenameHiddenFields: in C all members of a struct share one name space,
+     but in C++ a derived class may repeat the name of a base member or of a
+     typedef. Such names are renamed: a nested typedef T::x becomes T_x, and a
+     member that hides a base member becomes x_T.
+
+  b) System headers: every declaration from a system header is looked at, and
+     the needed headers are recorded (AddHeader, MarkSysTypes).
+
+  c) Types, functions and variables from the source text, in the order of the
+     source (GlobalItem for each object of printlist). Functions from system
+     headers are skipped except for those with a body (for example in
+     cmini/ownheaders/cstdio).
+
+  d) Classes: EmitTypeDef writes the struct definition for every class in
+     classlist (even if unused), and EmitInClassBodies writes the bodies of the
+     methods that are defined inside the class.
+
+  e) Generate () and GenGlobalInit () (see section 6): the generated functions
+     are written, and the global constructors are collected into cm_global_init.
+     Generate is run again after GenGlobalInit, because it can ask for more code.
+
+  f) The output is printed: the C header lines, then the six sections.
+
+
+6. Requests: code that is generated on demand
+---------------------------------------------
+
+Some code is needed only when it is used: a constructor for a class without one,
+new / delete, a destructor for a class with a destructor. For these, the code
+asks for the code with a request, not directly:
+
+  - CtorRef, DtorRef, NewRef, DeleteRef, CopyRef, VtableRef and InfoRef return
+    the name of the function or table, and mark it as wanted in the class data
+    (CLS, GetCls, ComputeSlots). The prototype is written at once (Proto).
+  - Generate () calls GenClass for each class until no new request appears
+    (the flag more). GenClass writes the bodies of the wanted functions into
+    SecGen: the constructor (CtorPrologue, then return this), the destructor
+    (DtorEpilogue), new and delete, and the virtual method table.
+
+This is why Translate calls Generate before and after GenGlobalInit.
+
+
+7. Expressions
+--------------
+
+The expression translator is Ex (line ~1797): a switch over the operator
+(expr->op) that writes the C text of one expression. Related helpers:
+
+  - ExP / ExprText: writes an expression with parentheses when needed
+    (IsPrimary decides).
+  - Addr (line ~1166): an address-of expression, for example &x or the address
+    of a reference.
+  - IdentExpr: a variable name, with the reference case (use (*x)) and the
+    member case of this (ThisExpr).
+  - ExTo (line ~1225): an expression converted to a target type (for example a
+    string or a class pointer) - the place for implicit conversions.
+  - Call (line ~1530), MethodCall (line ~1510), ArgList and SplitArgs: function
+    and method calls, default arguments and references in the arguments.
+  - SeqMethod, DictMethod, StringMethod: the methods of Sequence, Dictionary
+    and std::string. They are written as calls of the macros or functions in
+    cminirt.h (CM_SEQ_ADD, CM_DICT_REF, cm_string ...).
+  - NewExpr, DeleteExpr, CastExpr, DynCastExpr, AssignExpr: the corresponding
+    operators.
+  - InitList: initialisers of arrays and structs.
+
+
+8. Statements, scopes and destructors
+-------------------------------------
+
+St (line ~2358) writes one statement. Block (line ~2201) writes a compound
+statement and manages the scope. The scopes are a stack (PushScope,
+PopScope, the SCOPE record).
+
+Local objects with a destructor are registered in their scope (AddDtorObj).
+When control leaves a scope, the destructors are called in reverse order:
+
+  - at the end of a block (DestroyScope),
+  - before return (ReturnStat calls DestroyUpTo for all scopes),
+  - before break and continue (JumpStat, FindLoop finds the scope of the loop,
+    PendingDtors decides which destructors must run).
+
+Other statements:
+
+  - RangeForStat (line ~2281): for (T x : seq) over a Sequence, written as a
+    counting loop with CM_SEQ_AT;
+  - ForInit, LoopBody, IsJump: help for for, while, do and the jumps;
+  - LocalDecl (line ~2516) writes local variables, with ConstructVar for objects
+    that need a constructor.
+
+
+9. Declarations and function bodies
+-----------------------------------
+
+  - FuncProto writes the prototype of a function (FullHead, FuncName, StorageOf).
+  - FuncBody (line ~2684) writes a function body. A constructor begins with
+    CtorPrologue (base constructor, table pointer, members) and a destructor
+    ends with DtorEpilogue (members and base destructors).
+  - GlobalVar and GlobalItem (lines ~2855, ~2905) write global variables and
+    functions. IsConstExpr and IsIntConstObj decide when an initial value can
+    be written as a C constant.
+  - EmitStaticMembers writes the static members of a class.
+
+
+10. Types in C
+--------------
+
+  - TypeDecl, TypeName, ObjDecl and Declarator (lines ~540-605) write C
+    declarations of types, for example pointers to arrays and functions.
+  - ParamsText and FuncHead write parameter lists (with default values removed).
+  - EmitTypeDef and StructBody write struct definitions, including the vtable
+    pointer of polymorphic classes (FieldsText).
+  - EnumBody writes enumerations.
+  - EnsureTypes makes sure that every type a declaration uses is written first.
+
+
+11. The API used by cmini.bin
+-----------------------------
+
+The functions at the end of the file are called from instr_drv.c:
+
+    int  TrStart (const char * src)              read the source, set up lexer
+    int  TrTranslate (src, out_name)             translate src to a C file
+    void TrIncludeDir (char * dir)               -I and -iquote directories
+    void TrDefine (char * arg)                   -D name[=value]
+
+TrTranslate calls TrStart, reads all global declarations (GlobalDecl) and
+records the file of each one, then calls Translate and writes the result to
+out_name (or to standard output).
+
+The functions Error, OpenInp, CloseInp, NextChar, OpenOut, CloseOut, Indent,
+Unindent, PutChr and PutStr (lines ~3290-3338) are the small input and output
+interface that the lexer and parser expect. Most of them do nothing in the
+translator; the output goes through the BUF sections instead.
+
+
+12. Where to look for what
+--------------------------
+
+    changing the output of a class           EmitTypeDef, StructBody, GenClass
+    changing a method call                   Call, MethodCall, DispatchRef
+    changing the destructor order            DestroyScope, DestroyUpTo, PendingDtors
+    changing a loop or jump                  St, FindLoop, RangeForStat
+    changing the header list                 Translate, AddHeader, SystemHeader
+    changing names in the C text             ClsName, MethodName, FuncName, FName
+    testing                                  tests/03-cmini-c.sh, tests/examples/*.cc
+                                             (translated to C, compiled, compared
+                                             with tests/examples/expected/)
+
+Related documents: cmini/docs/instr.txt (the code generator), cmini/cminirt.h
+(the runtime macros and functions used in the output), CHANGELOG.txt (history of
+the translator, chapters 25, 27, 32 and 37).

@@ -1,0 +1,405 @@
+instr.c - the x86-64 code generator of CMini
+==============================================
+
+This document explains cmini/instr.c: what it does, how its code is organised,
+and how the main parts fit together. Line numbers refer to the file as it is
+in the repository now. Most of the detail is in the comments next to each
+function; this text gives the overview.
+
+
+1. Place in the compiler
+------------------------
+
+    source.cc --> lexer / parser (lex.c, decl.c, expr.c, stat.c, sem.c)
+              --> syntax tree (struct Expr, struct Stat, decl.h)
+              --> instr.c  (this file)
+              --> list of assembler instructions (asm/asmlist.h)
+              --> pasm (asm/libpasm.a, used as a library)
+              --> ELF64 object or executable
+              --> run, or save
+
+instr.c takes the declarations and the function bodies that the parser has
+built and produces an assembler program for x86-64. It never writes the
+assembler text itself as its main data; it builds a linked list of
+instructions (AsmNode, AsmOp) and hands that list to the pasm library. The
+assembler text is only produced on demand (saveAsm, for -S and -o).
+
+The generator is written in plain C (no classes, no C++), so that it can be
+compiled by gcc, by TinyCC and by CMini itself (bootstrap). Because of this,
+it only uses the subset of C that CMini supports (structs with 8-byte members,
+no function pointers in its own data, no structs passed by value).
+
+Compiler switches that influence the output are set in instr.h:
+
+    InstrOutputFile   save the executable (and name.asm, name.lst), do not run it
+    InstrAsmFile      save the assembler text (-S), also when pasm fails
+    InstrObjectFile   create only an ELF64 object file (-c)
+    InstrToaru        standalone program for ToaruOS (-T): own library, pasm -e -T
+    InstrToaruLib     program with the ToaruOS libc from a directory (-L DIR)
+    CPARSER_RTL=own   environment variable: own runtime library, no glibc
+    CPARSER_ASMLIST   environment variable: "text" = pasm reads the assembler text
+    CPARSER_CC        environment variable: the C compiler used for linking (gcc)
+
+
+2. Public interface (instr.h)
+-----------------------------
+
+    long runInstructions (int verbose);
+        translates the global declarations (glist), runs main, returns its
+        result; verbose prints the listing (prog.lst)
+
+    void instructions (void);
+        the same, prints "main returned N"
+
+    long InstrLink (char * * inputs, int n_inputs, const char * out);
+        links several object files and libraries (-c objects, -lm, ...);
+        with out == NULL the program is run
+
+    static state (initState / freeState)
+        the generator state is global. initState runs before every compilation
+        and freeState after it, so one process can compile several programs.
+
+
+3. Main flow: run ()
+--------------------
+
+run () (line ~2721) is the heart of the file. In order:
+
+  a) Choose the mode.
+       use_libc = glibc is used (gcc links the program, default);
+       otherwise the program is standalone (pasm -e, own runtime library).
+       -T and -L are checked for conflicts; -c requires glibc.
+
+  b) startProgram () writes the program skeleton: the data segment (RTL_DATA,
+     RTL_STR_DATA), the code segment (RTL_CODE, RTL_STR_CODE) and, for glibc,
+     an init_array entry for the global constructors. The cursor is left in
+     the code segment.
+
+  c) Labels are assigned to every function, constructor and method that has a
+     body (setFceLabel): main gets the label FMAIN, the others F<n>. The
+     public functions of an object file are recorded with addPublic.
+
+  d) allocGlobals () places the global variables in the data segment.
+
+  e) codeDecl () for each global declaration, codeFunction () for each
+     constructor and method, then the functions in glist.
+
+  f) codeGlobalInit () (CINIT) and codeGlobalFini () (CFINI) build the code
+     that constructs global objects before main and destroys them after it.
+
+  g) The implicit constructors and destructors that were requested during the
+     generation are generated (the list can grow while we work), and the
+     virtual method tables (codeVtables).
+
+  h) finishProgram () adds the EXTRN and PUBLIC directives (only known now)
+     and the runtime library function main (RTL_LIBC_MAIN) for glibc.
+
+  i) The assembler runs in a temporary directory (TempDir_new):
+       assemble (dir, "-c")  => prog.o    (glibc, or object mode)
+       assemble (dir, "-e")  => prog.bin  (standalone; pasm -e, ELF64)
+     then linkProg / linkToaru link prog.o with the libc (see section 11).
+
+  j) If an output file was requested the program is copied out and the
+     function returns 0. Otherwise execute () runs the program and returns the
+     result of main.
+
+
+4. Program skeleton and sections
+--------------------------------
+
+The program has these sections (set by startProgram / finishProgram):
+
+    data   runtime data (RTL_DATA), global variables, string constants,
+           virtual method tables, static initialisers
+    code   runtime code (RTL_CODE), functions, constructors, destructors
+
+Some pieces of the program are kept as plain text blocks (textLines): the
+runtime library written in assembler. The blocks are defined in the file as
+RTL_DATA, RTL_CODE, RTL_LIBC_DATA, RTL_LIBC_CODE, RTL_LIBC_MAIN, RTL_STR_DATA
+and RTL_STR_CODE. The functions printf, putchar, puts, abs, labs, rand, srand,
+time and exit are written in this assembler (section 6). Functions that are not
+in this list are taken from glibc (glibc mode) or from the ToaruOS libc (-L).
+
+Two cursors are used while building the list: ext_cur (EXTRN/PUBLIC directives,
+added at the end) and data_cur / code_tail (places for the data and the
+libc main).
+
+The result of main is written by the generated program to file descriptor 3
+(see section 10); the process exit code only has 8 bits.
+
+
+5. Building instructions
+------------------------
+
+Instructions are built with small helpers (near line 3069):
+
+    ins0 (k), ins1 (k, a), ins2 (k, a, b), ins3 (k, a, b, c)
+        one instruction; k is a keyword from asm/key.h (iMov, iPush, iCall ...)
+    note (node, "text")        attaches a comment to the instruction
+    comment ("text"), blank (), bind ("label")
+        comment line, empty line, label definition
+    insPrefix (prefix, k)      instruction with a prefix, for example
+                               insPrefix (iRep, iMovsb) in copyBytes
+
+Operands:
+
+    gp (Register)              general register (RAX, RCX, R11 ...)
+    xreg (n)                   XMM register n
+    imm (v), imm_hex (v)       immediate number
+    qword_ptr (b, off)         [b + off], 8 bytes (also byte_ptr, any_ptr)
+    any_ptr_idx (b, i, s, off) [b + i * s + off]
+    qword_lab (label)          [label] - memory at a global label
+    alab (label)               address of a label (lea rax, S5)
+    jlab (label)               jump / call target (jmp L5, call F3)
+    sized_ptr (size, b, off)   memory operand of a given size
+
+Labels are created by newLabel ("F", "L", "S" ...) and are numbered.
+Labels for functions and objects are kept in dictionaries (fce_labels,
+label_objs). String constants use S<n> labels (stringLabel), global variables
+use G<n> labels (allocGlobal), functions and methods use F<n>.
+
+
+6. Values, registers and the stack model
+----------------------------------------
+
+The generator uses a simple stack model:
+
+  - The result of every expression is left in RAX.
+  - Intermediate results are saved with push / pop (push, pop).
+  - RCX, RDX and R11 are auxiliary registers; RDI, RSI, R8, R9 are used for
+    arguments of calls.
+  - Floating point values are kept in XMM0 (and XMM1 for the second operand);
+    toXmm / fromXmm move them to and from RAX.
+
+Sizes:
+
+  - Every scalar variable (int, bool, char, pointer, enum, ...) takes 8 bytes in
+    a slot. Arrays of char and characters after pointers take 1 byte.
+  - loadSized / storeSized move values of 1, 2, 4 or 8 bytes; signed and
+    unsigned values are extended with normalizeSize / normalizeTo.
+  - promoted, arithType and convert apply the usual C conversions
+    (integer promotion, usual arithmetic conversion, int <-> float).
+
+Frames: every function has the frame
+    push rbp / mov rbp, rsp / sub rsp, N ...  mov rsp, rbp / pop rbp / ret
+Parameters and local variables are at [rbp - offset] (variable, allocLocal,
+collectLocals). The stack size N is computed in codeFunction, after the body
+has been generated (frame_size).
+
+
+7. Expressions
+--------------
+
+codeExpr (line ~6642) is a switch over the operator of the expression (expr->op):
+
+  - constants: NUM, CHR, FLT, TRUE_, FALSE_, NULLPTR_, STR (constants are
+    folded where possible: constValue, fpConstValue);
+  - variables and memory: IDENT, PERIOD, ARROW, LBRACK, DEREF, ADR (&),
+    variable, codeVarAddress, codeAddress, codeLoad;
+  - arithmetic and bit operations: PLUS, MINUS, ASTERISK, SLASH, MOD, SHL, SHR,
+    AND, OR, XOR, comparisons, unary operators (codeBinary, codeOperation,
+    codeFpBinary for float and double, codePointerArith for pointers);
+  - logic: LOGAND, LOGOR, LOGNOT, QUESTION (codeAndOr, codeConditional);
+  - assignments and increments: ASSIGN and the compound operators (codeAssign,
+    codeFpAssign, codeIncDec);
+  - calls and object creation: FCE (codeCall), NEW_ (codeNew), DELETE_
+    (codeDelete), THIS_ (codeThis), SIZEOF_;
+  - casts: (T) e, static_cast, dynamic_cast (codeCast, codeDynamicCheck).
+
+Comparisons and logic operators produce 0 or 1 in RAX (codeBoolValue).
+
+Sequences and dictionaries (section 9) and std::string have their own paths in
+the same switch (codeContMethod, codeDictMethod, codeStringValue).
+
+
+8. Calls and parameters
+-----------------------
+
+codeCall (line ~6401) generates a call of a function, a method, a constructor
+or a function pointer (codeIndirectCall). passArgs (line ~6285) places the
+arguments:
+
+  - hidden parameters first: the this pointer (for methods), then the address
+    of the result for a struct returned by value (sret_off);
+  - the remaining arguments follow the System V AMD64 convention:
+    integers in RDI, RSI, RDX, RCX, R8, R9, floating point values in
+    XMM0..XMM7, the rest on the stack. classifyArgs (line ~6234) decides where
+    each argument goes;
+  - a struct passed by value is copied qword by qword into integer registers
+    when it has up to 16 bytes, otherwise it is copied onto the stack;
+  - codeArg handles one argument (including default arguments, addDefaultArgs).
+
+The called function returns its result in RAX (integers and pointers) or XMM0
+(float, double). Structs that are returned by value use the sret address.
+
+
+9. Functions, statements and loops
+----------------------------------
+
+codeFunction (line ~4834):
+  - sets up the labels (epilogue_label), the parameter list and the frame;
+  - copies the parameters from the registers into their stack slots;
+  - generates the body with codeStat, then the epilogue: destruction of the
+    local objects (destroyLocals), mov rsp, rbp, pop rbp, ret.
+
+codeStat (line ~7839) dispatches the statement kinds:
+
+  - SIM / LBRACE  compound statement (codeCompoundStat);
+  - DECL          declaration of a local variable (codeLocalDecls, codeLocalInit);
+  - IF_           codeIf; WHILE_ codeWhile; DO_ codeDo; FOR_ codeFor;
+  - for (T x : seq) range-based loop over a Sequence (codeRangeFor);
+  - SWITCH_ codeSwitch (with CASE_ and DEFAULT_, collectCases);
+  - RETURN_       codeReturn (returns the value and runs the destructors);
+  - BREAK_, CONTINUE_ and GOTO_ with labels (LoopLabels, userLabel).
+
+Loops keep the labels for break and continue in a LoopLabels record
+(LoopLabels_new). Local objects that need a destructor are registered in
+cleanup (cleanupAdd) and destroyed at the end of their block (destroyLocals,
+hasLocalsToDestroy).
+
+
+10. Running the program and the result
+--------------------------------------
+
+execute (line ~2996) runs the program produced by pasm (prog.bin):
+
+  - the program is started with a pipe; its descriptor 3 is the write end;
+  - the program writes the 64-bit result of main to descriptor 3 (the
+    environment variable CPARSER_RESULT=3 tells the runtime library);
+  - the parent reads the result from the pipe and waits for the process;
+  - if the program was terminated by a signal, an error is reported;
+  - if no result arrived, the exit code is returned (exit () called by the
+    program), or "Program failed" if it did not exit normally.
+
+The exit status of the process would only give 8 bits, which is why the pipe
+is used.
+
+
+11. Assembling and linking
+--------------------------
+
+assemble (dir, mode) (line ~2901) calls the pasm library:
+  - "-c": ELF64 relocatable object (prog.o), for gcc or for the libc;
+  - "-e": standalone ELF64 executable (prog.bin); with -T the program is placed
+    at 0x3F000000 for ToaruOS (PASM_TOARU).
+The listing (prog.lst) is always written.
+
+linkProg (glibc, the default):  gcc -no-pie prog.o -o prog.bin -lm
+linkFiles: the same with several objects and libraries; an undefined
+    function is reported as "Undefined function: name".
+linkToaru (-L DIR):  the static linker of pasm (PasmLink) with
+    DIR/crt0.o, crti.o, prog.o, libc.a, crtn.o.
+runTool runs a tool in the temporary directory and captures its output.
+
+
+12. Data: static initialisers and string constants
+--------------------------------------------------
+
+Global variables and objects are allocated by allocGlobal (line ~4666) and
+their initial values are written by staticInit / staticBytes / staticOffset
+(for initialisers of arrays, structs and pointers to labels). emitBytes writes
+raw data, dataQ writes one 8-byte item.
+
+String constants are placed once in the data segment (stringConstLabel,
+stringLabel) with a label S<n>. Strings used as std::string values are
+allocated at run time by the runtime library (RT_CALLOC and the string
+functions in RTL_STR_CODE).
+
+
+13. Classes and objects
+-----------------------
+
+  - Layout (structBytes, memberOffset, typeBytes, typeAlign): base class
+    members first, then the pointer to the virtual method table (only in a
+    polymorphic class), then the own members. Each member is 8 bytes unless it is
+    an array or a char member (see section 6). The base class is at the start of
+    the object, so a pointer to the derived class can be used as a pointer to
+    the base class without offset.
+
+  - Virtual methods (vtableSlot, vtableLabel, codeVtables): every polymorphic
+    class has a table VT<n> in the data segment; a virtual call loads the table
+    from the object and calls the slot. Methods that are not overridden keep the
+    slot of the base class; pure virtual methods call the runtime function RT_PURE.
+
+  - Constructors: constructVar, callCtor, callCtor0, codeCtorPrologue (base
+    constructor, virtual table pointer, members, body, return this) and
+    codeImplicitCtor for classes without a constructor.
+
+  - Destructors: destructVar, codeDtorEpilogue, codeImplicitDtor, codeDelete
+    (delete p calls the destructor and frees the memory with the runtime library).
+
+  - Global objects: their constructors run in CINIT before main and their
+    destructors in CFINI after main.
+
+  - Note: the comment at the top of the file says that destructors are only
+    compiled and that delete is not there yet. codeDelete exists in the file,
+    so the top comment is out of date.
+
+
+14. Built-in containers: Sequence, Dictionary, std::string
+----------------------------------------------------------
+
+Sequence <T> (dynamic array) and Dictionary <K, V> (hash table) are built into
+the generator, not into a library. Their methods are generated inline:
+
+  - codeContMethod, codeContValue, collectContMembers, contSlotAddr and
+    contHandle handle add, get, size, contains, clear and the other methods of
+    Sequence (a method call is turned into an access to the container's slots);
+  - codeDictMethod handles the Dictionary methods (store, get, contains, ...);
+  - elemKind, storeElem, boxElem and unboxElem convert the element values
+    (int, float, string, pointer) to and from the 8-byte slots of the
+    container; dictKind classifies the key type;
+  - codeContElemAddress produces the address of seq [i] or dict [k].
+
+std::string is a pointer to a NUL-terminated string allocated by the runtime
+library (codeStringValue, strTemp). String operations (+, +=, ==, <, length(),
+c_str()) are generated as calls to the runtime functions in RTL_STR_CODE.
+
+Temporary values of these types (a container or string returned by a function)
+must be released after use. The generator keeps track of them with
+pending_temps and the ownership functions (ownedTemp, exprOwned, statOwned,
+allocTemp, incOwned, decOwned, releaseTemps, copySlots).
+
+
+15. Errors
+----------
+
+InstrError (line ~144) reports an error of the program being compiled with
+the context InstrContext (the name of the function) and stops the generator
+with a non-zero result. Messages from pasm and from the linker are passed
+through (assemble, linkFiles).
+
+
+16. Helper data types
+---------------------
+
+instr.c uses the helper types from util.h (shared with translate.c):
+
+    Str / Cat / Cat3 / SubStr / IntStr    strings; they are allocated and not freed
+                                          (the generator runs once per compilation)
+    Seq                                   dynamic array of long values
+    Dict, SDict                           hash tables with a key number or pointer,
+                                          or with a string key
+    Queue                                 queue of declarations and statements
+
+The declarations and statements come from decl.h (struct Expr, struct Stat,
+struct Object, struct Type). Their fields that the generator uses are documented
+next to each use in the code.
+
+
+17. Where to look for what
+--------------------------
+
+    changing the code for a statement    codeStat and the code* function it calls
+    changing an operator                 codeExpr, codeBinary / codeOperation
+    changing the calling convention      passArgs, classifyArgs, codeArg
+    adding a runtime library function    RTL_CODE (and RTL_DATA if it needs data)
+    changing the program layout          startProgram, finishProgram
+    changing class layout or vtables     structBytes, memberOffset, codeVtables
+    changing the output for -c / -T / -L run, assemble, linkProg, linkToaru
+    checking the generator           tests/03-cmini-c.sh, make test-quick,
+                                     tests/examples/*.cc with tests/examples/expected/
+
+Related documents: CHANGELOG.txt (history of the generator, chapters 15 - 24 and
+the later chapters on the pure C version), asm/README.txt (the assembler pasm),
+cmini/ownheaders/README.txt (the replacement C library headers).
