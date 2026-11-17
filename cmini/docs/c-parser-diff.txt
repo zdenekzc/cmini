@@ -1,0 +1,232 @@
+c-parser vs cmini: what was added to the parser
+=================================================
+
+The parser of CMini (cmini/decl.c, cmini/expr.c, cmini/stat.c) grew out of the
+parser of the earlier project c-parser (/abc/c-parser, the files decl.cc,
+expr.cc and stat.cc, single commit "Initial commit"). This document lists the
+features that exist in cmini and not in c-parser. Comments that were only
+translated from Czech into English are not counted as changes.
+
+Comparison method: the code of both versions was compared with comments
+removed. The number of functions was compared by name, and each new function
+was read with its comment. Features were checked in both trees by searching
+for their keywords and names; none of the features below is present in
+c-parser (decl.cc, expr.cc, stat.cc, lex.cc).
+
+Size of the three files (without comments):
+
+    file        c-parser   cmini
+    decl        882        2139 lines (51 -> 91 functions)
+    expr        1042       1870 lines (58 -> 88 functions)
+    stat        350        471 lines (7 -> 9 functions)
+
+
+1. Summary
+----------
+
+    Feature                                  Where            Section
+    std::string (type, methods, operators)   expr.c, decl.c    2
+    Sequence <T>, Dictionary <K, V>          expr.c, decl.c    3
+    cout, cerr, endl (<<)                    expr.c            4
+    dynamic_cast, static_cast, casts         expr.c            5
+    namespaces (namespace X, X::)            decl.c            6
+    constructors, destructors, implicit      decl.c            7
+      constructor, member initialisers
+    default parameter values, overloading     decl.c            8
+    deferred bodies of class members         decl.c            9
+    token replay (lookahead in declarations) decl.c            10
+    declaration in a condition               stat.c            11
+    polymorphic classes and base checks      expr.c            5
+
+
+2. std::string
+--------------
+
+New functions: IsStdString, IsStringLike, IsStringName (decl.c), StringMethod,
+StringConstruct, StringResult, CheckStringOperand (expr.c).
+
+  - the type "string" and "std::string" are recognised (IsStringName in decl.c,
+    IsStdString in expr.c);
+  - member functions: c_str (), length (), size (), empty (), substr (pos = 0,
+    n = npos), find (s, pos = 0), rfind (s, pos = npos), clear (). reserve is
+    accepted and has no effect (StringMethod);
+  - operators + += = == != < <= > >= (CheckStringOperand, the operands must be
+    a string, a char pointer or a character);
+  - constructors string s (p, n) (n characters from p) and string (n, c)
+    (n times the character c) (StringConstruct);
+  - a string in a char array argument: CheckStringOperand also accepts a char
+    array (char msg [512]).
+
+The runtime representation is a char pointer; the code generator and the C
+translator call the runtime library functions for these operations (see
+cmini/docs/instr.txt, section 14, and cmini/docs/translate.txt, section 7).
+
+
+3. Sequence <T> and Dictionary <K, V>
+-------------------------------------
+
+New functions: IsContainer, IsContainerName, ContainerArg, ContainerType
+(decl.c, expr.c), ContainerMethod (expr.c).
+
+  - the names Sequence and Dictionary are built-in template types. They are
+    recognised by name (IsContainerName), unless the program declares its own
+    type with that name;
+  - their element types are given in the declaration: Sequence <int>,
+    Dictionary <string, int>, nested in classes and as members;
+  - the methods of Sequence and Dictionary are built into the parser and
+    checked by ContainerMethod (see cmini/docs/instr.txt, section 14, for the
+    code that is generated for them).
+
+
+4. cout, cerr, endl
+-------------------
+
+New functions: IsStreamName, IsStreamMarker, StreamMarker, StreamOut,
+StreamCall, OutCall (expr.c).
+
+  - cout << a << b << endl; is parsed as a chain of output operations. In
+    primary expressions cout, cerr and endl are only a marker (an identifier
+    without an object); shift_expr turns the chain into calls (StreamOut);
+  - each operand is printed by a call of printf (stdout) or dprintf (2, ..., for
+    cerr). The format is chosen by the type of the operand (StreamCall):
+    the format is chosen by the type of the operand (see StreamCall for the
+    cases); endl gives a newline;
+  - a declared variable named cout takes precedence over the marker (it is not
+    a stream then);
+  - cerr is tied to cout: stdout is flushed first (fflush (0)).
+
+Output with cout is not a call of the C++ library; it is printf. There are no
+other streams (fstream and general iostreams are not supported; see
+README.md).
+
+
+5. Casts and polymorphic classes
+--------------------------------
+
+New functions: CastNode, DynamicCastNode, IsPolymorphic, IsBaseOf (expr.c).
+
+  - static_cast <T> (e) and (T) e: CastNode (the type is the name of a type
+    with pointers and qualifiers, see TypeName);
+  - dynamic_cast <T *> (p) and dynamic_cast <T &> (x): DynamicCastNode. The
+    check is made at run time with the class information of the object (see
+    cmini/docs/translate.txt, section 4);
+  - a cast to a base class without a runtime check is marked by "^" (id of the
+    node) in the comment of DynamicCastNode;
+  - IsPolymorphic: a class with virtual methods (also inherited); IsBaseOf
+    decides whether a class is a base of another class.
+
+
+6. Namespaces
+-------------
+
+New functions: NamespaceQual, IsNamespaceName, PeekSymbol, IsQualifiedExpr
+(decl.c).
+
+  - namespace X { ... } is accepted; the declarations inside are global (the
+    namespace only qualifies the names);
+  - the qualification X:: is skipped when the symbols are read (NamespaceQual,
+    called by the lexer). using namespace X; is accepted;
+  - a qualified name T::f () or T::x at the start of an expression is not a
+    declaration (IsQualifiedExpr).
+
+The standard namespace std is handled like the other namespaces; its names
+(std::string, std::cout) are recognised by Std (expr.c).
+
+
+7. Constructors, destructors and member initialisers
+----------------------------------------------------
+
+New functions: ConstructorDecl, ConstructorBody, DestructorDecl,
+ImplicitInitCtor, HasImplicit, MemberInits, PutBaseInit (decl.c).
+
+  - a constructor with an initialiser list (base class and members), a body
+    and an implicit constructor when a class has no constructor and needs one
+    for its members (ImplicitInitCtor, HasImplicit);
+  - a destructor declaration (DestructorDecl) and the body of a constructor
+    or destructor that is read later (see section 9);
+  - members with an initialiser in the class (bool x = false;) that are not in
+    the initialiser list of the constructor are assigned by MemberInits (after
+    the other initialisation); PutBaseInit writes the initialisation of the base
+    class.
+
+
+8. Default parameter values and overloading
+-------------------------------------------
+
+New functions: MergeDefaults, NextParam, SameParams, RemoveFromQueue, PutParamDecl,
+ParameterList, CppOverloaded (decl.c).
+
+  - default values of parameters: MergeDefaults copies the defaults of a
+    declaration into the definition of the function;
+  - a method of a derived class with the same name as a virtual method of the
+    base but different parameters only hides the base method (SameParams); the
+    same parameters make it an override;
+  - CppOverloaded: the C functions strchr, strrchr, strstr, strpbrk and memchr
+    are declared by the system header (<cstring>), not by the parser, because
+    C++ overloads them.
+
+
+9. Deferred bodies of class members
+-----------------------------------
+
+New functions: DeferBody, RecordBlock, ReplaceInPrintList (decl.c).
+
+A method or constructor can use members that are declared after it in the same
+class. C++ allows this, so the body is not compiled at once. DeferBody records
+the tokens of the body (RecordBlock, up to the matching }) and puts them in a
+list (DeferTail). When the class is complete, the recorded tokens are replayed
+and compiled (see section 10). ReplaceInPrintList replaces an entry of the
+print list (the list of declarations that is translated).
+
+
+10. Token replay
+----------------
+
+New functions: SaveToken, LoadToken, StartReplay, ReplayNext, PeekReplay,
+PeekSymbol, PeekIsTypeStart (decl.c).
+
+The parser needs to look at the next symbol in some places (is this a
+declaration or an expression? is the next symbol a type?). For this it keeps
+the symbol of a record, so that the lookahead can be returned:
+
+  - PeekSymbol and PeekIsTypeStart look at the following symbol without moving
+    the input;
+  - SaveToken and LoadToken store and restore the current symbol;
+  - StartReplay and ReplayNext return the symbols of a recorded list (DeferBody,
+    section 9) as if they came from the input again.
+
+The recorded list stays as it is; the replay is only a second reading of it.
+
+
+11. Declaration in a condition
+------------------------------
+
+New functions: IsCondDecl, CondDecl (stat.c).
+
+In an if, while or switch condition a variable can be declared with an
+initialiser:
+
+    if (T x = e) ...        while (T x = e) ...        switch (T x = e) ...
+
+CondDecl makes a block { T x = e; } with its own scope; the statement inside is
+parsed in that scope and the block is closed after it. The expression that is
+the value of the condition is the variable x itself. IsCondDecl decides that a
+condition starts with a declaration (and not with a functional cast like
+string (x) or with T::f ()).
+
+
+12. Where to look for what
+--------------------------
+
+    std::string                          expr.c: StringMethod, StringConstruct, CheckStringOperand
+    Sequence and Dictionary              expr.c: ContainerMethod; decl.c: IsContainerName
+    cout, cerr, endl                     expr.c: StreamOut, StreamCall, OutCall
+    casts                                expr.c: CastNode, DynamicCastNode
+    namespaces                           decl.c: NamespaceQual, IsQualifiedExpr
+    constructors and destructors         decl.c: ConstructorDecl, DestructorDecl, MemberInits
+    deferred bodies and replay           decl.c: DeferBody, RecordBlock, ReplayNext
+    declarations in conditions           stat.c: CondDecl, IsCondDecl
+
+Not covered by this document: the lexer (lex.c, lexer.c, c-parser lex.cc) and the
+header decl.h, which also differ between the two projects. The files compared
+here are decl, expr and stat only.
