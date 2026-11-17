@@ -7,31 +7,31 @@
 
 Scope     gscope;
 Queue     glist;
-Queue     printlist;   /* poradi pro vypis -p: objekty jako v textu + znacky */
-Queue     ctorlist;     /* definice konstruktoru */
-Queue     methodlist;   /* definice metod (s telem) */
-Queue     classlist;    /* definovane struktury a tridy */
-TypePtr   MethodClass = NULL;   /* trida prekladane metody nebo konstruktoru (this) */
+Queue     printlist;   /* order for printing -p: objects as in the text + markers */
+Queue     ctorlist;     /* definition of constructors */
+Queue     methodlist;   /* definitions of methods (with body) */
+Queue     classlist;    /* defined structures and classes */
+TypePtr   MethodClass = NULL;   /* class of the method or constructor being translated (this) */
 
-static TypePtr QualClass = NULL; /* T::f - trida z kvalifikovaneho jmena v deklaratoru */
+static TypePtr QualClass = NULL; /* T::f - class from the qualified name in the declarator */
 
 /*************************** RECORDED SYMBOLS *****************************/
 
-/* Tela metod a konstruktoru uvnitr tridy mohou pouzivat polozky deklarovane
-   az za nimi.  Symboly tela se proto pri cteni tridy jen zaznamenaji
-   a prelozi se (prehraji pres ReplaySymbol) az na konci tridy. */
+/* The bodies of methods and constructors inside a class may use members declared
+   only after them. Therefore, when the class is read, the symbols of the body are only recorded
+   and translated (replayed via ReplaySymbol) only at the end of the class. */
 
 void (*ReplaySymbol) (void) = NULL;
 
 typedef struct
 {
   SYMBOL sy;
-  char * text;      /* IdentVal, NumVal nebo StrVal */
+  char * text;      /* IdentVal, NumVal or StrVal */
   char   chr;
   bool   l, u, f;
   int    line, col;
-  const char * file;  /* vlozeny soubor (preprocesor) nebo NULL */
-  int    fline;       /* radka ve vlozenem souboru */
+  const char * file;  /* included file (preprocessor) or NULL */
+  int    fline;       /* line in the included file */
 }
   TOKEN;
 
@@ -47,7 +47,7 @@ typedef struct
   TOKENLIST;
 
 static void SaveToken (TOKEN * t)
-/* aktualni symbol => t */
+/* current symbol => t */
 {
   t->sy = sy;
   t->text = NULL;
@@ -66,7 +66,7 @@ static void SaveToken (TOKEN * t)
 }
 
 static void LoadToken (TOKEN * t)
-/* t => aktualni symbol */
+/* t => current symbol */
 {
   sy = t->sy;
   if (t->text != NULL)
@@ -86,7 +86,7 @@ static void LoadToken (TOKEN * t)
 }
 
 static void RecordBlock (TOKENLIST * list)
-/* zaznamenej symboly od aktualniho (: nebo {) az po odpovidajici } vcetne */
+/* record the symbols from the current one (: or {) up to the corresponding } inclusive */
 {
   int depth = 0;
   list->items = NULL;
@@ -120,12 +120,12 @@ static void RecordBlock (TOKENLIST * list)
   }
 }
 
-typedef struct REPLAY_REC REPLAY;   /* predem - ukazatel na sebe (cmm nezna struct X * v polozce) */
+typedef struct REPLAY_REC REPLAY;   /* in advance - pointer to itself (cmm does not know struct X * in a member) */
 struct REPLAY_REC
 {
   TOKENLIST *         list;
   int                 pos;
-  TOKEN               saved;   /* symbol aktualni pred prehravanim */
+  TOKEN               saved;   /* current symbol before replaying */
   REPLAY *            prev;
 };
 
@@ -140,7 +140,7 @@ static void ReplayNext (void)
      return;
   }
 
-  /* konec zaznamu: obnov symbol, ktery byl aktualni pred prehravanim */
+  /* end of the record: restore the symbol that was current before replaying */
   LoadToken (&r->saved);
   Replay = r->prev;
   ReplaySymbol = (Replay != NULL) ? ReplayNext : NULL;
@@ -155,21 +155,21 @@ static void StartReplay (TOKENLIST * list)
   r->prev = Replay;
   Replay = r;
   ReplaySymbol = ReplayNext;
-  ReplayNext ();              /* prvni symbol zaznamu */
+  ReplayNext ();              /* first symbol of the record */
 }
 
-/* nahled na nasledujici symbol (aktualni symbol se nemeni) */
+/* peek at the following symbol (the current symbol does not change) */
 static TOKEN PeekNext;
 static void (*PeekSaved) (void) = NULL;
 
 static void PeekReplay (void)
 {
-  ReplaySymbol = PeekSaved;     /* puvodni zdroj symbolu (vstup nebo zaznam) */
+  ReplaySymbol = PeekSaved;     /* original source of the symbol (input or record) */
   LoadToken (&PeekNext);
 }
 
-/* prostory jmen:  namespace X { ... }  - deklarace jsou globalni, kvalifikace X::
-   se pri cteni symbolu vynecha (NamespaceQual, volaji ho lexery) */
+/* namespaces:  namespace X { ... }  - declarations are global, the qualification X::
+   is skipped when reading symbols (NamespaceQual, called by the lexers) */
 static char * Namespaces [64];
 static int NamespaceCnt = 0;
 static bool InPeek = false;
@@ -186,7 +186,7 @@ void NamespaceQual (void)
   if (InPeek || NamespaceCnt == 0 || !IsNamespaceName (IdentVal)) return;
   if (PeekSymbol () != DCOLON) return;    /* namespace X {, using namespace X; */
   NextSymbol ();                           /* :: */
-  NextSymbol ();                           /* jmeno (i vnoreny prostor) */
+  NextSymbol ();                           /* name (also a nested namespace) */
 }
 
 SYMBOL PeekSymbol (void)
@@ -199,7 +199,7 @@ SYMBOL PeekSymbol (void)
   SaveToken (&PeekNext);
   SYMBOL result = sy;
   PeekSaved = ReplaySymbol;
-  ReplaySymbol = PeekReplay;    /* pristi NextSymbol vrati PeekNext */
+  ReplaySymbol = PeekReplay;    /* the next NextSymbol returns PeekNext */
   LoadToken (&cur);
   return result;
 }
@@ -208,8 +208,8 @@ bool IsType (ObjectPtr obj);
 extern bool DclSym [];
 
 static bool PeekIsTypeStart (void)
-/* symbol za aktualnim ( je ) nebo zacina typ => deklarace funkce,
-   jinak  string s (p, n)  - prima inicializace */
+/* symbol after the current one is ) or starts a type => function declaration,
+   otherwise  string s (p, n)  - direct initialization */
 {
   SYMBOL s = PeekSymbol ();
   if (s == RPAR) return true;
@@ -226,7 +226,7 @@ static bool PeekIsTypeStart (void)
 }
 
 bool IsQualifiedExpr (void)
-/* T::f (...),  T::x  - jmeno tridy a :: na zacatku vyrazu (ne deklarace) */
+/* T::f (...),  T::x  - class name and :: at the start of an expression (not a declaration) */
 {
   if (sy!=IDENT) return false;
   ObjectPtr obj = Lookup (IdentVal);
@@ -236,7 +236,7 @@ bool IsQualifiedExpr (void)
   return PeekSymbol () == DCOLON;
 }
 
-/* odlozena tela metod a konstruktoru prave ctene tridy */
+/* postponed bodies of methods and constructors of the class just being read */
 typedef struct DEFERRED_REC DEFERRED;
 struct DEFERRED_REC
 {
@@ -246,7 +246,7 @@ struct DEFERRED_REC
   DEFERRED *            next;
 };
 
-static DEFERRED * * DeferTail = NULL;   /* != NULL => tela se odkladaji */
+static DEFERRED * * DeferTail = NULL;   /* != NULL => bodies are postponed */
 
 static void DeferBody (ObjectPtr obj, bool ctor)
 {
@@ -267,8 +267,8 @@ void ConstructorDecl (TypePtr cls);
 void DestructorDecl (TypePtr cls, bool virt);
 static void ImplicitInitCtor (TypePtr cls);
 
-/* stejne parametry (prekryti virtualni metody); jine - metoda virtualni metodu
-   baze jen skryva (C++: void f (int, bool = false) ve tride odvozene) */
+/* same parameters (override of a virtual method); different - the method only hides
+   the virtual method of the base (C++: void f (int, bool = false) in the derived class) */
 static bool SameParams (TypePtr f1, TypePtr f2)
 {
   f1 = Resolve (f1);
@@ -355,7 +355,7 @@ void Append (QueuePtr queue, ObjectPtr obj)
 }
 
 void Join (QueuePtr dst, QueuePtr add)
-/* Pridej prvky fronty 'add' do fronty 'dst' */
+/* Add the elements of queue 'add' to queue 'dst' */
 {
   if (add->first!=NULL)
      if (dst->first==NULL)
@@ -387,7 +387,7 @@ void CloseScope (void)
 /********************************** TREE ***********************************/
 
 void EnterPrim (ObjectPtr * root, ObjectPtr add)
-/* Vloz identifikator do stromu */
+/* Insert identifier into the tree */
 {
   int cmp;
 
@@ -412,7 +412,7 @@ void EnterPrim (ObjectPtr * root, ObjectPtr add)
 }
 
 void Enter (ScopePtr scope, ObjectPtr add)
-/* Vloz identifikator do stromu */
+/* Insert identifier into the tree */
 {
   EnterPrim (&scope->root, add);
 }
@@ -420,7 +420,7 @@ void Enter (ScopePtr scope, ObjectPtr add)
 /* ---------------------------------------------------------------------- */
 
 ObjectPtr SearchPrim (ObjectPtr root, IDENT_TYP name)
-/* Hledej zadany identifikator ve stromu */
+/* Search the given identifier in the tree */
 {
   int cmp;
 
@@ -440,7 +440,7 @@ ObjectPtr SearchPrim (ObjectPtr root, IDENT_TYP name)
 }
 
 ObjectPtr Search (ScopePtr scope, IDENT_TYP name)
-/* Hledej zadany identifikator ve stromu */
+/* Search the given identifier in the tree */
 {
    return SearchPrim (scope->root, name);
 }
@@ -448,7 +448,7 @@ ObjectPtr Search (ScopePtr scope, IDENT_TYP name)
 /* ---------------------------------------------------------------------- */
 
 ObjectPtr Lookup (IDENT_TYP name)
-/* Hledej zadany identifikator ve vsech stromech */
+/* Search the given identifier in all trees */
 {
   int i;
   ObjectPtr obj;
@@ -465,7 +465,7 @@ ObjectPtr Lookup (IDENT_TYP name)
 }
 
 ObjectPtr Find (IDENT_TYP name)
-/* Hledej zadany identifikator. Ohlas chybu, pokud nebyl nalezen. */
+/* Search the given identifier. Report an error if it was not found. */
 {
   ObjectPtr obj;
 
@@ -477,7 +477,7 @@ ObjectPtr Find (IDENT_TYP name)
 /* ---------------------------------------------------------------------- */
 
 ObjectPtr LookupMember (TypePtr typ, IDENT_TYP name)
-/* Hledej polozku struktury, potom v bazovych tridach */
+/* Search the structure member, then in the base classes */
 {
   while (typ != NULL)
   {
@@ -489,7 +489,7 @@ ObjectPtr LookupMember (TypePtr typ, IDENT_TYP name)
 }
 
 bool IsMemberOf (ObjectPtr obj, TypePtr typ)
-/* obj je polozka (nebo metoda) struktury typ nebo jejich bazovych trid */
+/* obj is a member (or method) of structure typ or of its base classes */
 {
   if (obj == NULL) return false;
   while (typ != NULL)
@@ -501,8 +501,8 @@ bool IsMemberOf (ObjectPtr obj, TypePtr typ)
 }
 
 int OpenClassScopes (TypePtr cls)
-/* zpristupni polozky tridy a jejich bazovych trid (baze nejdrive),
-   vraci pocet otevrenych oboru */
+/* make the members of the class and its base classes accessible (base first),
+   returns the number of opened scopes */
 {
   int n = 0;
   if (cls->base != NULL) n = OpenClassScopes (cls->base);
@@ -516,7 +516,7 @@ void CloseScopes (int n)
 }
 
 ObjectPtr FindMember (TypePtr typ, IDENT_TYP name)
-/* Hledej polozku struktury. Ohlas chybu, pokud nebyla nalezena. */
+/* Search the structure member. Report an error if it was not found. */
 {
   ObjectPtr obj;
 
@@ -529,7 +529,7 @@ ObjectPtr FindMember (TypePtr typ, IDENT_TYP name)
 /************************ CREATE TYPES AND OBJECTS ************************/
 
 TypePtr NewType (sort_typ sort)
-/* Vytvor novy typ, nastav polozku sort */
+/* Create a new type, set the sort field */
 {
   TypePtr typ;
 
@@ -573,7 +573,7 @@ TypePtr Alias (IDENT_TYP name, sort_typ sort, TypePtr desc)
 }
 
 ObjectPtr NewObject (IDENT_TYP name, TypePtr desc)
-/* Vytvor objekt daneho jmena a typu */
+/* Create an object of the given name and type */
 {
   ObjectPtr obj;
 
@@ -651,7 +651,7 @@ TypePtr enum_specifier (void)
      typ->defined = true;
      NextSymbol ();
 
-     /* enumerator_list (prazdny vycet enum X { } - gram ho generuje) */
+     /* enumerator_list (empty enumeration enum X { } - the grammar generates it) */
      if (sy != RBRACE) for (;;)
      {
         /* enumerator */
@@ -676,7 +676,7 @@ TypePtr enum_specifier (void)
 
 /******************************* STRUCTURE ********************************/
 
-TypePtr CurrentClass = NULL;   /* prave zpracovavana struktura */
+TypePtr CurrentClass = NULL;   /* structure being processed */
 
 bool IsType (ObjectPtr obj);
 
@@ -701,7 +701,7 @@ TypePtr struct_specifier (void)
 
   typ = CreateType (id, sort, sy==LBRACE || sy==COLON);
 
-  /* bazova trida:  class B : public A { ... } */
+  /* base class:  class B : public A { ... } */
   if (sy==COLON)
   {
      NextSymbol ();
@@ -732,7 +732,7 @@ TypePtr struct_specifier (void)
      /* struct_declarator */
 
      int scopes = 0;
-     if (typ->base != NULL) scopes = OpenClassScopes (typ->base);  /* polozky baze */
+     if (typ->base != NULL) scopes = OpenClassScopes (typ->base);  /* members of the base */
      OpenScope (&typ->scope);
      TypePtr save_class = CurrentClass;
      CurrentClass = typ;
@@ -743,14 +743,14 @@ TypePtr struct_specifier (void)
 
      while (sy!=RBRACE)
      {
-        /* public:  private:  protected:  (pristup se nekontroluje) */
+        /* public:  private:  protected:  (access is not checked) */
         if (sy==PUBLIC_ || sy==PRIVATE_ || sy==PROTECTED_)
         {
            NextSymbol ();
            CheckSymbol (COLON);
            continue;
         }
-        /* friend class X;  friend int f (...);  - pristup se nekontroluje => preskocit */
+        /* friend class X;  friend int f (...);  - access is not checked => skip */
         if (sy==FRIEND_)
         {
            while (sy!=SEMICOLON && sy!=EOS)
@@ -762,7 +762,7 @@ TypePtr struct_specifier (void)
         Join (&typ->list, &queue);
      }
 
-     /* tela metod a konstruktoru - az jsou zname vsechny polozky tridy */
+     /* bodies of methods and constructors - once all members of the class are known */
      DeferTail = save_tail;
      for (DEFERRED * d = deferred; d != NULL; d = d->next)
      {
@@ -771,10 +771,10 @@ TypePtr struct_specifier (void)
            ConstructorBody (typ, d->obj);
         else
            FunctionBody (d->obj);
-        if (sy!=RBRACE) Bug ();             /* zaznam musi byt cely zpracovan */
+        if (sy!=RBRACE) Bug ();             /* the record must be fully processed */
      }
      NextSymbol ();
-     ImplicitInitCtor (typ);   /* polozky s inicializaci ve tride, bez konstruktoru */
+     ImplicitInitCtor (typ);   /* members with initialization in the class, without constructor */
 
      CurrentClass = save_class;
      CloseScope ();
@@ -899,7 +899,7 @@ TypePtr sim_declaration_specifiers (void)
      else if (sy==LONG_ && typ->length == Long)
      {
         typ->long_long = true;
-        NextSymbol ();                 /* long long = long (64 bitu, x86-64) */
+        NextSymbol ();                 /* long long = long (64 bits, x86-64) */
      }
      else if (sy==LONG_)
      {
@@ -940,13 +940,13 @@ bool IsType (ObjectPtr obj)
   if (obj==NULL) return false;
   if (obj->storage==Typedef) return true;
   sort = obj->type->sort;
-  /* jmeno struktury (tag), ne promenna typu struktura:
-     CreateType nastavi typ->tag = obj->name */
+  /* name of the structure (tag), not a variable of type structure:
+     CreateType sets typ->tag = obj->name */
   if ((IsClsSort (sort) || sort==Enum) && obj->type->tag == obj->name) return true;
   return false;
 }
 
-/* Sequence <T>, Dictionary <K, V>  (pokud nejsou deklarovany jinak) */
+/* Sequence <T>, Dictionary <K, V>  (unless declared otherwise) */
 static bool IsContainerName (void)
 {
   return sy==IDENT && (strcmp (IdentVal, "Sequence") == 0 || strcmp (IdentVal, "Dictionary") == 0) &&
@@ -960,7 +960,7 @@ ObjectPtr declarator (TypePtr typ);
 TypePtr declaration_specifiers (void);
 
 static TypePtr ContainerArg (bool key)
-/* parametr typu:  int,  GrmRule *,  string  (prvek: hodnota v 8bajtovem slotu) */
+/* parameter of a type:  int,  GrmRule *,  string  (element: value in an 8-byte slot) */
 {
   TypePtr t = declaration_specifiers ();
   ObjectPtr o = declarator (t);
@@ -973,8 +973,8 @@ static TypePtr ContainerArg (bool key)
      return o->type;                     /* long, unsigned, unsigned long, short */
   if (!key && (r->sort == Float || r->sort == Double))
      return o->type;
-  /* prvek struktura bez retezcu, kontejneru a destruktoru (kopie po bajtech):
-     Sequence <DtorVar> (zdroje cmm) */
+  /* element struct without strings, containers and destructor (copy byte by byte):
+     Sequence <DtorVar> (sources of cmm) */
   if (!key && IsClsSort (r->sort) && r->defined && !NeedsDtor (r, true) && !IsPolymorphic (r))
      return o->type;
   Error (key ? "Dictionary key must be integer, enum, pointer or string"
@@ -983,10 +983,10 @@ static TypePtr ContainerArg (bool key)
 }
 
 static void CloseAngle (void)
-/* > na konci parametru typu;  >> (vnorene typy) se rozdeli na dva symboly > */
+/* > at the end of the type parameter;  >> (nested types) is split into two symbols > */
 {
   if (sy==GREATER) NextSymbol ();
-  else if (sy==SHR) sy = GREATER;        /* prvni > je zpracovan, druhy zustava */
+  else if (sy==SHR) sy = GREATER;        /* the first > is processed, the second remains */
   else Error ("> expected");
 }
 
@@ -1008,7 +1008,7 @@ static TypePtr ContainerType (void)
   return typ;
 }
 
-/* std::string:  string  (pokud neni deklarovan jinak)  nebo  std::string */
+/* std::string:  string  (unless declared otherwise)  or  std::string */
 static bool IsStringName (void)
 {
   return sy==IDENT && (strcmp (IdentVal, "string") == 0 || strcmp (IdentVal, "std") == 0) &&
@@ -1020,7 +1020,7 @@ TypePtr declaration_specifiers (void)
   TypePtr typ;
   ObjectPtr obj;
 
-  /* const pred jmenem typu:  const string & s,  const T * p */
+  /* const before the type name:  const string & s,  const T * p */
   bool cnst = false;
   while (sy==CONST_ || sy==VOLATILE_)
   {
@@ -1028,7 +1028,7 @@ TypePtr declaration_specifiers (void)
      NextSymbol ();
      if (sy!=IDENT && sy!=STRUCT_ && sy!=UNION_ && sy!=CLASS_ && sy!=ENUM_)
      {
-        /* const int ... - zbytek precte sim_declaration_specifiers */
+        /* const int ... - the rest is read by sim_declaration_specifiers */
         typ = sim_declaration_specifiers ();
         if (cnst) typ->Const = true;
         return typ;
@@ -1115,7 +1115,7 @@ void type_qualifier_list (TypePtr typ)
 ObjectPtr declarator (TypePtr typ);
 
 void ParameterList (TypePtr typ)
-/* seznam parametru funkce typu 'typ', symbol ( jiz byl precten, cte se vcetne ) */
+/* list of parameters of the function of type 'typ', symbol ( already read, read including ) */
 {
   int cnt = 0;
 
@@ -1149,14 +1149,14 @@ void ParameterList (TypePtr typ)
         pobj = declarator (ptyp);
         if (reg) pobj->storage = Register_;
 
-        /* parametr typu pole je ukazatel:  char * argv []  =>  char * * argv */
+        /* parameter of array type is a pointer:  char * argv []  =>  char * * argv */
         if (pobj->type != NULL && pobj->type->sort == Array)
         {
            pobj->desc = Link (Pointer, pobj->type->desc);
            pobj->type = Resolve (pobj->desc);
         }
 
-        /* implicitni hodnota:  int level = 0 */
+        /* default value:  int level = 0 */
         if (sy==ASSIGN)
         {
            NextSymbol ();
@@ -1169,7 +1169,7 @@ void ParameterList (TypePtr typ)
         Append (&typ->list, pobj);
 
         cnt ++;
-        if (pobj->type != NULL && pobj->type->sort==Void)   /* f (void), ne f (void * p) */
+        if (pobj->type != NULL && pobj->type->sort==Void)   /* f (void), not f (void * p) */
         {
            if (cnt!=1)
               Error ("Invalid parameter type (void)");
@@ -1219,7 +1219,7 @@ ObjectPtr declarator (TypePtr typ)
   {
      ReadIdent (id);
 
-     /* metoda definovana mimo tridu:  int T::f (...) { ... } */
+     /* method defined outside the class:  int T::f (...) { ... } */
      if (sy==DCOLON)
      {
         ObjectPtr c = Lookup (id);
@@ -1241,8 +1241,8 @@ ObjectPtr declarator (TypePtr typ)
   for (;;)
      if (sy==LBRACK)
      {
-        /* a [N] [M] = pole N prvku, kazdy je pole M prvku
-           => posledni rozmer musi byt nejvnitrnejsi typ */
+        /* a [N] [M] = array of N elements, each is an array of M elements
+           => the last dimension must be the innermost type */
         ExprPtr ranges [DIMENSION_MAX];
         int cnt = 0;
         while (sy==LBRACK)
@@ -1261,18 +1261,18 @@ ObjectPtr declarator (TypePtr typ)
 
      else if (sy==LPAR && Fce != NULL && typ != NULL && Resolve (typ)->sort == StdString &&
               obj->name [0] != 0 && ! PeekIsTypeStart ())
-        break;      /* lokalni  string s (p, n);  - inicializace, ne deklarace funkce */
+        break;      /* local  string s (p, n);  - initialization, not a function declaration */
 
      else if (sy==LPAR)
      {
         NextSymbol ();
         typ = Link (Function, typ);
-        /* int T::f (TType * p) - jmena typu ze tridy T jsou v parametrech viditelna */
+        /* int T::f (TType * p) - type names from class T are visible in the parameters */
         int qscopes = (QualClass != NULL) ? OpenClassScopes (QualClass) : 0;
         ParameterList (typ);
         CloseScopes (qscopes);
 
-        /* metoda:  int f () const   void f () override */
+        /* method:  int f () const   void f () override */
         for (;;)
            if (sy==CONST_) NextSymbol ();
            else if (sy==IDENT && (strcmp (IdentVal, "override") == 0 ||
@@ -1366,13 +1366,13 @@ bool IsDecl (void)
 
 void FunctionBody (ObjectPtr object)
 {
-  /* metoda: polozky tridy (a bazovych trid) jsou viditelne, this */
+  /* method: members of the class (and base classes) are visible, this */
   int scopes = 0;
   TypePtr save_method = MethodClass;
   if (object->owner != NULL)
   {
      if (object->owner != CurrentClass)
-        scopes = OpenClassScopes (object->owner);   /* definice mimo tridu */
+        scopes = OpenClassScopes (object->owner);   /* definition outside the class */
      if (object->method) MethodClass = object->owner;
   }
 
@@ -1421,7 +1421,7 @@ storage_typ storage_class_specifier (void)
   else if (sy==STATIC_)
      SetStorage (&storage, Static);
 
-  /* extern "C" int main (...) - jen zpusob linkovani, ne extern */
+  /* extern "C" int main (...) - only the linkage, not extern */
   if (storage==Extern && sy==STR && strcmp (StrVal, "C") == 0)
   {
      NextSymbol ();
@@ -1437,7 +1437,7 @@ static ObjectPtr PrintMarker (int kind, ObjectPtr ref, TypePtr type);
 static void ReplaceInPrintList (ObjectPtr old_item, ObjectPtr new_item);
 
 static void ArraySizeFromInit (ObjectPtr obj)
-/* pole bez velikosti:  int a [] = { 1, 2, 3 };  char s [] = "abc"; */
+/* array without size:  int a [] = { 1, 2, 3 };  char s [] = "abc"; */
 {
   TypePtr t = obj->type;
   if (t == NULL || t->sort != Array || t->range != NULL || obj->init == NULL) return;
@@ -1463,7 +1463,7 @@ static void ArraySizeFromInit (ObjectPtr obj)
   r->id = NewStr (buf);
   r->type = &IntDef;
 
-  /* novy typ pole (typ muze byt sdileny s jinymi deklaracemi) */
+  /* new array type (the type may be shared with other declarations) */
   TypePtr a = NewType (Array);
   *a = *t;
   a->range = r;
@@ -1472,7 +1472,7 @@ static void ArraySizeFromInit (ObjectPtr obj)
 }
 
 static void RemoveFromQueue (QueuePtr queue, ObjectPtr obj)
-/* odeber objekt z fronty (nenalezeny => nic) */
+/* remove object from queue (not found => nothing) */
 {
   NodePtr p = queue->first;
   while (p != NULL && p->item != obj)
@@ -1484,7 +1484,7 @@ static void RemoveFromQueue (QueuePtr queue, ObjectPtr obj)
 }
 
 static NodePtr NextParam (NodePtr p)
-/* preskoc parametr typu void:  int f (void) */
+/* skip parameter of type void:  int f (void) */
 {
   while (p != NULL && p->item->type != NULL && p->item->type->sort == Void)
      p = p->next;
@@ -1492,9 +1492,9 @@ static NodePtr NextParam (NodePtr p)
 }
 
 static void MergeDefaults (TypePtr decl, TypePtr def, char * name)
-/* deklarace (prototyp, metoda ve tride) a definice teze funkce:
-   stejny pocet parametru, chybejici implicitni hodnoty v 'def'
-   se prevezmou z 'decl'  (void f (int a = 1);  void f (int a) { ... }) */
+/* declaration (prototype, method in a class) and definition of the same function:
+   same number of parameters, missing default values in 'def'
+   are taken from 'decl'  (void f (int a = 1);  void f (int a) { ... }) */
 {
   NodePtr a = NextParam (decl->list.first);
   NodePtr b = NextParam (def->list.first);
@@ -1505,7 +1505,7 @@ static void MergeDefaults (TypePtr decl, TypePtr def, char * name)
      if (b->item->init == NULL && a->item->init != NULL)
      {
         b->item->init = a->item->init;
-        b->item->merged = true;      /* vypis: implicitni hodnota jen v deklaraci */
+        b->item->merged = true;      /* print: default value only in the declaration */
      }
      a = NextParam (a->next);
      b = NextParam (b->next);
@@ -1538,7 +1538,7 @@ void declaration (QueuePtr queue, int opt)
   storage = storage_class_specifier ();
   if (sy==INLINE_) { inl = true; NextSymbol (); }
 
-  /* destruktor uvnitr tridy:  ~T () { ... } */
+  /* destructor inside a class:  ~T () { ... } */
   if (sy==TILDA && CurrentClass != NULL)
   {
      DestructorDecl (CurrentClass, virt);
@@ -1547,20 +1547,20 @@ void declaration (QueuePtr queue, int opt)
 
   type = declaration_specifiers ();
 
-  /* konstruktor uvnitr struktury:  Item (...) ... */
+  /* constructor inside a structure:  Item (...) ... */
   if (sy==LPAR && CurrentClass != NULL && Resolve (type) == CurrentClass)
   {
      ConstructorDecl (CurrentClass);
      return;
   }
 
-  /* konstruktor mimo strukturu:  Item::Item (...) { ... } */
+  /* constructor outside the structure:  Item::Item (...) { ... } */
   if (sy==DCOLON)
   {
      TypePtr cls = Resolve (type);
      NextSymbol ();
 
-     /* destruktor mimo tridu:  T::~T () { ... } */
+     /* destructor outside the class:  T::~T () { ... } */
      if (sy==TILDA && cls != NULL && IsClsSort (cls->sort))
      {
         DestructorDecl (cls, false);
@@ -1572,7 +1572,7 @@ void declaration (QueuePtr queue, int opt)
         Error ("Constructor name expected after ::  (methods: type T::name (...))");
      NextSymbol ();
 
-     int scopes = OpenClassScopes (cls);   /* polozky tridy a baze jsou viditelne */
+     int scopes = OpenClassScopes (cls);   /* members of the class and its bases are visible */
      ConstructorDecl (cls);
      CloseScopes (scopes);
      return;
@@ -1584,17 +1584,17 @@ void declaration (QueuePtr queue, int opt)
      /* init_declarator */
      obj = declarator (type);
 
-     /* definice metody mimo tridu:  int T::f (...) { ... } */
+     /* method definition outside the class:  int T::f (...) { ... } */
      if (QualClass != NULL)
      {
         TypePtr cls = QualClass;
         QualClass = NULL;
         ObjectPtr m = Search (&cls->scope, obj->name);
 
-        /* definice staticke polozky:  const int T::x = 0; */
+        /* definition of a static member:  const int T::x = 0; */
         if (m != NULL && !m->fce && m->storage == Static && m->owner == cls)
         {
-           m->outdef = true;          /* definice je v tomto souboru (translate.c) */
+           m->outdef = true;          /* the definition is in this file (translate.c) */
            if (sy==ASSIGN)
            {
               NextSymbol ();
@@ -1610,9 +1610,9 @@ void declaration (QueuePtr queue, int opt)
         if (m->body != NULL)
            ErrorId ("Multiple definition of method", obj->name);
         if (sy!=LBRACE) Error ("{ expected");
-        MergeDefaults (m->type, obj->type, obj->name);  /* implicitni hodnoty z deklarace ve tride */
-        m->ptype = m->type;           /* vypis: deklarace ve tride (jmena, implicitni hodnoty) */
-        m->type = obj->type;          /* parametry s jmeny z definice */
+        MergeDefaults (m->type, obj->type, obj->name);  /* default values from the declaration in the class */
+        m->ptype = m->type;           /* print: declaration in the class (names, default values) */
+        m->type = obj->type;          /* parameters with names from the definition */
         m->desc = obj->desc;
         m->outdef = true;
         Append (&printlist, PrintMarker (PK_OUTDEF, m, m->type));
@@ -1620,9 +1620,9 @@ void declaration (QueuePtr queue, int opt)
         return;
      }
 
-     /* globalni funkce: prototyp a pozdejsi definice (nebo dalsi prototyp)
+     /* global function: prototype and later definition (or another prototype)
           void f (int a, int b = 0);   ...   void f (int a, int b) { ... }
-        pouzije se objekt z prvni deklarace, implicitni hodnoty se prevezmou */
+        the object of the first declaration is used, default values are taken over */
      if (obj->name[0] != 0 && storage != Typedef && CurrentClass == NULL &&
          Display[DisplayLevel] == &gscope && obj->type->sort == Function)
      {
@@ -1633,7 +1633,7 @@ void declaration (QueuePtr queue, int opt)
            if (inl) prev->Inline = true;
            if (prev->body != NULL)
            {
-              /* prototyp za definici - jen implicitni hodnoty */
+              /* prototype after the definition - only default values */
               if (sy==LBRACE)
                  ErrorId ("Multiple definition of function", obj->name);
               MergeDefaults (obj->type, prev->type, obj->name);
@@ -1642,16 +1642,16 @@ void declaration (QueuePtr queue, int opt)
            }
 
            MergeDefaults (prev->type, obj->type, obj->name);
-           if (sy==LBRACE)            /* vypis: na miste prototypu jen prototyp */
+           if (sy==LBRACE)            /* print: at the place of the prototype only the prototype */
               ReplaceInPrintList (prev, PrintMarker (PK_PROTO, prev, prev->type));
-           prev->type = obj->type;    /* parametry s jmeny z posledni deklarace */
+           prev->type = obj->type;    /* parameters with names from the last declaration */
            prev->desc = obj->desc;
 
            if (sy==LBRACE)
            {
               if (! OPT (Body))
                  Error ("Function definition is not allowed here");
-              /* definice na miste definice (vypis -p, poradi v glist) */
+              /* definition at the place of the definition (print -p, order in glist) */
               RemoveFromQueue (&glist, prev);
               Append (queue, prev);
               FunctionBody (prev);
@@ -1664,8 +1664,8 @@ void declaration (QueuePtr queue, int opt)
         }
      }
 
-     /* globalni promenna:  extern int x;  ...  int x = 1;  (i v opacnem poradi)
-        - jeden objekt, definice nahradi deklaraci extern */
+     /* global variable:  extern int x;  ...  int x = 1;  (also in the opposite order)
+          - one object, the definition replaces the extern declaration */
      bool skip_enter = false;
      if (obj->name[0] != 0 && storage != Typedef && CurrentClass == NULL &&
          Display[DisplayLevel] == &gscope && obj->type->sort != Function)
@@ -1676,10 +1676,10 @@ void declaration (QueuePtr queue, int opt)
         {
            prev->extern_decl = true;
            if (storage == Extern)
-              skip_enter = true;              /* deklarace po definici (nebo dalsi extern) */
+              skip_enter = true;              /* declaration after definition (or another extern) */
            else
            {
-              /* definice po deklaraci extern */
+              /* definition after extern declaration */
               ReplaceInPrintList (prev, PrintMarker (PK_PROTO, prev, prev->type));
               RemoveFromQueue (&glist, prev);
               prev->type = obj->type;
@@ -1691,7 +1691,7 @@ void declaration (QueuePtr queue, int opt)
         }
      }
 
-     /* typedef struct X X;  typedef enum X X;  - jmeno X uz je typ (jako v C++) */
+     /* typedef struct X X;  typedef enum X X;  - name X is already a type (as in C++) */
      if (obj->name[0] != 0 && storage == Typedef && !skip_enter)
      {
         ObjectPtr prev = Search (Display[DisplayLevel], obj->name);
@@ -1699,11 +1699,11 @@ void declaration (QueuePtr queue, int opt)
            skip_enter = true;
      }
 
-     if (obj->name[0] != 0 && !skip_enter)  /* struct X { ... };  nema jmeno */
+     if (obj->name[0] != 0 && !skip_enter)  /* struct X { ... };  has no name */
         Enter (Display[DisplayLevel], obj);
      else if (skip_enter && storage == Extern)
      {
-        /* jen deklarace - do fronty se nepridava */
+        /* only declaration - not added to the queue */
         if (OPT (Init) && sy==ASSIGN) Error ("extern declaration with initializer");
         if (sy!=COMMA) { CheckSymbol (SEMICOLON); return; }
         NextSymbol ();
@@ -1714,7 +1714,7 @@ void declaration (QueuePtr queue, int opt)
      obj->storage = storage;
      if (storage==Typedef && obj->type->tag == NULL)
      {
-        obj->type->tag = obj->name;   /* typedef struct { ... } X;  (ne typedef A B;) */
+        obj->type->tag = obj->name;   /* typedef struct { ... } X;  (not typedef A B;) */
         obj->type->typedef_tag = true;
      }
 
@@ -1726,19 +1726,19 @@ void declaration (QueuePtr queue, int opt)
                 (sort==Function || sort==Constructor || sort==Destructor);
      obj->Inline = inl && obj->fce;
 
-     /* metoda tridy (staticka metoda nema this) */
+     /* method of a class (static method has no this) */
      if (obj->fce && CurrentClass != NULL)
      {
         obj->owner = CurrentClass;
         obj->method = storage != Static;
         if (storage == Static) obj->storage = NoStorage;
 
-        /* virtualni: oznacena virtual, nebo prekryva virtualni metodu baze */
+        /* virtual: marked virtual, or overrides a virtual method of the base */
         ObjectPtr inh = CurrentClass->base != NULL ? LookupMember (CurrentClass->base, obj->name) : NULL;
         obj->Virtual = virt || (inh != NULL && inh->fce && inh->Virtual && SameParams (inh->type, obj->type));
         if (virt && !obj->method) Error ("Static method cannot be virtual");
 
-        /* ciste virtualni metoda:  virtual void f () = 0; */
+        /* pure virtual method:  virtual void f () = 0; */
         if (sy==ASSIGN)
         {
            NextSymbol ();
@@ -1753,7 +1753,7 @@ void declaration (QueuePtr queue, int opt)
 
      if (obj->fce) break;
 
-     /* for (T x : seq) - deklarace promenne cyklu konci pred : */
+     /* for (T x : seq) - the declaration of the loop variable ends before : */
      if (OPT (RangeFor) && sy==COLON)
      {
         RangeForDecl = true;
@@ -1783,14 +1783,14 @@ void declaration (QueuePtr queue, int opt)
      }
      else if (CurrentClass != NULL && storage != Static && storage != Typedef && sy==ASSIGN)
      {
-        /* polozka s inicializaci ve tride:  bool x = false;  - prirazeni na zacatku
-           kazdeho konstruktoru, ktery ji neinicializuje (MemberInits) */
+        /* member with initialization in the class:  bool x = false;  - assignment at the start of
+           each constructor that does not initialize it (MemberInits) */
         NextSymbol ();
         obj->member_init = simple_expr ();
      }
      else if (CurrentClass != NULL && storage == Static)
      {
-        /* staticka polozka tridy:  static const int max = 4 * 1024; */
+        /* static member of a class:  static const int max = 4 * 1024; */
         obj->owner = CurrentClass;
         if (sy==ASSIGN)
         {
@@ -1799,7 +1799,7 @@ void declaration (QueuePtr queue, int opt)
         }
      }
 
-     if (OPT (CondInit) && sy==RPAR) return;   /* if (T x = e) - ) precte volajici */
+     if (OPT (CondInit) && sy==RPAR) return;   /* if (T x = e) - ) is read by the caller */
      if (sy!=COMMA) break;
      NextSymbol ();
   }
@@ -1807,7 +1807,7 @@ void declaration (QueuePtr queue, int opt)
   if (obj->fce && sy==LBRACE)
   {
      if (OPT (Body) && obj->owner != NULL && obj->owner == CurrentClass && DeferTail != NULL)
-        DeferBody (obj, false);           /* telo metody az na konci tridy */
+        DeferBody (obj, false);           /* body of a method until the end of the class */
      else if (OPT (Body))
         FunctionBody (obj);
      else
@@ -1822,9 +1822,9 @@ void declaration (QueuePtr queue, int opt)
 /****************************** CONSTRUCTOR *******************************/
 
 void ConstructorDecl (TypePtr cls)
-/* konstruktor struktury 'cls', symbol ( je na vstupu
-     Item ();                                  deklarace
-     Item () : key (0), left (nullptr) { ... }  definice */
+/* constructor of the structure 'cls', symbol ( is at the input
+     Item ();                                  declaration
+     Item () : key (0), left (nullptr) { ... }  definition */
 {
   TypePtr typ = Link (Function, &VoidDef);
   CheckSymbol (LPAR);
@@ -1844,11 +1844,11 @@ void ConstructorDecl (TypePtr cls)
   if (cls->ctor != NULL && (cls->ctor->body != NULL || cls->ctor->deferred))
      ErrorId ("Multiple definition of constructor", cls->tag);
 
-  /* deklarace ve tride, definice mimo tridu - implicitni hodnoty z deklarace */
+  /* declaration in the class, definition outside the class - default values from the declaration */
   if (cls->ctor != NULL)
      MergeDefaults (cls->ctor->type, typ, cls->tag);
 
-  /* konstruktor uvnitr tridy: inicializace a telo az na konci tridy */
+  /* constructor inside the class: initialization and body at the end of the class */
   if (cls == CurrentClass && DeferTail != NULL)
   {
      cls->ctor = obj;
@@ -1858,7 +1858,7 @@ void ConstructorDecl (TypePtr cls)
 
   if (cls != CurrentClass)
   {
-     /* definice mimo tridu - vypis: ve tride deklarace, definice na tomto miste */
+     /* definition outside the class - print: declaration in the class, definition at this place */
      obj->outdef = true;
      obj->ptype = (cls->ctor != NULL) ? cls->ctor->type : typ;
      Append (&printlist, PrintMarker (PK_OUTDEF, obj, typ));
@@ -1866,8 +1866,8 @@ void ConstructorDecl (TypePtr cls)
   ConstructorBody (cls, obj);
 }
 
-/* prirazeni polozek s inicializaci ve tride (bool x = false;), ktere nejsou
-   v inicializacnim seznamu konstruktoru (done, n) - pripoji se za *last */
+/* assignment of members with initialization in the class (bool x = false;) that are not
+   in the constructor's initializer list (done, n) - appended after *last */
 static void MemberInits (TypePtr cls, ObjectPtr * done, int n, StatPtr * first, StatPtr * last)
 {
   for (NodePtr p = cls->list.first; p != NULL; p = p->next)
@@ -1891,7 +1891,7 @@ static void MemberInits (TypePtr cls, ObjectPtr * done, int n, StatPtr * first, 
   }
 }
 
-/* trida bez konstruktoru s polozkami s inicializaci ve tride - implicitni T () { } */
+/* class without constructor with members having initialization in the class - implicit T () { } */
 static void ImplicitInitCtor (TypePtr cls)
 {
   bool any = false;
@@ -1912,18 +1912,18 @@ static void ImplicitInitCtor (TypePtr cls)
 }
 
 void ConstructorBody (TypePtr cls, ObjectPtr obj)
-/* inicializace polozek a telo konstruktoru, na vstupu je : nebo { */
+/* initialization of members and the body of the constructor, at the input is : or { */
 {
   TypePtr typ = obj->type;
 
-  OpenScope (&typ->scope);     /* parametry */
+  OpenScope (&typ->scope);     /* parameters */
   Fce = obj;
   TypePtr save_method = MethodClass;
-  MethodClass = cls;           /* this v konstruktoru */
+  MethodClass = cls;           /* this in the constructor */
 
-  /* inicializace polozek  : key (0), left (nullptr)  =>  prirazeni na zacatku tela */
+  /* initialization of members  : key (0), left (nullptr)  =>  assignment at the start of the body */
   StatPtr first = NULL, last = NULL;
-  ObjectPtr done [256];   /* polozky z inicializacniho seznamu (MemberInits) */
+  ObjectPtr done [256];   /* members from the initializer list (MemberInits) */
   int ndone = 0;
   if (sy==COLON)
   {
@@ -1932,7 +1932,7 @@ void ConstructorBody (TypePtr cls, ObjectPtr obj)
      {
         if (sy!=IDENT) Error ("Member name expected");
 
-        /* konstruktor baze:  : Base (args) */
+        /* base constructor:  : Base (args) */
         if (cls->base != NULL && cls->base->tag != NULL && strcmp (IdentVal, cls->base->tag) == 0)
         {
            NextSymbol ();
@@ -1962,8 +1962,8 @@ void ConstructorBody (TypePtr cls, ObjectPtr obj)
         CheckSymbol (LPAR);
         if (sy==RPAR)
         {
-           /* buf ()  - inicializace hodnotou: skalar => 0, pole a objekty
-              se nemeni (new => calloc, pamet je vynulovana) */
+           /* buf ()  - initialization by value: scalar => 0, arrays and objects
+              are not changed (new => calloc, memory is zeroed) */
            NextSymbol ();
            TypePtr mt = member->type;
            if (mt->sort == Array || IsClsSort (mt->sort) || mt->sort == StdString ||
@@ -2000,7 +2000,7 @@ void ConstructorBody (TypePtr cls, ObjectPtr obj)
      }
   }
 
-  MemberInits (cls, done, ndone, &first, &last);   /* bool x = false; ve tride */
+  MemberInits (cls, done, ndone, &first, &last);   /* bool x = false; in the class */
 
   if (sy!=LBRACE) Error ("{ expected");
   StatPtr body = statement ();
@@ -2010,7 +2010,7 @@ void ConstructorBody (TypePtr cls, ObjectPtr obj)
   MethodClass = save_method;
   CloseScope ();
 
-  /* { inicializace ... telo } */
+  /* { initialization ... body } */
   StatPtr s = NEW (Stat);
   s->st = LBRACE;
   if (first == NULL) first = body; else last->next = body;
@@ -2024,12 +2024,12 @@ void ConstructorBody (TypePtr cls, ObjectPtr obj)
 /******************************* DESTRUCTOR *******************************/
 
 void DestructorDecl (TypePtr cls, bool virt)
-/* destruktor tridy 'cls', symbol ~ je na vstupu
-     ~T ();   virtual ~T ();   virtual ~T () = 0;   ~T () { ... }   (ve tride)
-     T::~T () { ... }                                                (mimo tridu)
-   Destruktor je metoda se jmenem "~" (stejne jmeno ve vsech tridach -
-   prekryti virtualniho destruktoru baze), ulozena v cls->dtor a mezi
-   polozkami tridy. */
+/* destructor of the class 'cls', symbol ~ is at the input
+     ~T ();   virtual ~T ();   virtual ~T () = 0;   ~T () { ... }   (in the class)
+     T::~T () { ... }                                                (outside the class)
+   Destructor is a method named "~" (the same name in all classes -
+   overriding the virtual destructor of the base), stored in cls->dtor and among
+   the members of the class. */
 {
   CheckSymbol (TILDA);
   if (sy!=IDENT || cls->tag == NULL || strcmp (IdentVal, cls->tag) != 0)
@@ -2041,7 +2041,7 @@ void DestructorDecl (TypePtr cls, bool virt)
 
   if (cls != CurrentClass)
   {
-     /* definice mimo tridu */
+     /* definition outside the class */
      ObjectPtr d = cls->dtor;
      if (d == NULL)
         ErrorId ("Destructor is not declared in class", cls->tag);
@@ -2063,7 +2063,7 @@ void DestructorDecl (TypePtr cls, bool virt)
   obj->method = true;
   obj->owner = cls;
 
-  /* virtualni: oznaceny virtual, nebo baze ma virtualni destruktor */
+  /* virtual: marked virtual, or the base has a virtual destructor */
   ObjectPtr inh = (cls->base != NULL) ? LookupMember (cls->base, (char *) "~") : NULL;
   obj->Virtual = virt || (inh != NULL && inh->fce && inh->Virtual);
 
@@ -2088,7 +2088,7 @@ void DestructorDecl (TypePtr cls, bool virt)
 
   if (sy!=LBRACE) Error ("{ expected");
   if (DeferTail != NULL)
-     DeferBody (obj, false);            /* telo az na konci tridy */
+     DeferBody (obj, false);            /* body at the end of the class */
   else
      FunctionBody (obj);
 }
@@ -2099,7 +2099,7 @@ void GlobalDecl (void)
 {
   Queue queue;
 
-  /* using namespace std;  - jmenne prostory se ignoruji */
+  /* using namespace std;  - namespaces are ignored */
   if (sy==IDENT && strcmp (IdentVal, "using") == 0)
   {
      while (sy!=SEMICOLON && sy!=EOS) NextSymbol ();
@@ -2107,7 +2107,7 @@ void GlobalDecl (void)
      return;
   }
 
-  /* extern "C" { ... },  extern "C" deklarace;  - vazba se nerozlisuje */
+  /* extern "C" { ... },  extern "C" declarations;  - linkage is not distinguished */
   if (sy==EXTERN_ && PeekSymbol () == STR)
   {
      NextSymbol ();                      /* extern */
@@ -2121,7 +2121,7 @@ void GlobalDecl (void)
      }
   }
 
-  /* namespace X { ... } - deklarace globalne, X:: se vynechava (NamespaceQual) */
+  /* namespace X { ... } - declarations are global, X:: is skipped (NamespaceQual) */
   if (sy==IDENT && strcmp (IdentVal, "namespace") == 0)
   {
      NextSymbol ();
@@ -2145,14 +2145,14 @@ void GlobalDecl (void)
   Join (&glist, &queue);
 }
 
-/* znacka v printlist */
+/* marker in printlist */
 static ObjectPtr PrintMarker (int kind, ObjectPtr ref, TypePtr type)
 {
   ObjectPtr m = NewObject (ref->name, type);
   m->pkind = kind;
   m->pref = ref;
   m->ptype = type;
-  m->desc = ref->desc;          /* typ s aliasy (typedef) v okamziku deklarace */
+  m->desc = ref->desc;          /* type with aliases (typedef) at the moment of declaration */
   return m;
 }
 
@@ -2206,7 +2206,7 @@ void Postfix (TypePtr t, TypePtr desc, bool ptr);
 
 static void PutBaseInit (ObjectPtr ctor);
 
-bool PutTypeNameOnly = false;   /* tisk typu ve vyrazu (new T, (T) e, sizeof (T)): jen jmeno tridy */
+bool PutTypeNameOnly = false;   /* printing of a type in an expression (new T, (T) e, sizeof (T)): only the class name */
 
 void Prefix (TypePtr t, TypePtr desc, bool ptr)
 {
@@ -2291,7 +2291,7 @@ void Prefix (TypePtr t, TypePtr desc, bool ptr)
            PutStr (t->tag);
         }
 
-        if (t->base!=NULL && t->base->tag!=NULL)   /* bazova trida */
+        if (t->base!=NULL && t->base->tag!=NULL)   /* base class */
         {
            PutStr (" : public ");
            PutStr (t->base->tag);
@@ -2303,7 +2303,7 @@ void Prefix (TypePtr t, TypePtr desc, bool ptr)
         PutEol ();
         if (t->sort==Class)
         {
-           PutStr ("public:");     /* pristup se nekontroluje - vse verejne */
+           PutStr ("public:");     /* access is not checked - everything is public */
            PutEol ();
         }
         Indent ();
@@ -2311,18 +2311,18 @@ void Prefix (TypePtr t, TypePtr desc, bool ptr)
         for (p=t->list.first; p!=NULL; p=p->next)
         {
            Check (p->item!=NULL);
-           /* metody s telem uvnitr tridy, definovane mimo tridu jen deklarace */
+           /* methods with body inside the class, defined outside the class only as declarations */
            SubDecl (p->item, (p->item->fce && p->item->body != NULL && !p->item->outdef) ? full : header);
         }
 
-        if (t->ctor != NULL && t->ctor->outdef)   /* konstruktor definovany mimo tridu */
+        if (t->ctor != NULL && t->ctor->outdef)   /* constructor defined outside the class */
         {
            PutStr (t->ctor->name);
            Postfix (t->ctor->ptype, NULL, false);
            PutChr (';');
            PutEol ();
         }
-        else if (t->ctor != NULL)     /* konstruktor */
+        else if (t->ctor != NULL)     /* constructor */
         {
            PutStr (t->ctor->name);
            Postfix (t->ctor->type, t->ctor->desc, false);
@@ -2448,7 +2448,7 @@ void PutStorage (storage_typ storage, mode_typ mode)
 }
 
 static void PutBaseInit (ObjectPtr ctor)
-/* konstruktor:  : Base (args) */
+/* constructor:  : Base (args) */
 {
   if (ctor != NULL && ctor->base_init && ctor->owner != NULL && ctor->owner->base != NULL)
   {
@@ -2460,12 +2460,12 @@ static void PutBaseInit (ObjectPtr ctor)
   }
 }
 
-static TypePtr PutQualifier = NULL;   /* definice mimo tridu:  int T::f (...) */
-static bool PutSkipMerged = false;    /* definice: implicitni hodnoty jen v deklaraci */
+static TypePtr PutQualifier = NULL;   /* definition outside the class:  int T::f (...) */
+static bool PutSkipMerged = false;    /* definition: default values only in the declaration */
 
 void SubDecl (ObjectPtr obj, mode_typ mode)
 {
-  if (obj->type == NULL)            /* parametr ... */
+  if (obj->type == NULL)            /* parameter ... */
   {
      PutStr (obj->name);
      return;
@@ -2477,7 +2477,7 @@ void SubDecl (ObjectPtr obj, mode_typ mode)
      if (obj->fce && obj->owner != NULL && !obj->method) PutStr ("static ");
      if (!obj->fce && obj->owner != NULL && obj->storage == Static) PutStr ("static ");
   }
-  /* funkce bez tela na konci prekladu = knihovni funkce (glibc) */
+  /* function without body at the end of translation = library function (glibc) */
   if (mode==full && obj->fce && obj->body==NULL && obj->owner==NULL && obj->storage!=Static)
      PutStr ("extern \"C\" ");
   if (! (obj->owner != NULL && obj->storage == Static))
@@ -2487,7 +2487,7 @@ void SubDecl (ObjectPtr obj, mode_typ mode)
   bool dtor = obj->fce && obj->owner != NULL && obj->owner->dtor == obj;
   if (dtor)
   {
-     /* destruktor:  ~T ()  /  T::~T ()  - bez typu vysledku */
+     /* destructor:  ~T ()  /  T::~T ()  - without result type */
      if (PutQualifier != NULL)
      {
         PutSpc (PutQualifier->tag);
@@ -2543,7 +2543,7 @@ void SubDecl (ObjectPtr obj, mode_typ mode)
      if (obj->fce)
      {
         if (obj->body==NULL)
-           PutChr (';');              /* deklarace funkce (prototyp) */
+           PutChr (';');              /* function declaration (prototype) */
         PutEol ();
         if (obj->body!=NULL)
            PutStat (obj->body);
@@ -2567,7 +2567,7 @@ void PutParamDecl (ObjectPtr obj)
 }
 
 void PutTypeName (TypePtr type)
-/* typ ve vyrazu:  new T,  static_cast <T *>,  sizeof (T) */
+/* type in an expression:  new T,  static_cast <T *>,  sizeof (T) */
 {
   bool save = PutTypeNameOnly;
   PutTypeNameOnly = true;
@@ -2581,15 +2581,15 @@ void PutHeader (ObjectPtr obj)
 }
 
 static bool HasImplicit (ObjectPtr root)
-/* implicitne deklarovana funkce v globalnim stromu identifikatoru */
+/* implicitly declared function in the global identifier tree */
 {
   if (root == NULL) return false;
   return root->implicit || HasImplicit (root->left) || HasImplicit (root->right);
 }
 
-/* knihovni funkce C, ktere ma C++ v <cstring> pretizene (const char * strchr
-   (const char *, int) a char * strchr (char *, int)) - prototyp extern "C"
-   by s nimi koliduje; ve vypisu -p je deklaruje #include <cstring> */
+/* C library functions that C++ overloads in <cstring> (const char * strchr
+   (const char *, int) and char * strchr (char *, int)) - the extern "C" prototype
+   would clash with them; in the -p listing they are declared by #include <cstring> */
 static bool CppOverloaded (ObjectPtr obj)
 {
   static const char * names [] = { "strchr", "strrchr", "strstr", "strpbrk", "memchr", NULL };
@@ -2601,7 +2601,7 @@ static bool CppOverloaded (ObjectPtr obj)
 
 void PutGlobalDecl (void)
 {
-  /* volane nedeklarovane funkce (printf, rand, ...) - hlavicky jazyka C */
+  /* called undeclared functions (printf, rand, ...) - C language headers */
   if (HasImplicit (gscope.root))
   {
      PutStr ("#include <cstdio>"); PutEol ();
@@ -2610,8 +2610,8 @@ void PutGlobalDecl (void)
   }
   PutStr ("#include <cstring>"); PutEol ();   /* strchr, strstr, ... - viz CppOverloaded */
 
-  /* std::string a assert jsou vestavene - pro g++ hlavicky */
-  if (UsesContainers)       /* Sequence, Dictionary - sablony pro g++ (cmini/ownheaders/containers.h) */
+  /* std::string and assert are built in - for g++ headers */
+  if (UsesContainers)       /* Sequence, Dictionary - templates for g++ (cmini/ownheaders/containers.h) */
   {
      PutStr ("#include \"containers.h\""); PutEol ();
   }
@@ -2626,9 +2626,9 @@ void PutGlobalDecl (void)
      ObjectPtr obj = p->item;
      if (obj->pkind == PK_PROTO)
      {
-        /* prototyp funkce (definice je dale), deklarace extern promenne */
+        /* function prototype (definition is later), declaration of extern variable */
         Object tmp;
-        tmp = *obj->pref;   /* cmini: inicializace struktury jen { ... } */
+        tmp = *obj->pref;   /* cmini: initialization of a struct only { ... } */
         tmp.type = obj->ptype;
         tmp.desc = obj->desc;
         tmp.body = NULL;
@@ -2638,7 +2638,7 @@ void PutGlobalDecl (void)
      }
      else if (obj->pkind == PK_OUTDEF)
      {
-        /* metoda nebo konstruktor definovany mimo tridu:  int T::f (...) { ... } */
+        /* method or constructor defined outside the class:  int T::f (...) { ... } */
         ObjectPtr m = obj->pref;
         if (m->owner != NULL && m->owner->ctor == m)
         {

@@ -9,7 +9,7 @@
 #include "lex.h"
 
 #ifdef __cplusplus
-extern "C" {   /* front-end je v cistem C (decl.c, ...); g++ (instr.cc, test_instr.cc) */
+extern "C" {   /* the front-end is in plain C (decl.c, ...); g++ (instr.cc, test_instr.cc) */
 #endif
 
 struct Node;
@@ -21,7 +21,7 @@ struct Expr;
 struct Stat;
 struct VtSlot;
 
-/* C: struct/enum tagy nejsou implicitni typova jmena (na rozdil od C++) */
+/* C: struct/enum tags are not implicit type names (unlike C++) */
 #ifndef __cplusplus
 typedef struct Node  Node;
 typedef struct Queue Queue;
@@ -136,7 +136,7 @@ ObjectPtr FindMember (TypePtr typ, IDENT_TYP name);
 
 /********************************* OBJECT *********************************/
 
-/* Register_ - ne Register: v C koliduje s typem Register z ../asm/reg.h (instr.cc) */
+/* Register_ - not Register: in C it clashes with the type Register from ../asm/reg.h (instr.cc) */
 enum storage_typ { NoStorage, Typedef,
                    Auto, Register_, Static, Extern };
 #ifndef __cplusplus
@@ -155,7 +155,7 @@ struct Object                  /* Object = typedef, variable, function, ... */
    storage_typ storage;        /* storage class */
    ExprPtr     init;           /* initializer */
    ExprPtr     width;          /* width of bit field */
-   ExprPtr     member_init;    /* polozka tridy s inicializaci ve tride:  bool x = false; */
+   ExprPtr     member_init;    /* class member with initialization in the class:  bool x = false; */
 
    StatPtr     body;           /* function definition */
    bool        fce;            /* function */
@@ -167,19 +167,19 @@ struct Object                  /* Object = typedef, variable, function, ... */
    bool        pure;           /* pure virtual method:  virtual void f () = 0; */
    bool        deferred;       /* body inside class - parsed at the end of class */
 
-   /* vypis -p (printlist) */
-   int         pkind;          /* znacka v printlist: PK_PROTO, PK_OUTDEF (0 = objekt) */
-   ObjectPtr   pref;           /* znacka: funkce, metoda nebo konstruktor */
-   TypePtr     ptype;          /* PK_PROTO: typ z deklarace (jmena, implicitni hodnoty) */
-   bool        outdef;         /* metoda / konstruktor definovany mimo tridu,
-                                  staticka polozka definovana mimo tridu */
-   bool        merged;         /* parametr: implicitni hodnota prevzata z deklarace */
-   bool        extern_decl;    /* globalni promenna deklarovana i jako extern - vnejsi
-                                  vazba i pro const (extern const char T []; v hlavicce) */
+   /* print -p (printlist) */
+   int         pkind;          /* marker in printlist: PK_PROTO, PK_OUTDEF (0 = object) */
+   ObjectPtr   pref;           /* marker: function, method or constructor */
+   TypePtr     ptype;          /* PK_PROTO: type from the declaration (names, default values) */
+   bool        outdef;         /* method / constructor defined outside the class,
+                                  static member defined outside the class */
+   bool        merged;         /* parameter: default value taken from the declaration */
+   bool        extern_decl;    /* global variable declared also as extern - external
+                                  linkage also for const (extern const char T []; in the header) */
 
-   /* konstruktor:  T (...) : Base (args) */
-   bool        base_init;      /* konstruktor baze s argumenty */
-   ExprPtr     base_args;      /* argumenty (NULL = zadne) */
+   /* constructor:  T (...) : Base (args) */
+   bool        base_init;      /* base constructor with arguments */
+   ExprPtr     base_args;      /* arguments (NULL = none) */
 };
 
 enum { PK_PROTO = 1, PK_OUTDEF = 2 };
@@ -190,9 +190,9 @@ enum sort_typ  { NoSort,
                  Char, Bool, Enum, Int, Float, Double, Pointer, Reference,
                  Array, Function, Struct, Union, Class, Void,
                  Constructor, Destructor,
-                 StdString,     /* std::string - jen generator instr.cc */
-                 StdSequence,   /* Sequence <T> - vestaveny typ (instr.cc) */
-                 StdDictionary, /* Dictionary <K, V> - vestaveny typ (instr.cc) */
+                 StdString,     /* std::string - only the generator instr.cc */
+                 StdSequence,   /* Sequence <T> - built-in type (instr.cc) */
+                 StdDictionary, /* Dictionary <K, V> - built-in type (instr.cc) */
                  Name, Tag };
 #ifndef __cplusplus
 typedef enum sort_typ sort_typ;
@@ -265,28 +265,28 @@ struct Type
    TypePtr     base;    /* for classes - base class (single inheritance) */
    TypePtr     elem;    /* Sequence <T>: T,  Dictionary <K, V>: V */
    TypePtr     key;     /* Dictionary <K, V>: K */
-   ObjectPtr   tdef;    /* Name: typedef, jehoz jmeno alias pouziva (typedef ve tride - translate.c) */
-   bool        long_long;     /* long long (v c-mini = long; translate.c vypise long long) */
-   bool        typedef_tag;   /* typedef struct { ... } X; - jmeno X z typedef (v C jen X, ne struct X) */
+   ObjectPtr   tdef;    /* Name: typedef whose name the alias uses (typedef in a class - translate.c) */
+   bool        long_long;     /* long long (in c-mini = long; translate.c prints long long) */
+   bool        typedef_tag;   /* typedef struct { ... } X; - name X from the typedef (in C just X, not struct X) */
 
-                        /* sem.c - vypoctene vlastnosti tridy (0 = zatim neurceno, 1 = ne, 2 = ano) */
-   int         need_ctor;     /* konstruktor (vlastni, vptr, baze, polozky) */
-   int         need_ctor_z;   /*   i kvuli retezcum a kontejnerum v polozkach (nulovani - instr.cc) */
+                        /* sem.c - computed properties of the class (0 = not determined yet, 1 = no, 2 = yes) */
+   int         need_ctor;     /* constructor (own, vptr, base, members) */
+   int         need_ctor_z;   /*   also because of strings and containers in members (zeroing - instr.cc) */
    int         need_dtor;
    int         need_dtor_z;
-   bool        vt_done;       /* tabulka virtualnich metod spocitana (VtCount) */
+   bool        vt_done;       /* virtual method table counted (VtCount) */
    int         vt_count;
    VtSlot *    vt;
 };
 
-/* slot tabulky virtualnich metod (sem.c) */
+/* slot of the virtual method table (sem.c) */
 struct VtSlot
 {
-   char *      name;      /* jmeno metody ("~" = destruktor) */
-   ObjectPtr   decl;      /* metoda, ktera slot zavedla (typ slotu) */
-   TypePtr     intro;     /* trida, ktera slot zavedla */
-   ObjectPtr   impl;      /* posledni prekryti (v teto tride nebo bazi) */
-   TypePtr     impl_cls;  /*   jeho trida */
+   char *      name;      /* method name ("~" = destructor) */
+   ObjectPtr   decl;      /* method that introduced the slot (type of slot) */
+   TypePtr     intro;     /* class that introduced the slot */
+   ObjectPtr   impl;      /* last override (in this class or base) */
+   TypePtr     impl_cls;  /*   its class */
 };
 
 TypePtr   NewType (sort_typ sort);
@@ -302,8 +302,8 @@ TypePtr   CreateType (IDENT_TYP id, sort_typ sort, bool def);
 const int Body    = 1;   /* function body { ... } */
 const int Init    = 2;   /* variable initializer */
 const int Width   = 4;   /* field width */
-const int RangeFor = 8;  /* for (T x : seq) - deklarace konci pred : */
-const int CondInit = 16; /* if (T x = e) - deklarace v podmince konci pred ) */
+const int RangeFor = 8;  /* for (T x : seq) - the declaration ends before : */
+const int CondInit = 16; /* if (T x = e) - the declaration in the condition ends before ) */
 #else
 #define Body     1
 #define Init     2
@@ -311,7 +311,7 @@ const int CondInit = 16; /* if (T x = e) - deklarace v podmince konci pred ) */
 #define RangeFor 8
 #define CondInit 16
 #endif
-extern bool RangeForDecl; /* declaration nasla  for (T x : ... */
+extern bool RangeForDecl; /* declaration found  for (T x : ... */
 
 bool IsDecl (void);                        /* is it declaration */
 SYMBOL PeekSymbol (void);                  /* next symbol (current symbol is unchanged) */
@@ -351,34 +351,34 @@ bool IsOperand (TypePtr t);
 bool IsString (TypePtr t);
 bool IsStdString (TypePtr t);              /* std::string */
 bool IsContainer (TypePtr t);              /* Sequence <T>, Dictionary <K, V> */
-bool IsPolymorphic (TypePtr cls);          /* trida s virtualnimi metodami (i zdedenymi) */
-bool SameType (TypePtr t1, TypePtr t2);    /* stejny typ (i kontejnery) */
-extern bool UsesContainers;                /* program pouziva Sequence / Dictionary (vypis -p) */
-bool IsStringLike (TypePtr t);             /* std::string, char *, retezcova konstanta */
+bool IsPolymorphic (TypePtr cls);          /* class with virtual methods (also inherited) */
+bool SameType (TypePtr t1, TypePtr t2);    /* same type (also containers) */
+extern bool UsesContainers;                /* program uses Sequence / Dictionary (print -p) */
+bool IsStringLike (TypePtr t);             /* std::string, char *, string constant */
 
-/* sem.c - pomocne funkce nad stromem, spolecne pro translate.c a instr.cc */
-ExprPtr SkipParens (ExprPtr e);            /* bez zavorek (LPAR) */
+/* sem.c - helper functions over the tree, shared by translate.c and instr.cc */
+ExprPtr SkipParens (ExprPtr e);            /* without parentheses (LPAR) */
 bool    IsSequence (TypePtr t);            /* Sequence <T> */
 bool    IsDictionary (TypePtr t);          /* Dictionary <K, V> */
-bool    IsStringKey (TypePtr dict);        /* Dictionary <string, V> - klic CM_KSTR */
-TypePtr ArrayElem (TypePtr t);             /* typ prvku pole (i vicerozmerneho), jinak t */
-TypePtr ElemClass (TypePtr t);             /* trida nebo pole trid => trida, jinak NULL */
-bool    IsEnumConst (ObjectPtr obj);       /* vyctova konstanta */
-bool    IsField (ObjectPtr obj);           /* nestaticka datova polozka tridy */
-bool    IsStaticMember (ObjectPtr obj);    /* staticka datova polozka tridy */
-bool    IsCtorDecl (ObjectPtr m);          /* konstruktor (jmeno tridy) */
+bool    IsStringKey (TypePtr dict);        /* Dictionary <string, V> - key CM_KSTR */
+TypePtr ArrayElem (TypePtr t);             /* element type of an array (also multi-dimensional), otherwise t */
+TypePtr ElemClass (TypePtr t);             /* class or array of classes => class, otherwise NULL */
+bool    IsEnumConst (ObjectPtr obj);       /* enum constant */
+bool    IsField (ObjectPtr obj);           /* non-static data member of a class */
+bool    IsStaticMember (ObjectPtr obj);    /* static data member of a class */
+bool    IsCtorDecl (ObjectPtr m);          /* constructor (class name) */
 bool    IsDtorDecl (ObjectPtr m);          /* destruktor ("~") */
-TypePtr CalleeType (ExprPtr f);            /* typ volane funkce (i pres ukazatel, referenci) */
-bool    CallReturnsRef (ExprPtr e);        /* volani funkce vracejici referenci */
-bool    NeedsCtor (TypePtr cls, bool zero_fields);   /* zero_fields: i retezce, kontejnery v polozkach */
+TypePtr CalleeType (ExprPtr f);            /* type of the called function (also via pointer, reference) */
+bool    CallReturnsRef (ExprPtr e);        /* call of a function returning a reference */
+bool    NeedsCtor (TypePtr cls, bool zero_fields);   /* zero_fields: also strings, containers in members */
 bool    NeedsDtor (TypePtr cls, bool zero_fields);
-int     VtCount (TypePtr cls);             /* pocet slotu tabulky virtualnich metod (0 - neni) */
+int     VtCount (TypePtr cls);             /* number of slots of the virtual method table (0 - none) */
 VtSlot * VtGet (TypePtr cls, int i);       /* slot i */
-int     VtIndex (TypePtr cls, const char * name);   /* slot metody podle jmena, -1 - neni */
-bool    BaseIsPolymorphic (TypePtr cls);   /* baze s virtualnimi metodami */
-bool    VptrHere (TypePtr cls);            /* trida zavadi ukazatel na tabulku virtualnich metod */
-TypePtr VptrRoot (TypePtr cls);            /* trida, ktera zavedla ukazatel na tabulku (cls polymorfni) */
-bool    IsConstInit (ObjectPtr obj);       /* const s inicializaci (const int N = 10;) */
+int     VtIndex (TypePtr cls, const char * name);   /* slot of a method by name, -1 - none */
+bool    BaseIsPolymorphic (TypePtr cls);   /* base with virtual methods */
+bool    VptrHere (TypePtr cls);            /* class introduces a pointer to the virtual method table */
+TypePtr VptrRoot (TypePtr cls);            /* class that introduced the pointer to the table (cls polymorphic) */
+bool    IsConstInit (ObjectPtr obj);       /* const with initialization (const int N = 10;) */
 
 void CheckInteger (TypePtr t);
 void CheckOperand (TypePtr t);
@@ -431,7 +431,7 @@ struct Expr
 
    SIZEOF_       sizeof (e1)
    NEW_          new T (e1)   type = pointer to T, e1 = constructor arguments or NULL
-                 new T [e2]   pole (e2 = pocet prvku)
+                 new T [e2]   array (e2 = number of elements)
 
    ASTERISK      e1 * e2
    SLASH         e1 / e2
@@ -521,22 +521,22 @@ struct Stat
 StatPtr statement (void);       /* read statement */
 void    PutStat (StatPtr s);    /* print statement */
 
-/* z sem.c (presunuto z instr.cc / translate.c) */
+/* from sem.c (moved from instr.cc / translate.c) */
 bool isIntegralType (TypePtr t);
 bool isUnsignedType (TypePtr t);
 long scalarSize (TypePtr t);
 bool isStructVal (TypePtr t);
 bool isZeroInit (TypePtr t);
-int fpKind (TypePtr t)       /* 0 - neni, 1 - float, 2 - double */;
+int fpKind (TypePtr t)       /* 0 - no, 1 - float, 2 - double */;
 bool hasFloatMember (TypePtr t);
 bool hasUserDtor (TypePtr t);
 bool hasCopyCtor (TypePtr t);
-bool IsInClass (ObjectPtr f) /* metoda / konstruktor definovany uvnitr tridy => static inline */;
+bool IsInClass (ObjectPtr f) /* method / constructor defined inside the class => static inline */;
 bool BaseHasField (TypePtr base, const char * name);
-TypePtr VT (TypePtr t) /* typ hodnoty: bez aliasu a reference */;
+TypePtr VT (TypePtr t) /* type of value: without alias and reference */;
 TypePtr ET (ExprPtr e);
 bool IsCharPtrT (TypePtr t) /* char *, char [] */;
-TypePtr PtrClass (TypePtr t) /* ukazatel na tridu => trida, jinak NULL */;
+TypePtr PtrClass (TypePtr t) /* pointer to a class => class, otherwise NULL */;
 
 #ifdef __cplusplus
 }

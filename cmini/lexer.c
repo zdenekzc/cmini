@@ -7,17 +7,17 @@
 /**************************************************************************/
 
 /*
-   Alternativa k lex.c se zpracovanim direktiv preprocesoru (viz lexer.h).
-   Myslenky prevzaty z utils/textio.cc a utils/envio.cc, napsano v jazyce C.
+   Alternative to lex.c with handling of preprocessor directives (see lexer.h).
+   Ideas taken from utils/textio.cc and utils/envio.cc, written in C.
 
-   Vrstvy:
-     1. vstup       - zasobnik urovni: hlavni text (inp.c), vlozene soubory,
-                      rozvinuta makra, pomocne texty (argumenty, tela maker)
-     2. RawToken    - symboly preprocesoru (identifikator, cislo, retezec,
-                      znak, oddelovac, konec radky) i s puvodnim textem
-     3. ExpToken    - rozvijeni maker
-     4. DirToken    - direktivy (# na zacatku radky) a podminene preklady
-     5. NextSymbol  - prevod na SYMBOL a hodnoty IdentVal, NumVal, StrVal, ChrVal
+   Layers:
+     1. input       - stack of levels: main text (inp.c), included files,
+                      expanded macros, auxiliary texts (arguments, macro bodies)
+     2. RawToken    - preprocessor symbols (identifier, number, string,
+                      character, separator, end of line) with the original text
+     3. ExpToken    - macro expansion
+     4. DirToken    - directives (# at the start of a line) and conditional compilation
+     5. NextSymbol  - conversion to SYMBOL and values IdentVal, NumVal, StrVal, ChrVal
 */
 
 #include <string.h> /* memset, strcmp */
@@ -29,14 +29,14 @@
 #include "out.h"
 #include "lexer.h"
 
-SYMBOL     sy;           /* zpracovavany symbol */
+SYMBOL     sy;           /* symbol being processed */
 
-IDENT_TYP  IdentVal;     /* identifikator */
-NUM_TYP    NumVal;       /* cislo (jako posloupnost znaku) */
-STR_TYP    StrVal;       /* retezec (bez uvozovek) */
-char       ChrVal;       /* znak */
+IDENT_TYP  IdentVal;     /* identifier */
+NUM_TYP    NumVal;       /* number (as a sequence of characters) */
+STR_TYP    StrVal;       /* string (without quotes) */
+char       ChrVal;       /* character */
 
-bool       l_suffix;     /* znacky na konci cisla */
+bool       l_suffix;     /* suffixes at the end of a number */
 bool       u_suffix;
 bool       f_suffix;
 
@@ -44,12 +44,12 @@ bool       f_suffix;
 #define islod(c)     (isalpha(c) || ((c)=='_') || isdigit(c))
 #define isoctal(c)   ((c) >= '0' && (c) <= '7')
 
-#define LEVEL_MAX    64     /* vnoreni souboru a maker */
-#define PARAM_MAX    64     /* pocet parametru makra */
-#define COND_MAX     64     /* vnoreni #if */
-#define INCL_MAX     32     /* pocet adresaru pro #include */
-#define TOKEN_SIZE   1024   /* delka jednoho symbolu preprocesoru */
-#define PATH_SIZE    1024   /* delka jmena souboru */
+#define LEVEL_MAX    64     /* nesting of files and macros */
+#define PARAM_MAX    64     /* number of macro parameters */
+#define COND_MAX     64     /* nesting of #if */
+#define INCL_MAX     32     /* number of directories for #include */
+#define TOKEN_SIZE   1024   /* length of one preprocessor symbol */
+#define PATH_SIZE    1024   /* length of file name */
 
 /******************************** MESSAGES ********************************/
 
@@ -73,7 +73,7 @@ static char * StrDup (const char * s)
 
 /****************************** TEXT BUFFER *******************************/
 
-/* retezec promenne delky */
+/* variable-length string */
 
 typedef struct
 {
@@ -113,13 +113,13 @@ static void TextAddStr (TEXT * t, const char * s)
 }
 
 static const char * TextStr (TEXT * t)
-/* obsah (i prazdny retezec) */
+/* content (also an empty string) */
 {
   return (t->s == NULL) ? "" : t->s;
 }
 
 static char * TextGet (TEXT * t)
-/* vrati obsah, uvolneni pameti je na volajicim */
+/* returns the content; freeing the memory is up to the caller */
 {
   if (t->s == NULL) return StrDup ("");
   char * s = t->s;
@@ -145,11 +145,11 @@ typedef struct MACRO_REC MACRO;
 struct MACRO_REC
 {
   char *  name;
-  char *  body;                /* telo makra, symboly oddelene nejvyse jednou mezerou */
-  int     param_cnt;           /* -1 => makro bez zavorek */
+  char *  body;                /* macro body, symbols separated by at most one space */
+  int     param_cnt;           /* -1 => macro without parentheses */
   char *  params [PARAM_MAX];
-  bool    variadic;            /* posledni parametr je ... */
-  bool    predefined;          /* z LexDefine, InitLex makro neruší */
+  bool    variadic;            /* last parameter is ... */
+  bool    predefined;          /* macros from LexDefine are not removed by InitLex */
   MACRO * next;
 };
 
@@ -173,7 +173,7 @@ static void FreeMacro (MACRO * m)
 }
 
 static void RemoveMacros (bool all)
-/* all == false => zrus jen makra definovana ve zdrojovem textu */
+/* all == false => remove only macros defined in the source text */
 {
   MACRO * * p = &Macros;
   while (*p != NULL)
@@ -213,7 +213,7 @@ static void AddMacro (MACRO * m)
 }
 
 static int ParamIndex (MACRO * m, const char * name)
-/* poradi parametru, -1 => neni parametr */
+/* parameter index, -1 => not a parameter */
 {
   for (int i = 0; i < m->param_cnt; i++)
      if (strcmp (m->params [i], name) == 0)
@@ -225,23 +225,23 @@ static int ParamIndex (MACRO * m, const char * name)
 
 enum
 {
-  LEVEL_MAIN,   /* hlavni text - cte se pomoci inp.c (ch, NextChar) */
-  LEVEL_FILE,   /* soubor z #include */
-  LEVEL_MACRO,  /* rozvinute makro */
-  LEVEL_TEXT    /* pomocny text, na konci vraci PP_END */
+  LEVEL_MAIN,   /* main text - read via inp.c (ch, NextChar) */
+  LEVEL_FILE,   /* file from #include */
+  LEVEL_MACRO,  /* expanded macro */
+  LEVEL_TEXT    /* auxiliary text, returns PP_END at the end */
 };
 
 typedef struct
 {
   int     kind;
-  char *  text;       /* obsah (krome LEVEL_MAIN) */
+  char *  text;       /* content (except LEVEL_MAIN) */
   int     len;
   int     pos;
   char *  file_name;  /* LEVEL_MAIN, LEVEL_FILE */
-  int     line;       /* LEVEL_FILE: cislo radky */
-  bool    bol;        /* zacatek radky */
-  bool    eol_sent;   /* LEVEL_FILE: na konci souboru jiz byl ohlasen konec radky */
-  MACRO * macro;      /* LEVEL_MACRO: rozvijene makro (zakaz rekurze) */
+  int     line;       /* LEVEL_FILE: line number */
+  bool    bol;        /* start of line */
+  bool    eol_sent;   /* LEVEL_FILE: at the end of file the end of line has already been reported */
+  MACRO * macro;      /* LEVEL_MACRO: macro being expanded (no recursion) */
 }
   LEVEL;
 
@@ -292,7 +292,7 @@ static LEVEL * Top (void)
 }
 
 static LEVEL * CurrentFile (void)
-/* nejvyssi uroven, ktera je souborem */
+/* highest level that is a file */
 {
   int i = LevelCnt-1;
   while (i > 0 && Levels[i].kind != LEVEL_FILE)
@@ -320,7 +320,7 @@ int LexCurrentLine (void)
 }
 
 static bool MacroActive (MACRO * m)
-/* makro se prave rozviji */
+/* macro is being expanded */
 {
   for (int i = 0; i < LevelCnt; i++)
      if (Levels[i].kind == LEVEL_MACRO && Levels[i].macro == m)
@@ -338,7 +338,7 @@ static bool AtEnd (void)
 }
 
 static char Cur (void)
-/* aktualni znak */
+/* current character */
 {
   LEVEL * t = Top ();
   if (t->kind == LEVEL_MAIN)
@@ -348,7 +348,7 @@ static char Cur (void)
 }
 
 static void Adv (void)
-/* posun na dalsi znak */
+/* advance to next character */
 {
   LEVEL * t = Top ();
   if (t->kind == LEVEL_MAIN)
@@ -363,7 +363,7 @@ static void Adv (void)
 }
 
 static void LexErrorArg (const char * msg, const char * arg)
-/* chybove hlaseni, ve vlozenem souboru se pridava jmeno souboru a radka */
+/* error message; in an included file the file name and line are added */
 {
   char buf [PATH_SIZE + 256];
   buf [0] = 0;
@@ -400,7 +400,7 @@ enum
   PP_CHAR,
   PP_PUNCT,
   PP_NEWLINE,
-  PP_END,     /* konec pomocneho textu (LEVEL_TEXT) */
+  PP_END,     /* end of auxiliary text (LEVEL_TEXT) */
   PP_EOF
 };
 
@@ -409,18 +409,18 @@ typedef struct
   int  kind;
   char text [TOKEN_SIZE];
   int  len;
-  bool space;     /* pred symbolem byla mezera */
-  bool bol;       /* prvni symbol na radce souboru */
+  bool space;     /* there was a space before the symbol */
+  bool bol;       /* first symbol on a line of the file */
   int  line;
 }
   PPTOKEN;
 
-static PPTOKEN Back;               /* vraceny symbol (RawToken) */
+static PPTOKEN Back;               /* returned symbol (RawToken) */
 static bool    BackValid = false;
 
-static bool    SkipMode = false;   /* preskakovana cast - tolerantni k chybam */
-static bool    InDirective = false;/* uvnitr direktivy - konec radky je dulezity */
-static bool    PendingSpace = false; /* mezera pred nazvem makra */
+static bool    SkipMode = false;   /* skipped part - tolerant of errors */
+static bool    InDirective = false;/* inside a directive - the end of line is important */
+static bool    PendingSpace = false; /* space before the macro name */
 
 static void TokAdd (PPTOKEN * t, char c)
 {
@@ -437,9 +437,9 @@ static void TokAddCur (PPTOKEN * t)
 }
 
 static void Literal (PPTOKEN * t, char quote)
-/* retezec nebo znak, i s uvozovkami a escape sekvencemi */
+/* string or character, including quotes and escape sequences */
 {
-  TokAddCur (t); /* uvozovka */
+  TokAddCur (t); /* quote */
 
   for (;;)
   {
@@ -461,7 +461,7 @@ static void Literal (PPTOKEN * t, char quote)
      {
         Adv ();
         if (Cur () == LF)
-           Adv (); /* pokracovani na dalsi radce */
+           Adv (); /* continuation on the next line */
         else
         {
            TokAdd (t, BACKSLASH);
@@ -474,7 +474,7 @@ static void Literal (PPTOKEN * t, char quote)
 }
 
 static void PpNumber (PPTOKEN * t)
-/* cislo v sirsim smyslu (pp-number), kontrola az v NextSymbol */
+/* number in the broader sense (pp-number), checked only in NextSymbol */
 {
   char last = 0;
   for (;;)
@@ -499,7 +499,7 @@ static const char * Punct2 [] =
 };
 
 static void Punctuation (PPTOKEN * t)
-/* oddelovac, prvni znak jiz je v t */
+/* separator, the first character is already in t */
 {
   char first = t->text [0];
   char c = Cur ();
@@ -518,7 +518,7 @@ static void Punctuation (PPTOKEN * t)
 }
 
 static void RawToken (PPTOKEN * t)
-/* precti jeden symbol preprocesoru (bez rozvoje maker) */
+/* read one preprocessor symbol (without macro expansion) */
 {
   if (BackValid)
   {
@@ -552,14 +552,14 @@ static void RawToken (PPTOKEN * t)
         }
         else if (top->kind == LEVEL_FILE && ! top->eol_sent)
         {
-           /* soubor bez konce radky na posledni radce */
+           /* file without end of line on the last line */
            top->eol_sent = true;
            t->kind = PP_NEWLINE;
            return;
         }
         else
         {
-           PopLevel (); /* konec vlozeneho souboru nebo makra */
+           PopLevel (); /* end of included file or macro */
            t->space = true;
            continue;
         }
@@ -706,7 +706,7 @@ static bool IsEol (PPTOKEN * t)
 }
 
 static bool CouldMerge (char a, char b)
-/* symboly by se po spojeni bez mezery mohly slit do jednoho */
+/* symbols could merge into one if joined without a space */
 {
   const char * p = "+-*/%&|^=!<>:#.";
   if ((islod (a) || a == '.') && (islod (b) || b == '.')) return true;
@@ -715,7 +715,7 @@ static bool CouldMerge (char a, char b)
 }
 
 static void AddToken (TEXT * out, const char * s, bool space)
-/* pridej symbol do textu, mezeru jen kdyz byla ve zdroji nebo je nutna */
+/* add symbol to the text, a space only when it was in the source or is necessary */
 {
   if (*s == 0) return;
   if (out->len > 0 && (space || CouldMerge (LastChr (out), s [0])))
@@ -737,7 +737,7 @@ typedef struct
   TOKLIST;
 
 static void Tokenize (const char * s, TOKLIST * list)
-/* rozdel text na symboly */
+/* split text into symbols */
 {
   PPTOKEN t;
 
@@ -777,7 +777,7 @@ static void FreeTokList (TOKLIST * list)
 }
 
 static char * ExpandText (const char * s)
-/* text s rozvinutymi makry (argument makra) */
+/* text with expanded macros (macro argument) */
 {
   PPTOKEN t;
   TEXT out;
@@ -811,7 +811,7 @@ static void Stringify (TEXT * out, const char * s)
 }
 
 static char * Substitute (MACRO * m, TEXT args [])
-/* telo makra s dosazenymi argumenty, operatory # a ## */
+/* macro body with substituted arguments, operators # and ## */
 {
   TOKLIST b;
   TEXT out;
@@ -853,13 +853,13 @@ static char * Substitute (MACRO * m, TEXT args [])
         if (p < 0)
            val = s;
         else if (glue || (i+1 < b.cnt && strcmp (b.text [i+1], "##") == 0))
-           val = TextStr (&args [p]); /* u ## se argument nerozvijí */
+           val = TextStr (&args [p]); /* with ## the argument is not expanded */
         else
            val = expanded = ExpandText (TextStr (&args [p]));
      }
 
      if (glue)
-        TextAddStr (&out, val); /* ## - spojeni bez mezery */
+        TextAddStr (&out, val); /* ## - joining without a space */
      else
         AddToken (&out, val, space);
      glue = false;
@@ -873,7 +873,7 @@ static char * Substitute (MACRO * m, TEXT args [])
 }
 
 static void PeekToken (PPTOKEN * t)
-/* dalsi symbol bez rozvoje maker, mimo direktivu preskakuje konce radek */
+/* next symbol without macro expansion, outside a directive skips line ends */
 {
   RawToken (t);
   while (t->kind == PP_NEWLINE && ! InDirective)
@@ -881,7 +881,7 @@ static void PeekToken (PPTOKEN * t)
 }
 
 static int CollectArgs (MACRO * m, TEXT args [])
-/* precti argumenty makra, leva zavorka jiz byla prectena */
+/* read macro arguments, the left parenthesis has already been read */
 {
   PPTOKEN t;
   int cnt = 0;
@@ -933,7 +933,7 @@ static int CollectArgs (MACRO * m, TEXT args [])
 
   if (m->variadic && cnt == m->param_cnt-1)
   {
-     TextInit (&args [cnt]); /* prazdny ... */
+     TextInit (&args [cnt]); /* empty ... */
      cnt ++;
   }
 
@@ -961,7 +961,7 @@ static void QuoteFileName (PPTOKEN * t, const char * name)
 }
 
 static void ExpToken (PPTOKEN * t)
-/* precti symbol a rozvin makra */
+/* read symbol and expand macros */
 {
   for (;;)
   {
@@ -1001,7 +1001,7 @@ static void ExpToken (PPTOKEN * t)
         PeekToken (&n);
         if (! IsPunct (&n, "("))
         {
-           UnreadToken (&n); /* jmeno makra s parametry bez zavorky */
+           UnreadToken (&n); /* name of a macro with parameters without parenthesis */
            return;
         }
 
@@ -1021,8 +1021,8 @@ static void ExpToken (PPTOKEN * t)
 
 typedef struct
 {
-  bool active;    /* tato vetev se preklada */
-  bool taken;     /* nektera vetev jiz byla vybrana */
+  bool active;    /* this branch is compiled */
+  bool taken;     /* some branch has already been selected */
   bool else_seen;
 }
   COND;
@@ -1040,13 +1040,13 @@ static void PushCond (bool value)
   if (CondCnt >= COND_MAX) LexError ("Too many nested #if directives");
   bool parent = CondActive ();
   Conds[CondCnt].active = parent && value;
-  Conds[CondCnt].taken = ! parent || value; /* v neaktivni casti se zadna vetev nevybere */
+  Conds[CondCnt].taken = ! parent || value; /* in an inactive part no branch is selected */
   Conds[CondCnt].else_seen = false;
   CondCnt ++;
 }
 
 static void SkipLine (void)
-/* preskoc zbytek direktivy */
+/* skip the rest of the directive */
 {
   PPTOKEN t;
   bool save = SkipMode;
@@ -1078,7 +1078,7 @@ static void DirDefine (void)
   m->param_cnt = -1;
   m->body = NULL;
 
-  if (Cur () == '(') /* zavorka hned za jmenem => makro s parametry */
+  if (Cur () == '(') /* parenthesis right after the name => macro with parameters */
   {
      RawToken (&t); /* ( */
      m->param_cnt = 0;
@@ -1099,7 +1099,7 @@ static void DirDefine (void)
               if (ParamIndex (m, t.text) >= 0) LexErrorArg ("Duplicate macro parameter", t.text);
               m->params [m->param_cnt ++] = StrDup (t.text);
               RawToken (&t);
-              if (IsPunct (&t, "...")) /* GNU: jmeno... */
+              if (IsPunct (&t, "...")) /* GNU: name... */
               {
                  m->variadic = true;
                  RawToken (&t);
@@ -1119,7 +1119,7 @@ static void DirDefine (void)
   else
      RawToken (&t);
 
-  /* telo makra */
+  /* macro body */
   TextInit (&body);
   while (! IsEol (&t))
   {
@@ -1145,7 +1145,7 @@ static void DirUndef (void)
 /* ---------------------------------------------------------------------- */
 
 static char * ReadFile (const char * name)
-/* obsah souboru, NULL => soubor neexistuje */
+/* file content, NULL => file does not exist */
 {
   FILE * f = fopen (name, "rb");
   if (f == NULL) return NULL;
@@ -1171,7 +1171,7 @@ static void JoinPath (char * buf, const char * dir, const char * name)
 }
 
 static void FileDir (char * buf, const char * file_name)
-/* adresar souboru */
+/* directory of the file */
 {
   buf [0] = 0;
   if (file_name == NULL) return;
@@ -1245,16 +1245,16 @@ static void DirInclude (void)
      LexErrorArg ("Cannot open include file", msg);
   }
 
-  /* nenalezene systemove soubory (<stdio.h>, ...) se ignoruji */
+  /* system files not found (<stdio.h>, ...) are ignored */
 
   TextFree (&name);
 }
 
 /****************************** EXPRESSIONS *******************************/
 
-/* vyrazy v #if a #elif */
+/* expressions in #if and #elif */
 
-static PPTOKEN ET;  /* aktualni symbol vyrazu */
+static PPTOKEN ET;  /* current symbol of the expression */
 
 static void ENext (void)
 {
@@ -1301,7 +1301,7 @@ static long EPrimary (bool eval)
      if (strcmp (ET.text, "defined") == 0)
      {
         bool par = false;
-        RawToken (&ET); /* bez rozvoje maker */
+        RawToken (&ET); /* without macro expansion */
         if (IsPunct (&ET, "("))
         {
            par = true;
@@ -1320,7 +1320,7 @@ static long EPrimary (bool eval)
      else if (strcmp (ET.text, "true") == 0)
         v = 1;
      else
-        v = 0; /* nedefinovany identifikator */
+        v = 0; /* undefined identifier */
      ENext ();
   }
   else if (IsPunct (&ET, "("))
@@ -1435,7 +1435,7 @@ static long ECond (bool eval)
 }
 
 static bool IfExpression (void)
-/* vyhodnot vyraz az do konce radky */
+/* evaluate the expression up to the end of line */
 {
   bool save = SkipMode;
   SkipMode = false;
@@ -1467,7 +1467,7 @@ static bool IfdefSymbol (bool active)
 }
 
 static void Directive (void)
-/* '#' na zacatku radky jiz byl precten */
+/* '#' at the start of the line has already been read */
 {
   PPTOKEN t;
   bool active = CondActive ();
@@ -1478,7 +1478,7 @@ static void Directive (void)
   RawToken (&t);
 
   if (IsEol (&t))
-     ; /* prazdna direktiva */
+     ; /* empty directive */
 
   else if (t.kind != PP_IDENT)
   {
@@ -1578,7 +1578,7 @@ static void Directive (void)
 }
 
 static void DirToken (PPTOKEN * t)
-/* symbol po zpracovani direktiv a podminenych prekladu */
+/* symbol after processing directives and conditional compilation */
 {
   for (;;)
   {
@@ -1613,7 +1613,7 @@ static void DirToken (PPTOKEN * t)
 
 /********************************** INIT **********************************/
 
-static PPTOKEN Ahead;              /* symbol prectenty dopredu (spojovani retezcu) */
+static PPTOKEN Ahead;              /* symbol read ahead (string concatenation) */
 static bool    AheadValid = false;
 
 void LexFileName (const char * name)
@@ -1652,13 +1652,13 @@ void LexClear (void)
 
 void InitLex (void)
 {
-  /* musi byt zavolano az po OpenInp () */
+  /* must be called only after OpenInp () */
 
   while (LevelCnt > 0)
      PopLevel ();
   PushLevel (LEVEL_MAIN, NULL, MainFileName == NULL ? NULL : StrDup (MainFileName), NULL);
 
-  RemoveMacros (false); /* makra z predchoziho prekladu */
+  RemoveMacros (false); /* macros from the previous translation */
 
   BackValid = false;
   AheadValid = false;
@@ -1691,7 +1691,7 @@ typedef struct
   KEYWORD_REC;
 
 #define KEYWORD_MAX 50
-static KEYWORD_REC KeywordTab [KEYWORD_MAX] = /* serazeno podle abecedy */
+static KEYWORD_REC KeywordTab [KEYWORD_MAX] = /* sorted alphabetically */
 {
   {"auto",AUTO_},
   {"bool",BOOL_},
@@ -1745,7 +1745,7 @@ static KEYWORD_REC KeywordTab [KEYWORD_MAX] = /* serazeno podle abecedy */
   {"while",WHILE_}
 };
 
-/* oddelovace */
+/* separators */
 
 typedef struct
 {
@@ -1846,14 +1846,14 @@ static void Identifier (const char * s)
      }
   }
 
-  /* NULL, pokud neni definovano jako makro (stejne jako v lex.c) */
+  /* NULL if not defined as a macro (as in lex.c) */
   if (strcmp (IdentVal, "NULL") == 0)
      sy = NULLPTR_;
 }
 
 /* ---------------------------------------------------------------------- */
 
-static const char * NP; /* pozice ve zpracovavanem cisle */
+static const char * NP; /* position in the number being processed */
 
 static void Digits (void)
 /* digit <digit> */
@@ -1925,7 +1925,7 @@ static void Number (const char * s)
   f_suffix = false;
   NP = s;
 
-  if (*NP == '.')                       /* cislo zacinajici teckou */
+  if (*NP == '.')                       /* number starting with a dot */
   {
      sy = FLT;
      NP++;
@@ -1957,12 +1957,12 @@ static void Number (const char * s)
         FloatSuffix ();                 /* f | F | l | L */
      else
      {
-        /* kontrola osmickovych cisel */
+        /* check of octal numbers */
         if (s[0] == '0')
            for (const char * p = s+1; isdigit (*p); p++)
               if (*p > '7') LexError ("Bad octal number");
 
-        IntSuffix ();                   /* pripony */
+        IntSuffix ();                   /* suffixes */
      }
   }
 
@@ -2038,10 +2038,10 @@ static char DecodeChar (const char * * p)
   }
 }
 
-static int StrLen; /* delka retezce v StrVal */
+static int StrLen; /* length of string in StrVal */
 
 static void AppendString (const char * s)
-/* pridej obsah retezcove konstanty (s uvozovkami) do StrVal */
+/* add contents of the string literal (with quotes) to StrVal */
 {
   const char * p = s+1;
   while (*p != QUOTE2 && *p != 0)
@@ -2069,7 +2069,7 @@ static void StringLiteral (PPTOKEN * t)
   StrLen = 0;
   AppendString (t->text);
 
-  /* sousedni retezce se spoji: "abc" "def" */
+  /* adjacent strings are joined: "abc" "def" */
   for (;;)
   {
      GetToken (&Ahead);
@@ -2108,7 +2108,7 @@ static void Punctuator (const char * s)
 
 static void RawNextSymbol (void);
 
-/* symbol; X::jmeno s prostorem jmen X => jmeno (decl.c - NamespaceQual) */
+/* symbol; X::name with namespace X => name (decl.c - NamespaceQual) */
 void NextSymbol (void)
 {
   RawNextSymbol ();
@@ -2119,7 +2119,7 @@ static void RawNextSymbol (void)
 {
   PPTOKEN t;
 
-  if (ReplaySymbol != NULL)   /* prehravani ulozenych symbolu (decl.c) */
+  if (ReplaySymbol != NULL)   /* replay of stored symbols (decl.c) */
   {
      ReplaySymbol ();
      return;
@@ -2142,7 +2142,7 @@ static void RawNextSymbol (void)
 /************************** CHECK CURRENT SYMBOL **************************/
 
 static void SymToStr (SYMBOL par, STR_TYP s)
-/* prevod symbolu na retezec znaku */
+/* conversion of symbol to character string */
 {
   int i;
 
@@ -2164,7 +2164,7 @@ static void SymToStr (SYMBOL par, STR_TYP s)
 }
 
 void PutSymbol (SYMBOL par)
-/* zobraz symbol na vystupu */
+/* show symbol in the output */
 {
    STR_TYP txt;
    SymToStr (par, txt);
@@ -2172,7 +2172,7 @@ void PutSymbol (SYMBOL par)
 }
 
 void PutCurrentSymbol (void)
-/* zobraz prave zpracovavany symbol na vystupu */
+/* show the symbol being processed in the output */
 {
   switch (sy)
   {
@@ -2216,7 +2216,7 @@ void CheckSymbol (SYMBOL par)
 {
   STR_TYP msg;
 
-  /* ohlaseni chyby pokud sy <> par */
+  /* report error if sy <> par */
   if (sy != par)
   {
      switch (par)

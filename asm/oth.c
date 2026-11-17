@@ -1,6 +1,6 @@
 /* OTH.CC */
 
-/* vystupni zaznamy a direktivy (prevedeno z oth.pas) */
+/* output records and directives (translated from oth.pas) */
 
 #include <string.h>
 #include <stdlib.h>
@@ -33,8 +33,8 @@ static void SendRes (void)
 
    if (work.cls != Data || work.DataLen > 0)
    {
-      /* puvodne ResultSize [work.class] (+ DataLen) - velikosti pro
-         16bitove ukazatele; zde cely zaznam */
+      /* originally ResultSize [work.class] (+ DataLen) - sizes for
+         16-bit pointers; here the whole record */
       work.next = NULL;
 
       ref = (ResultPtr) malloc (sizeof (ResultRec));
@@ -77,9 +77,9 @@ static void PutFixup (ExprRec e, FixTyp kind, card width)
    work.FixVal    = e.val;
    work.Fix64     = x64 && width == qword;
    if (e.target == NULL && e.add == NULL && e.frame == NULL)
-      work.FixVal64 = e.val64;      /* konstanta - 64 bitu */
+      work.FixVal64 = e.val64;      /* constant - 64 bits */
    else
-      work.FixVal64 = e.val;        /* adresa - nejvyse 32 bitu */
+      work.FixVal64 = e.val;        /* address - at most 32 bits */
    SendRes ();
    ip = (longint) ((uint32_t) ip + width);
 }
@@ -103,8 +103,8 @@ void PutNear (ExprRec * e, card width)
 }
 
 void PutRel (ExprRec * e, card width, card extra)
-/* adresa relativni k RIP (x86-64): cil - konec instrukce,
-   extra = pocet bajtu instrukce za adresou (prima hodnota) */
+/* address relative to RIP (x86-64): target - end of instruction,
+   extra = number of instruction bytes after the address (immediate value) */
 {
    ExprRec t = *e;
    if (e->para) AsmError (BadPar);
@@ -227,7 +227,7 @@ static void SetCombi (CombiTyp x)
 }
 
 static void SetSeg32 (bool x, bool x64v)
-/* USE16, USE32, USE64 (x64v: USE64, x je pak take true) */
+/* USE16, USE32, USE64 (x64v: USE64, x is then also true) */
 {
    Insymbol ();
    if (x64v && proc < i64) AsmError (InvProc);
@@ -288,7 +288,7 @@ void SegmentDir (void)
    if (ThisSeg != NULL) AsmError (NestSeg);
    ThisSeg  = lab;
    ThisProc = NULL;
-   if (ThisSeg->ope.Seg32) default_ = dword;   /* i USE64: operandy 32 bitu */
+   if (ThisSeg->ope.Seg32) default_ = dword;   /* i USE64: 32-bit operands */
                       else default_ = word;
    x64 = ThisSeg->ope.Seg64;
    if (x64 && (obj || pas || bin)) AsmError (Use64NotAll);
@@ -416,7 +416,7 @@ void ExtrnDir (void)
    ExprRec a;
 
    if (bin) AsmError (ExtrnNotAll);
-   if (elf && ! pe) AsmError (ElfExtrn);   /* PE: import z DLL (code.c) */
+   if (elf && ! pe) AsmError (ElfExtrn);   /* PE: import from a DLL (code.c) */
    do
    {
       if (CurSy != Identif) AsmError (IdExp);
@@ -432,7 +432,7 @@ void ExtrnDir (void)
       else
          NewExtrn (ref, mem, TypeConv (a));
 
-      /* jmeno pro linker:  EXTRN X1: NEAR 'printf' */
+      /* name for the linker:  EXTRN X1: NEAR 'printf' */
       if (CurSy == Chars)
       {
          StrSet (ref->extname, sizeof (ref->extname), chs);
@@ -454,7 +454,7 @@ void PublicDir (void)
       (void) dummy;
       Insymbol ();
 
-      /* jmeno pro linker:  PUBLIC FMAIN 'main' */
+      /* name for the linker:  PUBLIC FMAIN 'main' */
       if (CurSy == Chars)
       {
          StrSet (ref->extname, sizeof (ref->extname), chs);
@@ -548,7 +548,7 @@ static void PutFloat (card t)
    int len, start, stop, pos, n;
 
    len = (int) strlen (num);
-   /* Pascal: num[0] (delka 0) <> 'R' */
+   /* Pascal: num[0] (length 0) <> 'R' */
    if (len == 0 || num[len - 1] != 'R') AsmError (BadFloat);
 
    stop = len - 1;
@@ -559,7 +559,7 @@ static void PutFloat (card t)
    pos = stop;
    while (pos >= start)
    {
-      /* Pascal: chs [pos], chs [pos-1] (cislovano od 1) */
+      /* Pascal: chs [pos], chs [pos-1] (numbered from 1) */
       n = conv (chs [pos - 1]) + 16 * conv (chs [pos - 2]);
       Put ((small) n, ' ');
       pos -= 2;
@@ -569,7 +569,7 @@ static void PutFloat (card t)
 void DefDir (card t)
 {
    int     DupLevel;
-   longint DupStart [RepMax + 1];   /* [1..RepMax] - poloha (i nad 64 kB, drive card) */
+   longint DupStart [RepMax + 1];   /* [1..RepMax] - position (also above 64 kB, formerly card) */
    card    DupCount [RepMax + 1];
    ExprRec a;
 

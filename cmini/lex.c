@@ -14,24 +14,24 @@
 #include "out.h"
 #include "lex.h"
 
-SYMBOL     sy;           /* zpracovavany symbol */
+SYMBOL     sy;           /* symbol being processed */
 
-IDENT_TYP  IdentVal;     /* identifikator */
-NUM_TYP    NumVal;       /* cislo (jako posloupnost znaku) */
-STR_TYP    StrVal;       /* retezec (bez uvozovek) */
-char       ChrVal;       /* znak */
+IDENT_TYP  IdentVal;     /* identifier */
+NUM_TYP    NumVal;       /* number (as a sequence of characters) */
+STR_TYP    StrVal;       /* string (without quotes) */
+char       ChrVal;       /* character */
 
-bool       l_suffix;     /* znacky na konci cisla */
+bool       l_suffix;     /* suffixes at the end of a number */
 bool       u_suffix;
 bool       f_suffix;
 
-static int NumLen;       /* delka cisla */
+static int NumLen;       /* length of number */
 
 /********************************** INIT **********************************/
 
 void InitLex (void)
 {
-  /* musi byt zavolano az po OpenInp () */
+  /* must be called only after OpenInp () */
 
   sy = (SYMBOL) 0;
   CLR_ARR (IdentVal);
@@ -181,7 +181,7 @@ static void FloatSuffix ()
   }
 }
 
-/* pripony celeho cisla:  L, LL (= L), U, UL, ULL, LU */
+/* suffixes of an integer:  L, LL (= L), U, UL, ULL, LU */
 static void HexSuffix (void)
 {
   if (ch=='l' || ch=='L')
@@ -239,14 +239,14 @@ static void Number (void)
 
      if (sy==NUM)
      {
-        /* kontrola osmickovych cisel */
+        /* check of octal numbers */
         if (NumVal[0] == '0')
         {
            for (int i=1; i<NumLen; i++)
               if (NumVal[i] > '7') Error ("Bad octal number");
         }
 
-        /* pripony */
+        /* suffixes */
         if (ch=='l' || ch=='L')
         {
            Store ();
@@ -274,14 +274,14 @@ static void Number (void)
      }
   }
 
-  NumVal [NumLen] = 0; /* ukonci retezec */
+  NumVal [NumLen] = 0; /* end the string */
 }
 
 static void Fraction (void)
-/* cislo zacinajici desetinnou teckou */
+/* number starting with a decimal point */
 {
   sy = FLT;
-  NumVal [0] = '.'; /* tecka jiz byla prectena */
+  NumVal [0] = '.'; /* the dot has already been read */
   NumLen = 1;
   l_suffix = false;
   u_suffix = false;
@@ -329,7 +329,7 @@ static void Identifier (void)
      }
   }
 
-  /* makro NULL (preprocesor nemame) */
+  /* macro NULL (we have no preprocessor) */
   if (strcmp (IdentVal, "NULL") == 0)
      sy = NULLPTR_;
 }
@@ -481,7 +481,7 @@ int LexCurrentLine (void) { return InpLineNum; }
 
 static void RawNextSymbol (void);
 
-/* symbol; X::jmeno s prostorem jmen X => jmeno (decl.c - NamespaceQual) */
+/* symbol; X::name with namespace X => name (decl.c - NamespaceQual) */
 void NextSymbol (void)
 {
   RawNextSymbol ();
@@ -494,7 +494,7 @@ static void RawNextSymbol (void)
   bool quit;
   char old;
 
-  if (ReplaySymbol != NULL)   /* prehravani ulozenych symbolu (decl.c) */
+  if (ReplaySymbol != NULL)   /* replay of stored symbols (decl.c) */
   {
      ReplaySymbol ();
      return;
@@ -514,7 +514,7 @@ static void RawNextSymbol (void)
   {
      NextChar (); /* skip '/' */
 
-     if (ch == '/') /* komentar se dvema lomitky */
+     if (ch == '/') /* comment with two slashes */
      {
         while (ch != LF)
            NextChar ();
@@ -527,10 +527,10 @@ static void RawNextSymbol (void)
         sy = DIVASSIGN;
      }
 
-     else if (ch != '*') /* obycejne lomitko */
+     else if (ch != '*') /* ordinary slash */
         sy = SLASH;
 
-     else /* komentar s lomitkem a hvezdickou */
+     else /* comment with slash and asterisk */
      {
         NextChar (); /* skip '*' */
 
@@ -546,7 +546,7 @@ static void RawNextSymbol (void)
      }
   }
 
-  /* PREPROCESSOR - direktivy (#include ...) se preskakuji */
+  /* PREPROCESSOR - directives (#include ...) are skipped */
   else if (ch == '#')
   {
      while (ch != LF && ch != NUL)
@@ -561,26 +561,26 @@ static void RawNextSymbol (void)
   /* PERIOD */
   else if (ch=='.')
   {
-     NextChar (); /* preskoc prvni tecku */
+     NextChar (); /* skip first dot */
 
-     if (isdigit (ch)) /* cislo zacinajici teckou */
+     if (isdigit (ch)) /* number starting with a dot */
      {
         Fraction ();
      }
-     else if (ch=='.') /* vice tecek */
+     else if (ch=='.') /* more dots */
      {
-        NextChar (); /* preskoc druhou tecku */
-        if (ch=='.') /* tri tecky */
+        NextChar (); /* skip second dot */
+        if (ch=='.') /* three dots */
         {
            NextChar ();
            sy = DOTS;
         }
-        else /* jen dve tecky */
+        else /* only two dots */
         {
            Error ("Unknown symbol");
         }
      }
-     else /* jedna tecka */
+     else /* one dot */
         sy = PERIOD;
   }
 
@@ -686,7 +686,7 @@ static void RawNextSymbol (void)
 
 /************************** CHECK CURRENT SYMBOL **************************/
 
-/* tabulky pro prevod symbolu zpet na retezce znaku - pro ladeni */
+/* tables for converting symbols back to character strings - for debugging */
 
 typedef struct
 {
@@ -760,7 +760,7 @@ SPECREC SpecTab [SPECMAX] =
   };
 
 static void SymToStr (SYMBOL par, STR_TYP s)
-/* prevod symbolu na retezec znaku */
+/* conversion of symbol to character string */
 {
   int i;
 
@@ -782,7 +782,7 @@ static void SymToStr (SYMBOL par, STR_TYP s)
 }
 
 void PutSymbol (SYMBOL par)
-/* zobraz symbol na vystupu */
+/* show symbol in the output */
 {
    STR_TYP txt;
    SymToStr (par, txt);
@@ -790,7 +790,7 @@ void PutSymbol (SYMBOL par)
 }
 
 void PutCurrentSymbol (void)
-/* zobraz prave zpracovavany symbol na vystupu */
+/* show the symbol being processed in the output */
 {
   switch (sy)
   {
@@ -834,7 +834,7 @@ void CheckSymbol (SYMBOL par)
 {
   STR_TYP msg;
 
-  /* ohlaseni chyby pokud sy <> par */
+  /* report error if sy <> par */
   if (sy != par)
   {
      switch (par)

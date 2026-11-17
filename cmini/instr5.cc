@@ -2,108 +2,108 @@
 /* INSTR4.CC */
 
 /*
-   Varianta instr4.cc: generator strojoveho kodu pro x86-64 pomoci asmjit::x86::Builder,
-   s prehazovanim poradi vypoctu operandu (Sethi-Ullman),
-   s predavanim argumentu funkci pres registry
-   a navic s promennymi v registrech.
+   Variant of instr4.cc: machine code generator for x86-64 using asmjit::x86::Builder,
+   with reordering of the operand evaluation (Sethi-Ullman),
+   with passing function arguments in registers
+   and additionally with variables in registers.
 
-   Promenne v registrech:
-     - kandidati: promenne deklarovane jako  register  a ridici promenne for-cyklu
-       (for (int i = ...) nebo  for (i = ...)  s lokalni promennou i),
-     - jen lokalni promenne a parametry typu int / char / bool, u kterych se nebere adresa
-       (predani do parametru  int & , inicializace reference, &x),
-     - priorita: register, potom for-cykly - vnorenejsi cyklus ma prednost,
-     - registry: rbx, r15, r14, r13 (nejvyse 4 promenne); r13 - r15 se tim
-       odeberou registrum pro mezivysledky (max_reg_limit), rbx se pro mezivysledky nepouziva.
+   Variables in registers:
+     - candidates: variables declared as  register  and control variables of for loops
+       (for (int i = ...) or  for (i = ...)  with a local variable i),
+     - only local variables and parameters of type int / char / bool whose address is not taken
+       (passing to a parameter  int & , initialization of a reference, &x),
+     - priority: register, then for loops - a more deeply nested loop has priority,
+     - registers: rbx, r15, r14, r13 (at most 4 variables); r13 - r15 are thereby removed
+       from the registers for intermediate results (max_reg_limit), rbx is not used for intermediate results.
 
-   Struktury, ukazatele, konstruktory:
-     - kazda polozka struktury zabira 8 bajtu (pole v polozce N * 8 bajtu),
-     - p->x, s.x, *p, &x, p [i] (ukazatel na 8-bajtove promenne; ukazatele na char
-       a aritmetika s ukazateli zatim nejsou),
-     - new T  =>  calloc (1, velikost T), potom se zavola konstruktor,
-     - konstruktor je funkce se skrytym parametrem this (rdi), vraci this;
-       uvnitr konstruktoru se polozky adresuji pres this,
-     - assert (podminka) je vestavena funkce (pri nesplneni vypise hlaseni a zavola abort).
+   Structs, pointers, constructors:
+     - each struct member takes 8 bytes (an array member N * 8 bytes),
+     - p->x, s.x, *p, &x, p [i] (pointer to 8-byte variables; pointers to char
+       and pointer arithmetic are not supported yet),
+     - new T  =>  calloc (1, size of T), then the constructor is called,
+     - a constructor is a function with a hidden parameter this (rdi), it returns this;
+       inside the constructor the members are addressed via this,
+     - assert (condition) is a built-in function (when it fails it prints a message and calls abort).
 
-   Uvod funkce:
-     Pouzite callee-saved registry (rbx, r12 - r15) se ulozi instrukci push pred  push rbp
-     a obnovi instrukci pop po  pop rbp. Instrukce push a  sub rsp, N  se vlozi zpetne
-     na zacatek funkce, az je znam nejvyssi pouzity registr. Pri lichem poctu push
-     se ramec zvetsi o 8 bajtu, aby rsp zustal zarovnany na 16 bajtu.
+   Function prologue:
+     The used callee-saved registers (rbx, r12 - r15) are saved by push instructions before  push rbp
+     and restored by pop instructions after  pop rbp. The push instructions and  sub rsp, N  are inserted
+     backwards to the start of the function, once the highest used register is known. With an odd number
+     of pushes the frame is enlarged by 8 bytes so that rsp stays aligned to 16 bytes.
 
-   Volani funkci (codeCall):
-     1. kazdy argument se vygeneruje jako samostatny blok instrukci
-        a zmeri se jeho potreba registru (nejvyssi pouzity registr),
-        argument obsahujici volani funkce potrebuje vsechny registry az do r11,
-     2. bloky se seradi sestupne podle potreby registru
-        (poradi vyhodnoceni argumentu jazyk C neurcuje),
-     3. vysledek kazdeho bloku zustane v registru nad potrebou vsech nasledujicich bloku,
-        pokud mozno rovnou v cilovem registru (rdi, rsi, rdx, rcx, r8, r9),
-        jinak v pomocnem registru, posledni argument muze zustat v rax,
-        pokud registr nezbyva, vlozi se  sub rsp, 8 / push rax,
-     4. pred instrukci call se hodnoty presunou do cilovych registru
-        (paralelni presun - cykly se resi instrukci xchg).
+   Function calls (codeCall):
+     1. each argument is generated as a separate block of instructions
+        and its register need is measured (the highest used register);
+        an argument containing a function call needs all registers up to r11,
+     2. the blocks are sorted in descending order of register need
+        (the C language does not define the evaluation order of arguments),
+     3. the result of each block stays in a register above the need of all following blocks,
+        if possible directly in the target register (rdi, rsi, rdx, rcx, r8, r9),
+        otherwise in a helper register; the last argument may stay in rax,
+        if no register is left, then  sub rsp, 8 / push rax  is inserted,
+     4. before the call instruction the values are moved to the target registers
+        (parallel move - cycles are resolved by the xchg instruction).
 
-   Binarni operatory (codeBinary):
-     Builder uchovava instrukce ve spojovem seznamu uzlu.
-       1. vygeneruje se blok levého operandu, zmeri se nejvyssi pouzity registr L,
-       2. vygeneruje se blok praveho operandu, zmeri se nejvyssi pouzity registr R
-          (poradi registru: rax, rcx, rdx, rsi, rdi, r8, r9, r10, r11, r12, r13, r14, r15),
-       3. pokud R > L (pravy operand potrebuje vice registru), presune se blok levého
-          operandu za blok praveho - nejdrive se pocita pravy operand,
-       4. vysledek prvniho bloku se ulozi do prvniho registru nad potrebou druheho bloku:
-          na hranici bloku se zpetne vlozi  mov <registr>, rax,
-          pokud registr nezbyva, vlozi se  sub rsp, 8 / push rax.
-     Celkova potreba registru je tak max (R, L+1) misto max (L, R+1).
-     Jazyk C poradi vyhodnoceni operandu aritmetickych operatoru neurcuje,
-     prehozeni je proto pripustne (&&, || a carka se neprehazuji).
+   Binary operators (codeBinary):
+     Builder keeps the instructions in a linked list of nodes.
+       1. the block of the left operand is generated, the highest used register L is measured,
+       2. the block of the right operand is generated, the highest used register R is measured
+          (register order: rax, rcx, rdx, rsi, rdi, r8, r9, r10, r11, r12, r13, r14, r15),
+       3. if R > L (the right operand needs more registers), the block of the left operand is moved
+          after the block of the right operand - the right operand is computed first,
+       4. the result of the first block is stored into the first register above the needs of the second block:
+          at the block boundary  mov <register>, rax  is inserted backwards,
+          if no register is left, then  sub rsp, 8 / push rax  is inserted.
+     The total register need is thus max (R, L+1) instead of max (L, R+1).
+     The C language does not define the evaluation order of the operands of arithmetic operators,
+     so swapping is permissible (&&, || and the comma are not swapped).
 
-     Registry r12 - r15 musi funkce zachovat (callee-saved) - viz Uvod funkce.
+     Registers r12 - r15 must be preserved by the function (callee-saved) - see Function prologue.
 
-   Zasobnikovy model:
-     - vysledek kazdeho (pod)vyrazu je v registru rax,
-     - levy operand binarniho operatoru se uklada do volneho registru (viz vyse),
-       ostatni mezivysledky (indexy, adresy, argumenty volani) na zasobnik (push / pop),
-     - rcx, rdx a r11 jsou pomocne registry.
+   Stack model:
+     - the result of each (sub)expression is in register rax,
+     - the left operand of a binary operator is stored in a free register (see above),
+     - other intermediate results (indexes, addresses, call arguments) on the stack (push / pop),
+     - rcx, rdx and r11 are auxiliary registers.
 
-   Pamet:
-     - kazda promenna (int, bool, char, ukazatel, ...) zabira 8 bajtu,
-       pole N prvku zabira N * 8 bajtu,
-     - globalni promenne lezi v pameti, kterou alokuje generator,
-     - parametry a lokalni promenne lezi v ramci funkce: [rbp - offset],
-     - reference (int & x) je ulozena jako adresa.
+   Memory:
+     - each variable (int, bool, char, pointer, ...) takes 8 bytes,
+       an array of N elements takes N * 8 bytes,
+     - global variables lie in memory allocated by the generator,
+     - parameters and local variables lie in the function frame: [rbp - offset],
+     - a reference (int & x) is stored as an address.
 
-   Volani funkci - konvence System V AMD64:
-     - parametry v rdi, rsi, rdx, rcx, r8, r9 (nejvyse 6),
-     - vysledek v rax,
-     - pred instrukci call je rsp zarovnan na 16 bajtu
-       (proto si pocitame hloubku zasobniku - promenna depth),
-     - al = 0 (pocet vektorovych registru pro funkce s promennym poctem parametru),
-     - funkce bez tela (printf, rand, ...) se hledaji v knihovnach pres dlsym.
+   Function calls - System V AMD64 convention:
+     - parameters in rdi, rsi, rdx, rcx, r8, r9 (at most 6),
+     - result in rax,
+     - before the call instruction rsp is aligned to 16 bytes
+       (that is why we count the stack depth - variable depth),
+     - al = 0 (number of vector registers for functions with a variable number of parameters),
+     - functions without a body (printf, rand, ...) are looked up in libraries via dlsym.
 
-   Kazda funkce s telem ma vlastni navesti a ramec:
+   Every function with a body has its own label and frame:
        [push rbx / push r12 ...]  push rbp / mov rbp, rsp / sub rsp, N
        ...
        mov rsp, rbp / pop rbp  [... pop r12 / pop rbx]  ret
 
-   Na zacatku kodu je skok na main, takze vstupni bod je zacatek kodu.
+   At the start of the code there is a jump to main, so the entry point is the start of the code.
 
-   Zatim nepodporovano: aritmetika s ukazateli, ukazatele na char (krome predani
-   do knihovnich funkci), struktury predavane hodnotou, float / double, switch, goto,
-   vice nez 6 parametru.
-*/
+   Not supported yet: pointer arithmetic, pointers to char (except passing them
+   to library functions), structs passed by value, float / double, switch, goto,
+   more than 6 parameters.
+   */
 
 #include "instr.h"
 #include "decl.h"
 
-#include "asmjit/x86.h"    /* asmjit.h je v nove verzi prazdny */
+#include "asmjit/x86.h"    /* asmjit.h is empty in the new version */
 using namespace asmjit;
 using namespace asmjit::x86;
 
-/* Podporovane verze asmjit:
-     - 1.24 a novejsi (_library/asmjit) - API ve stylu snake_case,
-     - 1.11 (balik asmjit-devel ve Fedore) - API ve stylu camelCase.
-   Mezilehle verze nebyly zkouseny. */
+/* Supported asmjit versions:
+     - 1.24 and newer (_library/asmjit) - API in snake_case style,
+     - 1.11 (asmjit-devel package in Fedora) - API in camelCase style.
+   Intermediate versions were not tested. */
 
 #if ASMJIT_LIBRARY_VERSION >= ASMJIT_LIBRARY_MAKE_VERSION(1, 24, 0)
    #define ASMJIT_SNAKE_CASE_API 1
@@ -132,7 +132,7 @@ static void InstrError (string msg)
 
 /* ---------------------------------------------------------------------- */
 
-/* volano z vygenerovaneho kodu pri nesplnenem assert */
+/* called from the generated code when an assert fails */
 static void instrAssertFail (const char * fce_name)
 {
     fflush (stdout);
@@ -140,11 +140,11 @@ static void instrAssertFail (const char * fce_name)
     abort ();
 }
 
-namespace {   /* stejne nazvy trid jako v instr1.cc, instr2.cc, instr3.cc a instr4.cc */
+namespace {   /* the same class names as in instr1.cc, instr2.cc, instr3.cc and instr4.cc */
 
-/* asmjit hlasi chyby pres ErrorHandler.
-   Vyjimku zde vyhodit nelze (asmjit je noexcept),
-   proto si prvni chybu zapamatujeme a ohlasime ji po vygenerovani kodu. */
+/* asmjit reports errors via ErrorHandler.
+   An exception cannot be thrown here (asmjit is noexcept),
+   so we remember the first error and report it after the code has been generated. */
 
 class AsmErrorHandler : public ErrorHandler
 {
@@ -170,14 +170,14 @@ public:
 
 /* ---------------------------------------------------------------------- */
 
-/* umisteni promenne */
+/* variable location */
 struct Variable
 {
     bool      global = false;
-    int64_t * addr = nullptr;  /* globalni promenna */
-    int       offset = 0;      /* lokalni promenna: [rbp + offset] */
-    bool      ref = false;     /* reference - v pameti je adresa */
-    const Gp * reg = nullptr;  /* promenna v registru */
+    int64_t * addr = nullptr;  /* global variable */
+    int       offset = 0;      /* local variable: [rbp + offset] */
+    bool      ref = false;     /* reference - in memory is the address */
+    const Gp * reg = nullptr;  /* variable in a register */
 };
 
 struct LoopLabels
@@ -186,9 +186,9 @@ struct LoopLabels
     Label continue_label;
 };
 
-static const int VAR_SIZE = 8; /* velikost jedne promenne v bajtech */
+static const int VAR_SIZE = 8; /* size of one variable in bytes */
 
-/* registry v poradi, ve kterem se prideluji pro mezivysledky */
+/* registers in the order in which they are allocated for intermediate results */
 static const Gp * const REGS [] =
 {
     &rax, &rcx, &rdx, &rsi, &rdi, &r8, &r9, &r10, &r11, &r12, &r13, &r14, &r15
@@ -197,12 +197,12 @@ static const Gp * const REGS [] =
 enum
 {
     R_RAX = 0, R_RCX = 1, R_RDX = 2,
-    R_R11 = 8,               /* nejvyssi registr, ktery muze zmenit volana funkce */
-    R_R12 = 9,               /* r12 - r15 musi funkce zachovat (callee-saved) */
+    R_R11 = 8,               /* highest register that the called function may change */
+    R_R12 = 9,               /* r12 - r15 must be preserved by the function (callee-saved) */
     R_LAST = 12              /* r15 */
 };
 
-/* registry pro promenne: rbx a odshora r15, r14, r13 (r12 zustava pro mezivysledky) */
+/* registers for variables: rbx and from the top r15, r14, r13 (r12 stays for intermediate results) */
 static const Gp * const VAR_REGS [] = { &rbx, &r15, &r14, &r13 };
 static const int VAR_REGS_MAX = 4;
 
@@ -217,25 +217,25 @@ public:
     AsmErrorHandler error_handler;
     x86::Builder    a;
 
-    vector <unique_ptr <int64_t []>> storage;  /* pamet globalnich promennych */
-    deque <string>                   strings;  /* retezcove konstanty */
+    vector <unique_ptr <int64_t []>> storage;  /* memory of global variables */
+    deque <string>                   strings;  /* string constants */
     map <ObjectPtr, Variable>        vars;
     map <ObjectPtr, Label>           fce_labels;
 
     ObjectPtr current_fce = nullptr;
     Label     epilogue_label;
-    int       frame_size = 0;          /* velikost lokalnich promennych */
-    int       depth = 0;               /* pocet 8-bajtovych polozek na zasobniku (push) */
-    int       max_reg = R_RAX;         /* nejvyssi pouzity registr (index do REGS) */
-    int       fce_max_reg = R_RAX;     /* nejvyssi pouzity registr v cele funkci */
-    int       max_reg_limit = R_LAST;  /* nejvyssi registr pro mezivysledky */
-    map <ObjectPtr, const Gp *> reg_vars;   /* promenne zvolene do registru (aktualni funkce) */
+    int       frame_size = 0;          /* size of local variables */
+    int       depth = 0;               /* number of 8-byte items on the stack (push) */
+    int       max_reg = R_RAX;         /* highest used register (index into REGS) */
+    int       fce_max_reg = R_RAX;     /* highest used register in the whole function */
+    int       max_reg_limit = R_LAST;  /* highest register for intermediate results */
+    map <ObjectPtr, const Gp *> reg_vars;   /* variables chosen to be in registers (current function) */
 
-    map <TypePtr, long>    struct_sizes;     /* velikost struktury (pocet 8-bajtovych polozek) */
-    map <ObjectPtr, long>  member_offsets;   /* polozka struktury -> posun v bajtech */
-    TypePtr   current_class = nullptr;       /* konstruktor: jeho struktura */
-    ObjectPtr this_obj = nullptr;            /* konstruktor: skryty parametr this */
-    vector <LoopLabels> loops;         /* pro break a continue */
+    map <TypePtr, long>    struct_sizes;     /* size of a struct (number of 8-byte members) */
+    map <ObjectPtr, long>  member_offsets;   /* member of a struct -> offset in bytes */
+    TypePtr   current_class = nullptr;       /* constructor: its struct */
+    ObjectPtr this_obj = nullptr;            /* constructor: hidden parameter this */
+    vector <LoopLabels> loops;         /* for break and continue */
 
     typedef long (*MainType) (int, char * *);
 
@@ -271,7 +271,7 @@ public:
         }
 
         for (NodePtr p = ctorlist.first; p != nullptr; p = p->next)
-            fce_labels [p->item] = newLabel ();     /* konstruktory */
+            fce_labels [p->item] = newLabel ();     /* constructors */
 
         if (main_fce == nullptr)
             InstrError ("Function main not found");
@@ -285,7 +285,7 @@ public:
         for (NodePtr p = ctorlist.first; p != nullptr; p = p->next)
             codeFunction (p->item);
 
-        a.finalize ();   /* Builder => strojovy kod */
+        a.finalize ();   /* Builder => machine code */
 
         if (error_handler.failed)
             InstrError ("asmjit: " + error_handler.message);
@@ -301,7 +301,7 @@ public:
         char arg0 [] = "program_name";
         char * argv [] = { arg0, nullptr };
         long result = fn (1, argv);
-        fflush (stdout);   /* vystup printf z prekladaneho programu */
+        fflush (stdout);   /* printf output of the compiled program */
 
         jit_runtime.release (fn);
         return result;
@@ -309,7 +309,7 @@ public:
 
     /* ------------------------------------------------------------------ */
 
-    /* rozdily v API mezi verzemi asmjit */
+    /* differences in the API between asmjit versions */
 
     Label newLabel ()
     {
@@ -329,7 +329,7 @@ public:
 #endif
     }
 
-    /* presun uzly first .. last (souvisly usek seznamu) za uzel ref */
+    /* move the nodes first .. last (a contiguous section of the list) after the node ref */
     void moveNodesAfter (BaseNode * first, BaseNode * last, BaseNode * ref)
     {
         vector <BaseNode *> nodes;
@@ -363,14 +363,14 @@ public:
 
     /* ------------------------------------------------------------------ */
 
-    /* zaznamenej pouziti registru - staci si pamatovat nejvyssi */
+    /* record the register usage - it is enough to remember the highest */
     void use (int reg)
     {
         if (reg > max_reg)
             max_reg = reg;
     }
 
-    /* push / pop s pocitanim hloubky zasobniku */
+    /* push / pop with counting of the stack depth */
 
     void push (const Gp & reg)
     {
@@ -446,7 +446,7 @@ public:
         }
     }
 
-    /* pocet 8-bajtovych promennych, ktere zabira typ (pole => pocet prvku) */
+    /* number of 8-byte variables occupied by the type (array => number of elements) */
     long typeCount (TypePtr type)
     {
         if (type != nullptr && type->sort == Array)
@@ -467,7 +467,7 @@ public:
         return 1;
     }
 
-    /* rozlozeni struktury: posuny polozek, velikost */
+    /* layout of the struct: member offsets, size */
     long structCount (TypePtr type)
     {
         auto it = struct_sizes.find (type);
@@ -477,7 +477,7 @@ public:
                 InstrError ("Structure contains itself");
             return it->second;
         }
-        struct_sizes [type] = -1;      /* rozpracovano */
+        struct_sizes [type] = -1;      /* in progress */
 
         long n = 0;
         for (NodePtr p = type->list.first; p != nullptr; p = p->next)
@@ -532,14 +532,14 @@ public:
         {
             ObjectPtr obj = p->item;
             if (obj->fce || obj->storage == Typedef || obj->name [0] == 0)
-                continue;          /* funkce, typedef, struct X { ... }; */
+                continue;          /* functions, typedef, struct X { ... }; */
             checkNoConstructor (obj);
 
             if (obj->type->sort == Reference)
                 InstrError (string ("Global references are not supported: ") + obj->name);
 
             long count = typeCount (obj->type);
-            int64_t * mem = new int64_t [count] ();   /* vynulovano */
+            int64_t * mem = new int64_t [count] ();   /* zeroed */
             storage.emplace_back (mem);
 
             if (obj->init != nullptr)
@@ -564,7 +564,7 @@ public:
         auto r = reg_vars.find (obj);
         if (r != reg_vars.end ())
         {
-            var.reg = r->second;       /* promenna v registru - v ramci nezabira misto */
+            var.reg = r->second;       /* variable in a register - takes no place in the frame */
             vars [obj] = var;
             return;
         }
@@ -573,7 +573,7 @@ public:
 
         long count = var.ref ? 1 : typeCount (obj->type);
         frame_size += count * VAR_SIZE;
-        var.offset = - frame_size;     /* pole: prvky od [rbp+offset] smerem nahoru */
+        var.offset = - frame_size;     /* array: elements from [rbp+offset] upward */
         vars [obj] = var;
     }
 
@@ -593,7 +593,7 @@ public:
         }
     }
 
-    /* projdi telo funkce a prirad lokalnim promennym misto v ramci */
+    /* walk the function body and assign the local variables their place in the frame */
     void collectLocals (StatPtr stat)
     {
         if (stat == nullptr) return;
@@ -642,12 +642,12 @@ public:
     struct RegCandidate
     {
         ObjectPtr obj;
-        int       score;      /* register => 1000, for-cyklus => hloubka vnoreni */
-        int       order;      /* poradi vyskytu */
+        int       score;      /* register => 1000, for loop => nesting depth */
+        int       order;      /* order of occurrence */
     };
 
-    set <ObjectPtr>        locals_seen;    /* parametry a lokalni promenne funkce */
-    set <ObjectPtr>        address_taken;  /* promenne, jejichz adresa se pouziva */
+    set <ObjectPtr>        locals_seen;    /* parameters and local variables of the function */
+    set <ObjectPtr>        address_taken;  /* variables whose address is used */
     vector <RegCandidate>  candidates;
 
     static bool regEligibleType (ObjectPtr obj)
@@ -696,7 +696,7 @@ public:
             for (ExprPtr arg : args)
             {
                 if (par != nullptr && par->item->type != nullptr && par->item->type->sort == Reference)
-                    markAddress (arg);           /* int & => potrebuje adresu */
+                    markAddress (arg);           /* int & => needs the address */
                 if (par != nullptr && par->item->type != nullptr) par = par->next;
             }
         }
@@ -800,7 +800,7 @@ public:
             info += string (" ") + sorted [i].obj->name;
         }
 
-        /* r15, r14, r13 obsazene promennymi uz nejsou pro mezivysledky */
+        /* r15, r14, r13 occupied by variables are no longer available for intermediate results */
         max_reg_limit = R_LAST - max (0, n - 1);
 
         if (n > 0)
@@ -818,7 +818,7 @@ public:
         frame_size = 0;
         depth = 0;
 
-        /* parametry */
+        /* parameters */
         vector <ObjectPtr> params;
         for (NodePtr p = decl->type->list.first; p != nullptr; p = p->next)
         {
@@ -830,7 +830,7 @@ public:
             params.push_back (par);
         }
 
-        /* konstruktor: skryty parametr this */
+        /* constructor: hidden parameter this */
         current_class = decl->owner;
         this_obj = nullptr;
         if (current_class != nullptr)
@@ -847,13 +847,13 @@ public:
 
         for (ObjectPtr par : params)
             allocLocal (par);
-        collectLocals (decl->body);               /* lokalni promenne */
+        collectLocals (decl->body);               /* local variables */
 
         a.bind (fce_labels [decl]);
-        BaseNode * entry = a.cursor ();           /* sem se pozdeji vlozi push callee-saved registru */
+        BaseNode * entry = a.cursor ();           /* here the push of the callee-saved registers is inserted later */
         a.push (rbp);
         a.mov (rbp, rsp);
-        BaseNode * frame_pos = a.cursor ();       /* sem se pozdeji vlozi sub rsp, N */
+        BaseNode * frame_pos = a.cursor ();       /* here sub rsp, N is inserted later */
 
         for (size_t i = 0; i < params.size (); i++)
         {
@@ -869,12 +869,12 @@ public:
         codeStat (decl->body);
 
         if (current_class != nullptr)
-            loadThis ();          /* konstruktor vraci this */
+            loadThis ();          /* constructor returns this */
         else
-            a.xor_ (eax, eax);    /* bez return => vysledek 0 */
+            a.xor_ (eax, eax);    /* no return => result 0 */
         a.bind (epilogue_label);
 
-        /* pouzite callee-saved registry: rbx, r12 .. r15 */
+        /* used callee-saved registers: rbx, r12 .. r15 */
         vector <const Gp *> saved;
         bool uses_rbx = false;
         for (auto & rv : reg_vars)
@@ -898,12 +898,12 @@ public:
 
         BaseNode * end = a.cursor ();
 
-        /* zpetne: push callee-saved registru pred push rbp */
+        /* backwards: push of the callee-saved registers before push rbp */
         setCursor (entry);
         for (const Gp * r : saved)
             a.push (*r);
 
-        /* zpetne: ramec, pri lichem poctu push o 8 bajtu vetsi (zarovnani na 16) */
+        /* backwards: frame, with an odd number of pushes 8 bytes larger (alignment to 16) */
         int frame = (frame_size + 15) & ~15;
         if (saved.size () % 2 != 0)
             frame += 8;
@@ -937,10 +937,10 @@ public:
         a.movzx (rax, al);
     }
 
-    /* rax := adresa promenne (u reference adresa ulozena v promenne) */
+    /* rax := address of the variable (for a reference the address is stored in the variable) */
     void codeVarAddress (ExprPtr expr)
     {
-        /* polozka struktury uvnitr konstruktoru:  this + posun */
+        /* struct member inside the constructor:  this + offset */
         if (current_class != nullptr && expr->obj != nullptr && vars.find (expr->obj) == vars.end () &&
             LookupMember (current_class, expr->obj->name) == expr->obj)
         {
@@ -962,7 +962,7 @@ public:
             a.mov (rax, qword_ptr (rax));
     }
 
-    /* rax := adresa l-hodnoty */
+    /* rax := address of the l-value */
     void codeAddress (ExprPtr expr)
     {
         expr = skipParens (expr);
@@ -981,7 +981,7 @@ public:
                 if (arr->type->sort == Pointer)
                 {
                     checkPointee (arr->type);
-                    codeExpr (arr);               /* ukazatel => jeho hodnota */
+                    codeExpr (arr);               /* pointer => its value */
                 }
                 else if (arr->type->sort == Array)
                     codeAddress (arr);
@@ -1030,8 +1030,8 @@ public:
         }
     }
 
-    /* rax := hodnota promenne nebo prvku pole */
-    /* promenna v registru, jinak nullptr */
+    /* rax := value of the variable or array element */
+    /* variable in a register, otherwise nullptr */
     const Gp * regVar (ExprPtr expr)
     {
         expr = skipParens (expr);
@@ -1041,7 +1041,7 @@ public:
         return it == vars.end () ? nullptr : it->second.reg;
     }
 
-    /* ukazatel musi ukazovat na 8-bajtove promenne */
+    /* pointer must point to 8-byte variables */
     static void checkPointee (TypePtr ptr)
     {
         if (ptr == nullptr || ptr->from == nullptr || ptr->from->sort == Void)
@@ -1058,7 +1058,7 @@ public:
         if (const Gp * r = regVar (expr))
             a.mov (rax, *r);
         else if (expr->type->sort == Array)
-            codeAddress (expr);           /* pole => adresa prvniho prvku */
+            codeAddress (expr);           /* array => address of the first element */
         else
         {
             codeAddress (expr);
@@ -1123,24 +1123,24 @@ public:
 
         int outer_max = max_reg;
 
-        /* blok leveho operandu */
-        BaseNode * before = a.cursor ();       /* uzel pred obema bloky */
+        /* block of the left operand */
+        BaseNode * before = a.cursor ();       /* node before both blocks */
         max_reg = R_RAX;
         codeExpr (expr->e1);
         int left_max = max_reg;
         BaseNode * left_end = a.cursor ();
 
-        /* blok praveho operandu */
+        /* block of the right operand */
         max_reg = R_RAX;
         codeExpr (expr->e2);
         int right_max = max_reg;
         BaseNode * right_end = a.cursor ();
 
-        /* pravy operand potrebuje vice registru => pocitat ho jako prvni */
+        /* the right operand needs more registers => compute it first */
         bool swap = right_max > left_max;
-        BaseNode * first_end;      /* konec prvniho bloku - sem se ulozi jeho vysledek */
-        BaseNode * end;            /* konec obou bloku */
-        int second_max;            /* potreba registru druheho bloku */
+        BaseNode * first_end;      /* end of the first block - its result is stored here */
+        BaseNode * end;            /* end of both blocks */
+        int second_max;            /* register need of the second block */
 
         if (swap)
         {
@@ -1156,7 +1156,7 @@ public:
             second_max = right_max;
         }
 
-        int save = second_max + 1;             /* prvni registr, ktery druhy blok nepouzil */
+        int save = second_max + 1;             /* first register that the second block did not use */
         if (save < R_RCX) save = R_RCX;
 
         setCursor (first_end);
@@ -1166,15 +1166,15 @@ public:
             a.mov (*REGS [save], rax);
         else
         {
-            a.sub (rsp, 8);                    /* 16 bajtu => zarovnani se nezmeni */
+            a.sub (rsp, 8);                    /* 16 bytes => stack alignment does not change */
             a.push (rax);
         }
         setCursor (end);
 
-        /* rax = levy operand, rcx = pravy operand */
+        /* rax = left operand, rcx = right operand */
         if (swap)
         {
-            /* rax = levy, ulozeny = pravy */
+            /* rax = left, stored = right */
             if (save > max_reg_limit)
             {
                 a.pop (rcx);
@@ -1185,7 +1185,7 @@ public:
         }
         else
         {
-            /* rax = pravy, ulozeny = levy */
+            /* rax = right, stored = left */
             if (save > max_reg_limit)
             {
                 a.mov (rcx, rax);
@@ -1217,9 +1217,9 @@ public:
         a.test (rax, rax);
 
         if (expr->op == LOGAND)
-            a.jz (end_label);    /* levy = 0 => vysledek 0 */
+            a.jz (end_label);    /* left = 0 => result 0 */
         else
-            a.jnz (end_label);   /* levy != 0 => vysledek 1 */
+            a.jnz (end_label);   /* left != 0 => result 1 */
 
         codeExpr (expr->e2);
         a.bind (end_label);
@@ -1256,7 +1256,7 @@ public:
         if (expr->op != ASSIGN && expr->e1->type->sort == Pointer)
             InstrError ("Pointer arithmetic is not supported yet");
 
-        if (const Gp * r = regVar (expr->e1))   /* promenna v registru */
+        if (const Gp * r = regVar (expr->e1))   /* variable in a register */
         {
             codeExpr (expr->e2);
             if (expr->op != ASSIGN)
@@ -1276,7 +1276,7 @@ public:
         push (rax);
         codeExpr (expr->e2);
         use (R_R11);
-        pop (r11);                /* r11 = adresa */
+        pop (r11);                /* r11 = address */
 
         if (expr->op != ASSIGN)
         {
@@ -1299,7 +1299,7 @@ public:
         if (operand->type->sort == Pointer)
             InstrError ("Pointers are not supported yet");
 
-        if (const Gp * r = regVar (operand))    /* promenna v registru */
+        if (const Gp * r = regVar (operand))    /* variable in a register */
         {
             if (postfix)
             {
@@ -1321,7 +1321,7 @@ public:
 
         if (postfix)
         {
-            a.mov (rdx, rax);                   /* vysledek = puvodni hodnota */
+            a.mov (rdx, rax);                   /* result = original value */
             if (expr->op == DPLUS) a.add (rdx, 1); else a.sub (rdx, 1);
             a.mov (qword_ptr (rcx), rdx);
         }
@@ -1344,19 +1344,19 @@ public:
             args.push_back (expr);
     }
 
-    /* jeden argument volani funkce */
+    /* one argument of the function call */
     struct ArgBlock
     {
-        int        target;     /* cilovy registr (index do REGS) */
-        BaseNode * first;      /* prvni a posledni uzel bloku instrukci */
+        int        target;     /* target register (index into REGS) */
+        BaseNode * first;      /* first and last node of the block of instructions */
         BaseNode * last;
-        int        need;       /* nejvyssi registr pouzity pri vypoctu */
-        int        hold;       /* kde ceka hodnota do volani: registr, nebo NO_REG = zasobnik */
+        int        need;       /* highest register used when computing the value */
+        int        hold;       /* where the value waits until the call: a register, or NO_REG = stack */
     };
 
     static const int NO_REG = -1;
 
-    /* zvol registr, ve kterem pocka hodnota argumentu blocks [k] */
+    /* choose the register in which the value of the argument blocks [k] waits */
     int chooseHoldRegister (vector <ArgBlock> & blocks, size_t k, int lowest)
     {
         auto taken = [&] (int r)
@@ -1372,11 +1372,11 @@ public:
             return false;
         };
 
-        /* nejlepe rovnou cilovy registr */
+        /* preferably directly the target register */
         if (blocks [k].target >= lowest && !taken (blocks [k].target))
             return blocks [k].target;
 
-        /* volny registr, ktery nepotrebuje jiny argument */
+        /* a free register that no other argument needs */
         for (int r = lowest; r <= max_reg_limit; r++)
             if (!taken (r) && !target_of_other (r))
                 return r;
@@ -1388,12 +1388,12 @@ public:
         return NO_REG;
     }
 
-    /* paralelni presun registru:  dst [i] := src [i]  pro vsechna i najednou */
+    /* parallel move of registers:  dst [i] := src [i]  for all i at once */
     void parallelMove (vector <pair <int, int>> moves)   /* (src, dst) */
     {
         for (;;)
         {
-            /* odstran presuny, ktere nic nedelaji */
+            /* remove the moves that do nothing */
             for (size_t i = 0; i < moves.size (); )
                 if (moves [i].first == moves [i].second)
                     moves.erase (moves.begin () + i);
@@ -1402,7 +1402,7 @@ public:
 
             if (moves.empty ()) break;
 
-            /* presun do registru, ktery uz neni zdrojem jineho presunu */
+            /* move into a register that is no longer the source of another move */
             bool done = false;
             for (size_t i = 0; i < moves.size () && !done; i++)
             {
@@ -1420,29 +1420,29 @@ public:
                 }
             }
 
-            /* zbyvaji jen cykly => vymena */
+            /* only cycles are left => swap */
             if (!done)
             {
                 int src = moves [0].first;
                 int dst = moves [0].second;
                 a.xchg (*REGS [dst], *REGS [src]);
                 moves.erase (moves.begin ());
-                for (auto & m : moves)       /* puvodni obsah dst je nyni v src */
+                for (auto & m : moves)       /* the original content of dst is now in src */
                     if (m.first == dst)
                         m.first = src;
             }
         }
     }
 
-    /* instrukce call (zarovnani zasobniku, al = 0) */
+    /* call instruction (stack alignment, al = 0) */
     void emitCall (const Label * label, void * addr)
     {
-        use (R_R11);                               /* volana funkce muze zmenit rax .. r11 */
+        use (R_R11);                               /* the called function may change rax .. r11 */
 
-        bool pad = (depth % 2) != 0;               /* zarovnani rsp na 16 bajtu */
+        bool pad = (depth % 2) != 0;               /* alignment of rsp to 16 bytes */
         if (pad) a.sub (rsp, 8);
 
-        a.xor_ (eax, eax);                         /* al = 0 vektorovych registru */
+        a.xor_ (eax, eax);                         /* al = 0 vector registers */
 
         if (label != nullptr)
             a.call (*label);
@@ -1455,7 +1455,7 @@ public:
         if (pad) a.add (rsp, 8);
     }
 
-    /* chybejici argumenty => implicitni hodnoty parametru:  int level = 0 */
+    /* missing arguments => default values of parameters:  int level = 0 */
     static void addDefaultArgs (ObjectPtr fce, vector <ExprPtr> & args)
     {
         size_t i = 0;
@@ -1472,7 +1472,7 @@ public:
         }
     }
 
-    /* assert (podminka) */
+    /* assert (condition) */
     void codeAssert (vector <ExprPtr> & args)
     {
         if (args.size () != 1)
@@ -1494,7 +1494,7 @@ public:
             fce_max_reg = max_reg;
     }
 
-    /* new T  /  new T (argumenty konstruktoru) */
+    /* new T  /  new T (constructor arguments) */
     void codeNew (ExprPtr expr)
     {
         static const Gp * arg_regs [] = { &rdi, &rsi, &rdx, &rcx, &r8, &r9 };
@@ -1516,14 +1516,14 @@ public:
 
         int outer_max = max_reg;
 
-        /* calloc (1, size) - pamet je vynulovana */
+        /* calloc (1, size) - memory is zeroed */
         a.mov (edi, 1);
         a.mov (rsi, imm (size));
         emitCall (nullptr, (void *) &calloc);
 
         if (ctor != nullptr)
         {
-            /* konstruktor (this, argumenty...) - argumenty jednoduse pres zasobnik */
+            /* constructor (this, arguments...) - arguments simply via the stack */
             push (rax);
             NodePtr par = ctor->type->list.first;
             for (ExprPtr arg : args)
@@ -1539,7 +1539,7 @@ public:
             for (int i = (int) args.size (); i >= 0; i--)
                 pop (*arg_regs [i]);
 
-            emitCall (&fce_labels [ctor], nullptr);   /* vraci this */
+            emitCall (&fce_labels [ctor], nullptr);   /* returns this */
         }
 
         max_reg = max (outer_max, (int) R_R11);
@@ -1549,7 +1549,7 @@ public:
 
     void codeCall (ExprPtr expr)
     {
-        /* rdi, rsi, rdx, rcx, r8, r9 jako indexy do REGS */
+        /* rdi, rsi, rdx, rcx, r8, r9 as indexes into REGS */
         static const int arg_regs [] = { 4, 3, 2, 1, 5, 6 };
 
         ExprPtr f = skipParens (expr->e1);
@@ -1571,9 +1571,9 @@ public:
             InstrError (string ("More than 6 arguments are not supported: ") + fce->name);
 
         int outer_max = max_reg;
-        int call_max = R_R11;                      /* volana funkce muze zmenit rax .. r11 */
+        int call_max = R_R11;                      /* the called function may change rax .. r11 */
 
-        /* 1. kazdy argument jako samostatny blok */
+        /* 1. each argument as a separate block */
         vector <ArgBlock> blocks;
         BaseNode * before = a.cursor ();
         NodePtr par = fce->type->list.first;
@@ -1586,7 +1586,7 @@ public:
             if (ptype != nullptr && IsClsSort (ptype->sort))
                 InstrError ("Structures passed by value are not supported yet (use reference)");
             if (ptype != nullptr && ptype->sort == Reference)
-                codeAddress (args [i]);            /* reference => adresa */
+                codeAddress (args [i]);            /* reference => address */
             else
                 codeExpr (args [i]);
 
@@ -1603,7 +1603,7 @@ public:
 
         if (!blocks.empty ())
         {
-            /* 2. serad bloky sestupne podle potreby registru */
+            /* 2. sort the blocks in descending order of register need */
             vector <ArgBlock> sorted = blocks;
             stable_sort (sorted.begin (), sorted.end (),
                          [] (const ArgBlock & x, const ArgBlock & y) { return x.need > y.need; });
@@ -1624,10 +1624,10 @@ public:
                 }
             }
 
-            /* 3. kde pocka hodnota kazdeho argumentu */
+            /* 3. where the value of each argument waits */
             for (size_t k = 0; k < blocks.size (); k++)
             {
-                int later_need = -1;               /* posledni blok => muze zustat v rax */
+                int later_need = -1;               /* last block => may stay in rax */
                 for (size_t j = k + 1; j < blocks.size (); j++)
                     later_need = max (later_need, blocks [j].need);
                 if (k + 1 < blocks.size () && later_need < R_RAX)
@@ -1640,7 +1640,7 @@ public:
                     a.comment ("arguments reordered");
                 if (blocks [k].hold == NO_REG)
                 {
-                    a.sub (rsp, 8);                /* 16 bajtu => zarovnani se nezmeni */
+                    a.sub (rsp, 8);                /* 16 bytes => stack alignment does not change */
                     a.push (rax);
                 }
                 else if (blocks [k].hold != R_RAX)
@@ -1648,16 +1648,16 @@ public:
 
                 call_max = max (call_max, max (blocks [k].need, blocks [k].hold));
             }
-            /* kurzor je ted za poslednim blokem */
+            /* the cursor is now after the last block */
 
-            /* 4. hodnoty do cilovych registru */
+            /* 4. values into the target registers */
             vector <pair <int, int>> moves;
             for (ArgBlock & blk : blocks)
                 if (blk.hold != NO_REG)
                     moves.push_back ({ blk.hold, blk.target });
             parallelMove (moves);
 
-            for (int k = (int) blocks.size () - 1; k >= 0; k--)   /* zasobnik v opacnem poradi */
+            for (int k = (int) blocks.size () - 1; k >= 0; k--)   /* stack in reverse order */
                 if (blocks [k].hold == NO_REG)
                 {
                     a.pop (*REGS [blocks [k].target]);
@@ -1679,7 +1679,7 @@ public:
             emitCall (nullptr, addr);
         }
 
-        /* knihovni funkce vraci int, bool, char jen v dolni casti rax */
+        /* library functions return int, bool, char only in the low part of rax */
         TypePtr res = fce->type->from;
         if (fce->body == nullptr && res != nullptr && res->length != Long)
         {
@@ -1807,21 +1807,21 @@ public:
 
     /* ------------------------------------------------------------------ */
 
-    /* vyhodnot podminku a nastav priznaky (ZF=1 <=> nepravda) */
+    /* evaluate the condition and set the flags (ZF=1 <=> false) */
     void codeCond (ExprPtr expr)
     {
         codeExpr (expr);
         a.test (rax, rax);
     }
 
-    /* deklarace lokalnich promennych - inicializace */
+    /* declarations of local variables - initialization */
     void codeLocalDecls (Queue & decl)
     {
         for (NodePtr p = decl.first; p != nullptr; p = p->next)
         {
             ObjectPtr obj = p->item;
             if (vars.find (obj) == vars.end ())
-                continue;         /* typedef, extern, deklarace funkce */
+                continue;         /* typedef, extern, function declaration */
 
             Variable & var = vars [obj];
 
@@ -1919,17 +1919,17 @@ public:
 
     void codeFor (StatPtr stat)
     {
-        // for (e1;e2;e3) s1     nebo  for (deklarace; e2; e3) s1
+        // for (e1;e2;e3) s1     or  for (declaration; e2; e3) s1
         a.comment ("for statement");
         Label begin_label = newLabel ();
         Label next_label = newLabel ();
         Label end_label = newLabel ();
 
         codeLocalDecls (stat->decl);
-        codeExpr (stat->e1);              /* inicializace */
+        codeExpr (stat->e1);              /* initialization */
 
         a.bind (begin_label);
-        if (stat->e2 != nullptr)          /* for (;;) => bez testu */
+        if (stat->e2 != nullptr)          /* for (;;) => without test */
         {
             codeCond (stat->e2);
             a.jz (end_label);
@@ -1940,7 +1940,7 @@ public:
         loops.pop_back ();
 
         a.bind (next_label);
-        codeExpr (stat->e3);              /* inkrement */
+        codeExpr (stat->e3);              /* increment */
         a.jmp (begin_label);
 
         a.bind (end_label);
@@ -1951,7 +1951,7 @@ public:
         if (stat->e1 != nullptr)
             codeExpr (stat->e1);
         else if (current_class != nullptr)
-            loadThis ();              /* konstruktor vraci this */
+            loadThis ();              /* constructor returns this */
         else
             a.xor_ (eax, eax);
         a.jmp (epilogue_label);

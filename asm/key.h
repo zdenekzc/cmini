@@ -1,6 +1,6 @@
 /* KEY.H */
 
-/* klicova slova assembleru (prevedeno z key.pas) */
+/* keywords of the assembler (translated from key.pas) */
 
 #ifndef KEY_H
 #define KEY_H
@@ -77,7 +77,7 @@ enum keyword
    /* x86-64 */
    iCdqe, iCmpsq, iCqo, iJrcxz, iLodsq, iMovsq,
    iMovsxd, iScasq, iStosq, iSyscall,
-   /* SSE, SSE2 (skalarni operace, registry XMM) */
+   /* SSE, SSE2 (scalar operations, XMM registers) */
    iAddsd, iAddss, iAndnpd, iAndnps, iAndpd, iAndps, iComisd, iComiss,
    iCvtsd2si, iCvtsd2ss, iCvtsi2sd, iCvtsi2ss, iCvtss2sd, iCvtss2si,
    iCvttsd2si, iCvttss2si, iDivsd, iDivss, iMaxsd, iMaxss, iMinsd, iMinss,
@@ -115,7 +115,7 @@ enum keyword
 };
 
 #ifndef __cplusplus
-typedef enum keyword keyword;    /* C: jmeno vyctu neni typ (asmlist.c) */
+typedef enum keyword keyword;    /* C: enum name is not a type (asmlist.c) */
 #endif
 
 #define KeyMax 488
@@ -127,7 +127,7 @@ typedef struct
 }
    KeyRec;
 
-/* KeyTable [1..KeyMax] - serazeno podle jmena (index 0 se nepouziva) */
+/* KeyTable [1..KeyMax] - sorted by name (index 0 is not used) */
 extern const KeyRec KeyTable [KeyMax + 1];
 
 #endif /* KEY_H */

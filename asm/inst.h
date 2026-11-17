@@ -1,6 +1,6 @@
 /* INST.H */
 
-/* instrukce (prevedeno z inst.pas) */
+/* instructions (translated from inst.pas) */
 
 #ifndef INST_H
 #define INST_H

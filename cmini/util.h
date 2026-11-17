@@ -1,6 +1,6 @@
-/* UTIL.H - pomocne funkce generatoru c-mini v C (instr.c, translate.c): retezce,
-   dynamicke pole Seq, hashovaci tabulka Dict, cteni souboru.  Ciste C v podmnozine
-   c-mini (prelozi gcc, tcc i cmini.bin). */
+/* UTIL.H - helper functions of the c-mini generators in C (instr.c, translate.c): strings,
+   dynamic array Seq, hash table Dict, file reading.  Plain C in the c-mini subset
+   (compiled by gcc, tcc and cmini.bin). */
 
 #ifndef UTIL_H
 #define UTIL_H
@@ -13,12 +13,12 @@ extern "C" {
 
 /*
 
-   Retezce: char * (nikdy NULL, "" = prazdny); nove retezce (Cat, Str, ...) se
-   alokuji a neuvolnuji (generator bezi jednou na preklad).
-   Seq: dynamicke pole hodnot long (cisla, ukazatele, retezce pretypovane na long).
-   Dict: hashovaci tabulka long => long; klic cislo / ukazatel (Dict...) nebo
-   retezec (SDict... - porovnani obsahu).  Chybejici klic: Get vraci 0, GetStr "".
-   Vsechny polozky struktur jsou long nebo ukazatel (c-mini: polozka = 8 bajtu). */
+   Strings: char * (never NULL, "" = empty); new strings (Cat, Str, ...) are
+   allocated and never freed (the generator runs once per translation).
+   Seq: dynamic array of long values (numbers, pointers, strings cast to long).
+   Dict: hash table long => long; key is a number / pointer (Dict...) or
+   a string (SDict... - compares contents).  Missing key: Get returns 0, GetStr "".
+   All struct members are long or pointers (c-mini: member = 8 bytes). */
 
 typedef struct Seq
 {
@@ -32,7 +32,7 @@ typedef struct Dict
 {
     long * keys;
     long * vals;
-    long * used;     /* 0 volne, 1 obsazene */
+    long * used;     /* 0 free, 1 in use */
     long   size;
     long   cap;
 }

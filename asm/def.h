@@ -1,6 +1,6 @@
 /* DEF.H */
 
-/* spolecne typy, promenne a procedury assembleru (prevedeno z def.pas) */
+/* common types, variables and procedures of the assembler (translated from def.pas) */
 
 #ifndef DEF_H
 #define DEF_H
@@ -12,7 +12,7 @@
 
 #include "key.h"
 
-/* atributy funkci (C99: [[noreturn]] ani _Noreturn nejsou; gcc, clang i tcc znaji __attribute__) */
+/* function attributes (C99: neither [[noreturn]] nor _Noreturn; gcc, clang and tcc know __attribute__) */
 #if defined (__GNUC__) || defined (__TINYC__)
 #define NORETURN    __attribute__ ((noreturn))
 #define MAYBE_UNUSED __attribute__ ((unused))
@@ -22,13 +22,13 @@
 #endif
 
 /*
-   Typy z Pascalu:
+   Types from Pascal:
       small   = 0..$FF      -> uint8_t
       int     = 0..$FFFF    -> card (uint16_t)
       long    = longint     -> longint (int32_t)
       bool    = boolean     -> bool
-      integer (16 bitu se znamenkem, rezim TP) -> int (pozor na preteceni)
-      string [n]            -> char [n+1], retezce ukoncene nulou
+      integer (16-bit signed, TP mode) -> int (beware of overflow)
+      string [n]            -> char [n+1], zero-terminated strings
 */
 
 typedef uint8_t  small;
@@ -41,7 +41,7 @@ extern char    ErrMsg [80 + 1];
 
 /****************************** STRINGS ***********************************/
 
-/* prirazeni a spojovani retezcu s orezanim na velikost (jako string [n]) */
+/* assignment and concatenation of strings, truncated to the size (like string [n]) */
 void StrSet    (char * dst, int size, const char * src);
 void StrAdd    (char * dst, int size, const char * src);
 void StrAddChr (char * dst, int size, char c);
@@ -64,13 +64,13 @@ enum symbol
 
    Identif,    Number,     Float,      Chars,
    EOL,
-   Operand     /* operand z uzlu asmlist (faze 2) - viz NodeOperands */
+   Operand     /* operand from an asmlist node (phase 2) - see NodeOperands */
 };
 typedef enum symbol symbol;
 
 extern FILE *  source;
 
-extern card    column;     /* pozice v LineBuf, cislovano od 1 jako v Pascalu */
+extern card    column;     /* position in LineBuf, numbered from 1 as in Pascal */
 extern card    start;
 extern longint line;
 extern char    LineBuf [LineLen + 1];
@@ -84,7 +84,7 @@ extern char    chs [ChsLen + 1];
 
 /******************************** SYMBOLS *********************************/
 
-/* velikosti a typy operandu (Pascal: byte, word, ..., short, near, far) */
+/* sizes and types of operands (Pascal: byte, word, ..., short, near, far) */
 #define byte    1
 #define word    2
 #define dword   4
@@ -125,12 +125,12 @@ typedef struct
 }
    HeadRec;
 
-/* enum Register a RegTable - reg.h (spolecne s asmlist.c) */
+/* enum Register and RegTable - reg.h (shared with asmlist.c) */
 #include "reg.h"
 
-small RegCode (Register r);  /* cislo registru v instrukci 0..15 (bit 3 => REX) */
-bool  RegNew  (Register r);  /* registr x86-64 (jen v segmentu USE64) */
-bool  RegRex  (Register r);  /* registr vyzaduje prefix REX (R8.., SPL .. DIL) */
+small RegCode (Register r);  /* register number in the instruction 0..15 (bit 3 => REX) */
+bool  RegNew  (Register r);  /* x86-64 register (only in segment USE64) */
+bool  RegRex  (Register r);  /* register requires a REX prefix (R8.., SPL .. DIL) */
 
 enum AlignTyp
 {
@@ -150,11 +150,11 @@ enum ExprSort
 {
    reg, seg, st, cr, dr, tr, mem, imm,
    segment, group, reserved, unknown,
-   xmm                                 /* XMM0 .. XMM15 (ceil = cislo), SSE / SSE2 */
+   xmm                                 /* XMM0 .. XMM15 (ceil = number), SSE / SSE2 */
 };
 typedef enum ExprSort ExprSort;
 
-/* variantni zaznam z Pascalu - vsechny varianty jako samostatne polozky */
+/* variant record from Pascal - all variants as separate items */
 typedef struct
 {
    card     typ;
@@ -172,7 +172,7 @@ typedef struct
    Register index;
    small    scale;
    longint  val;
-   int64_t  val64;    /* 64bitova hodnota konstanty (x86-64); val = jejich dolnich 32 bitu */
+   int64_t  val64;    /* 64-bit constant value (x86-64); val = its lower 32 bits */
    TreePtr  add;
    TreePtr  frame;
    TreePtr  target;
@@ -183,7 +183,7 @@ typedef struct
    AlignTyp align;
    CombiTyp combi;
    bool     Seg32;
-   bool     Seg64;    /* USE64 (Seg32 je take true) */
+   bool     Seg64;    /* USE64 (Seg32 is also true) */
    longint  SegLen;
    card     FrameNum;
    ObjInx   SegInx;
@@ -205,8 +205,8 @@ struct TreeRec
    alpha   name;
    bool    def;
 
-   alpha   orig;                  /* jmeno, jak bylo napsano (velka / mala pismena) */
-   char    extname [ChsLen + 1];  /* jmeno pro linker (EXTRN / PUBLIC 'jmeno'), jinak orig */
+   alpha   orig;                  /* name as written (upper / lower case) */
+   char    extname [ChsLen + 1];  /* name for the linker (EXTRN / PUBLIC 'name'), otherwise orig */
 
    TreePtr left;
    TreePtr right;
@@ -240,7 +240,7 @@ extern TreePtr ThisSeg;
 extern TreePtr MainSeg;
 extern TreePtr ThisProc;
 extern card    default_;     /* Pascal: default */
-extern bool    x64;          /* aktualni segment je USE64 */
+extern bool    x64;          /* current segment is USE64 */
 extern longint ip;
 
 extern Intel   proc;
@@ -262,18 +262,18 @@ extern bool    bin;
 extern FILE *  BinFile;
 extern char    BinName [255 + 1];
 
-extern bool    eobj;         /* relokovatelny objekt ELF64 (-c) */
+extern bool    eobj;         /* relocatable object ELF64 (-c) */
 extern char    EobjName [255 + 1];
 
-extern bool    elf;          /* spustitelny soubor ELF i386 pro Linux */
+extern bool    elf;          /* executable ELF i386 file for Linux */
 extern FILE *  ElfFile;
 extern char    ElfName [255 + 1];
 
-extern bool    ToaruTarget;  /* cilem je ToaruOS (-T): jina zakladna obrazce; ne "toaru" - gcc v ToaruOS ho definuje jako makro 1 */
+extern bool    ToaruTarget;  /* target ToaruOS (-T): different base image; not "toaru" - gcc in ToaruOS defines it as macro 1 */
 
-extern bool    pe;           /* spustitelny soubor PE pro Windows (-w, .exe; elf = true) */
+extern bool    pe;           /* executable PE file for Windows (-w, .exe; elf = true) */
 extern char    PeName [255 + 1];
-extern bool    cobj;         /* objekt COFF x64 pro Windows (-m, .obj; eobj = true) */
+extern bool    cobj;         /* COFF x64 object for Windows (-m, .obj; eobj = true) */
 extern char    CobjName [255 + 1];
 
 extern bool    lst;
@@ -284,7 +284,7 @@ extern bool    pas;
 extern FILE *  PasFile;
 extern char    PasName [255 + 1];
 
-/* jmeno zdrojoveho souboru je ModName */
+/* name of the source file is ModName */
 
 /************************* DEFINITION PROCEDURES **************************/
 
@@ -315,7 +315,7 @@ void    Init (void);
 
 /********************************* CONST **********************************/
 
-extern ExprRec zero;      /* konstanty - nastavi Init */
+extern ExprRec zero;      /* constants - set by Init */
 extern ExprRec st0;
 extern ExprRec st1;
 
@@ -364,17 +364,17 @@ extern bool  RetryAllowed;
 
 extern alpha ErrId;
 
-/* Zotaveni po chybe pomoci setjmp / longjmp:
-      LineJump  - navrat na konec prave prekladane radky (RetryAllowed)
-      AbortJump - ukonceni celeho prekladu */
+/* Error recovery with setjmp / longjmp:
+      LineJump  - return to the end of the line being assembled (RetryAllowed)
+      AbortJump - terminate the whole assembly */
 
 extern jmp_buf LineJump;
 extern jmp_buf AbortJump;
-extern bool    AbortSet;     /* AbortJump je nastaven */
+extern bool    AbortSet;     /* AbortJump is set */
 
 NORETURN void Message (ErrTyp msg);
 NORETURN void AsmError   (ErrTyp msg);
 NORETURN void Abort   (ErrTyp msg);
-NORETURN void StopCompile (void);  /* ukonceni prekladu - skok na AbortJump */
+NORETURN void StopCompile (void);  /* end of assembly - jump to AbortJump */
 
 #endif /* DEF_H */

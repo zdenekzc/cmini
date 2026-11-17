@@ -1,4 +1,4 @@
-/* OUT.C - vystup po radkach (ovladaci pres ifc.h: showOutLine) */
+/* OUT.C - line-by-line output (to the driver via ifc.h: showOutLine) */
 
 #include <stdlib.h>
 #include <string.h>
@@ -10,10 +10,10 @@
 
 /********************************* OUTPUT *********************************/
 
-static int    indent;           /* pocet mezer na zacatku radky */
-static char * OutLine = NULL;   /* vystupni radka (ukoncena nulou) */
-static size_t OutLen = 0;       /* pocet znaku v OutLine */
-static size_t OutCap = 0;       /* velikost OutLine */
+static int    indent;           /* number of spaces at the start of the line */
+static char * OutLine = NULL;   /* output line (terminated by zero) */
+static size_t OutLen = 0;       /* number of characters in OutLine */
+static size_t OutCap = 0;       /* size of OutLine */
 
 static void OutAppend (const char * txt, size_t len)
 {
@@ -38,15 +38,15 @@ static void OutClear (void)
 }
 
 void OpenOut (void)
-/* otevri vystupni soubor */
+/* open output file */
 {
-  clearOutLines (); /* vymaz vystupni okno */
+  clearOutLines (); /* clear output window */
   indent = 0;
   OutClear ();
 }
 
 void CloseOut (void)
-/* uzavri vystupni soubor */
+/* close output file */
 {
   PutEol ();
 }
@@ -54,7 +54,7 @@ void CloseOut (void)
 /****************************** INDENTATION *******************************/
 
 void Indent (void)
-/* zvetsi pocet mezer na zacatku radky */
+/* increase number of spaces at the start of the line */
 {
   if (indent==0)
      indent = 2;
@@ -63,7 +63,7 @@ void Indent (void)
 }
 
 void Unindent (void)
-/* zmensi pocet mezer na zacatku radky */
+/* decrease number of spaces at the start of the line */
 {
   if (indent<3)
      indent = 0;

@@ -1,4 +1,4 @@
-/* ASMLIST.C - program pro assembler pasm jako spojovy seznam (viz asmlist.h) */
+/* ASMLIST.C - program for the assembler pasm as a linked list (see asmlist.h) */
 
 #include "asmlist.h"
 #include "pasmlib.h"
@@ -26,7 +26,7 @@ static char * AsmStrDup (const char * s)
    return r;
 }
 
-/******************************** OPERANDY ********************************/
+/******************************** OPERANDS ********************************/
 
 static AsmOp NoOp (AsmOpKind kind)
 {
@@ -63,21 +63,21 @@ AsmOp AsmImm (int64_t v)
 AsmOp AsmImmHex (int64_t v)
 {
    AsmOp o = AsmImm (v);
-   o.num = 1;                 /* tisk 0...h */
+   o.num = 1;                 /* print 0...h */
    return o;
 }
 
 AsmOp AsmImmHexLit (int64_t v)
 {
    AsmOp o = AsmImm (v);
-   o.num = 3;                 /* tisk ...h (bez uvodni 0, cislo zacina cislici) */
+   o.num = 3;                 /* print ...h (without leading 0, the number starts with a digit) */
    return o;
 }
 
 AsmOp AsmImmU (uint64_t v)
 {
    AsmOp o = AsmImm ((int64_t) v);
-   o.num = 2;                 /* tisk bez znamenka */
+   o.num = 2;                 /* print unsigned */
    return o;
 }
 
@@ -136,9 +136,9 @@ AsmOp AsmDup (int count, int64_t value)
    return o;
 }
 
-/********************************* SEZNAM *********************************/
+/********************************** LIST **********************************/
 
-/* operand z rozhrani s ukazateli (AsmPReg, ...) - seznam v programu */
+/* operand from the interface with pointers (AsmPReg, ...) - list in the program */
 typedef struct OpBlock OpBlock;
 struct OpBlock
 {
@@ -180,7 +180,7 @@ void AsmFree (AsmProgram * p)
 }
 
 static AsmNode * NewNode (AsmProgram * p, AsmNodeKind kind)
-/* novy uzel za kurzor, stane se kurzorem */
+/* new node after the cursor, it becomes the cursor */
 {
    AsmNode * n = (AsmNode *) AsmAlloc (sizeof (AsmNode));
    n->kind = kind;
@@ -219,7 +219,7 @@ void AsmRemove (AsmProgram * p, AsmNode * n)
    free (n);
 }
 
-/********************************* NAVESTI ********************************/
+/********************************** LABELS ********************************/
 
 AsmLabel * AsmNamedLabel (AsmProgram * p, const char * name)
 {
@@ -244,7 +244,7 @@ AsmNode * AsmBind (AsmProgram * p, AsmLabel * label)
    return n;
 }
 
-/******************************** INSTRUKCE *******************************/
+/******************************** INSTRUCTIONS *******************************/
 
 AsmNode * AsmIns (AsmProgram * p, keyword inst, int nops, const AsmOp * ops)
 {
@@ -290,7 +290,7 @@ AsmNode * AsmPrefixed (AsmProgram * p, keyword prefix, keyword inst)
    return n;
 }
 
-/******************************** DIREKTIVY *******************************/
+/******************************** DIRECTIVES *******************************/
 
 AsmNode * AsmData (AsmProgram * p, AsmLabel * name, keyword dir, int nitems, const AsmOp * items)
 {
@@ -368,7 +368,7 @@ AsmNode * AsmComment (AsmNode * n, const char * comment)
 
 /********************************** TEXT **********************************/
 
-/* text se sklada do pomocneho bufferu (AsmAssemble - casti pro pasm) */
+/* text is built into a helper buffer (AsmAssemble - parts for pasm) */
 
 typedef struct
 {
@@ -391,25 +391,25 @@ static void TextAdd (TEXT * t, const char * s)
    t->len += n;
 }
 
-/* formatovany text - funkce s pevnymi parametry (ne ...): asmlist.c
-   preklada i cparser, ktery funkce s promennym poctem parametru neumi
-   definovat (volat printf, snprintf ano) */
-static void TextNum (TEXT * t, const char * fmt, long v)      /* jedno cislo: %ld, %lX, %lu */
+/* formatted text - function with fixed parameters (not ...): asmlist.c
+   is also translated by cparser, which cannot define functions with a variable
+   number of parameters (calling printf, snprintf is fine) */
+static void TextNum (TEXT * t, const char * fmt, long v)      /* one number: %ld, %lX, %lu */
 {
    char buf [512];
    snprintf (buf, sizeof (buf), fmt, v);
    TextAdd (t, buf);
 }
 
-static void TextStr (TEXT * t, const char * fmt, const char * a)   /* jeden retezec */
+static void TextStr (TEXT * t, const char * fmt, const char * a)   /* one string */
 {
    char buf [512];
    snprintf (buf, sizeof (buf), fmt, a);
    TextAdd (t, buf);
 }
 
-/* retezec doplneny mezerami na sirku w (delsi zustane cely) - ne printf "%-8s":
-   libc ToaruOS 2.3.2 delsi retezec na sirku orizne (init_array => init_ar) */
+/* string padded with spaces to width w (a longer one stays whole) - not printf "%-8s":
+   the ToaruOS 2.3.2 libc truncates a longer string to the width (init_array => init_ar) */
 static void TextPad (TEXT * t, const char * s, int w)
 {
    int n = (int) strlen (s);
@@ -425,7 +425,7 @@ static void TextStr2 (TEXT * t, const char * fmt, const char * a, const char * b
 }
 
 const char * AsmInstName (keyword k)
-/* jmeno instrukce nebo direktivy malymi pismeny (KeyTable z key.c) */
+/* instruction or directive name in lower case (KeyTable from key.c) */
 {
    static char names [KeyMax + 64][12];
    static bool ready = false;
@@ -474,13 +474,13 @@ static void RegName (TEXT * t, Register r)
 }
 
 static void Number (TEXT * t, int64_t v)
-/* desitkove (pasm cte i 64bitova cisla) */
+/* decimal (pasm also reads 64-bit numbers) */
 {
-   TextNum (t, "%ld", (long) v);   /* int64_t = long (LP64) - bez long long (cparser) */
+   TextNum (t, "%ld", (long) v);   /* int64_t = long (LP64) - without long long (cparser) */
 }
 
 static void Disp (TEXT * t, int64_t v, bool first)
-/* posun v adrese:  +16, -8 */
+/* displacement in an address:  +16, -8 */
 {
    if (v < 0)
    {
@@ -531,7 +531,7 @@ static void Operand (TEXT * t, const AsmOp * o)
          TextAdd (t, SizeName (o->size));
          if (o->label != NULL && o->reg == None && o->index == None)
          {
-            /* navesti:  msg  (lea),  dword ptr [count+4] */
+            /* label:  msg  (lea),  dword ptr [count+4] */
             if (o->size == 0 && o->val == 0)
                TextAdd (t, o->label->name);
             else
@@ -583,7 +583,7 @@ static void Operand (TEXT * t, const AsmOp * o)
          for (const char * s = o->str; *s != 0; s++)
          {
             char c [2] = { *s, 0 };
-            if (*s == '\'') TextAdd (t, "'");     /* '' uvnitr retezce */
+            if (*s == '\'') TextAdd (t, "'");     /* '' inside a string */
             TextAdd (t, c);
          }
          TextAdd (t, "'");
@@ -601,7 +601,7 @@ static void Operand (TEXT * t, const AsmOp * o)
 }
 
 static void Mnemonic (TEXT * t, keyword k)
-/* jmeno instrukce na 8 znaku, delsi + 1 mezera (cvtsi2sd xmm0, rax) */
+/* instruction name in 8 characters, longer + 1 space (cvtsi2sd xmm0, rax) */
 {
    const char * n = AsmInstName (k);
    if (strlen (n) >= 8) TextStr (t, "%s ", n);
@@ -609,7 +609,7 @@ static void Mnemonic (TEXT * t, keyword k)
 }
 
 static void Column (TEXT * t, const char * name)
-/* jmeno v prvnim sloupci (8 znaku) */
+/* name in the first column (8 characters) */
 {
    if (name == NULL) TextAdd (t, "        ");
    else { TextPad (t, name, 7); TextAdd (t, " "); }
@@ -658,7 +658,7 @@ int AsmCfiText (const AsmNode * n, char * buf, int size)
 }
 
 static void NodeText (TEXT * t, const AsmNode * n)
-/* jeden radek textu bez konce radky */
+/* one line of text without line end */
 {
    switch (n->kind)
    {
@@ -709,13 +709,13 @@ static void NodeText (TEXT * t, const AsmNode * n)
                else TextAdd (t, AsmInstName (n->inst));
                break;
 
-            case iExtrn:          /* extrn  jmeno: near 'printf' */
+            case iExtrn:          /* extrn  name: near 'printf' */
                Column (t, NULL);
                TextStr2 (t, "%-8s%s:", "extrn", n->label->name);
                if (n->text != NULL) TextStr (t, " %s", n->text);
                break;
 
-            case iPublic:         /* public  jmeno 'main' */
+            case iPublic:         /* public  name 'main' */
                Column (t, NULL);
                TextStr2 (t, "%-8s%s", "public", n->label->name);
                if (n->text != NULL) TextStr (t, " %s", n->text);
@@ -733,7 +733,7 @@ static void NodeText (TEXT * t, const AsmNode * n)
                else TextAdd (t, "end");
                break;
 
-            default:              /* .x64 a dalsi bez parametru */
+            default:              /* .x64 and others without parameters */
                Column (t, NULL);
                TextAdd (t, AsmInstName (n->inst));
                if (n->text != NULL) TextStr (t, " %s", n->text);
@@ -745,7 +745,7 @@ static void NodeText (TEXT * t, const AsmNode * n)
          TextAdd (t, n->text);
          break;
 
-      case AN_CFI:          /* pasm: poznamka */
+      case AN_CFI:          /* pasm: comment */
          Column (t, NULL);
          TextAdd (t, "; ");
          CfiText (t, n);
@@ -778,7 +778,7 @@ AsmNode * AsmNodeAtLine (const AsmProgram * p, int line)
    return n;
 }
 
-/********************************* PREKLAD ********************************/
+/********************************** TRANSLATION ***************************/
 
 int AsmNodeLine (const AsmNode * n, char * buf, int size)
 {
@@ -796,14 +796,14 @@ int AsmNodeLine (const AsmNode * n, char * buf, int size)
 }
 
 static void SourceName (char * name, int size, const char * base)
-/* jmeno pro hlaseni:  base.asm (bez adresare) */
+/* name for messages:  base.asm (without directory) */
 {
    const char * slash = strrchr (base, '/');
    snprintf (name, size, "%s.asm", slash != NULL ? slash + 1 : base);
 }
 
 int AsmAssemble (const AsmProgram * p, const char * base, int flags, char * msg, int msg_size)
-/* faze 2: pasm cte uzly primo */
+/* phase 2: pasm reads the nodes directly */
 {
    char name [256];
    SourceName (name, sizeof (name), base);
@@ -811,7 +811,7 @@ int AsmAssemble (const AsmProgram * p, const char * base, int flags, char * msg,
 }
 
 int AsmAssembleText (const AsmProgram * p, const char * base, int flags, char * msg, int msg_size)
-/* faze 1: text po radcich (jeden uzel = jedna radka) => PasmAssembleText */
+/* phase 1: text line by line (one node = one line) => PasmAssembleText */
 {
    int count = p->node_count;
    const char * * parts = (const char * *) AsmAlloc ((count + 1) * sizeof (char *));
@@ -833,7 +833,7 @@ int AsmAssembleText (const AsmProgram * p, const char * base, int flags, char * 
    return r;
 }
 
-/************************* ROZHRANI S UKAZATELI ***************************/
+/************************* INTERFACE WITH POINTERS ***************************/
 
 AsmProgram * AsmCreate (void)
 {

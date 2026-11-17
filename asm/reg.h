@@ -1,4 +1,4 @@
-/* REG.H - registry procesoru (spolecne pro pasm a asmlist.c - C i C++) */
+/* REG.H - processor registers (shared by pasm and asmlist.c - C and C++) */
 
 #ifndef REG_H
 #define REG_H
@@ -10,7 +10,7 @@ enum Register
    EAX, ECX, EDX, EBX, ESP, EBP, ESI, EDI,
    ES,  CS,  SS,  DS,  FS,  GS,
 
-   /* x86-64 (jen v segmentech USE64) */
+   /* x86-64 (only in segments USE64) */
    RAX,  RCX,  RDX,  RBX,  RSP,  RBP,  RSI,  RDI,
    R8,   R9,   R10,  R11,  R12,  R13,  R14,  R15,
    R8D,  R9D,  R10D, R11D, R12D, R13D, R14D, R15D,
@@ -25,7 +25,7 @@ enum Register
 typedef enum Register Register;
 #endif
 
-/* jmena registru (def.c):  RegTable [RAX] = "RAX" */
+/* register names (def.c):  RegTable [RAX] = "RAX" */
 extern const char RegTable [None + 1][4 + 1];
 
 #endif

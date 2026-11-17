@@ -1,6 +1,6 @@
 /* OTH.H */
 
-/* vystupni zaznamy a direktivy (prevedeno z oth.pas) */
+/* output records and directives (translated from oth.pas) */
 
 #ifndef OTH_H
 #define OTH_H
@@ -13,13 +13,13 @@
 
 enum ClassTyp { Data, Fixup, RepBeg, RepEnd, NewPos, LineBeg, LineEnd };
 typedef enum ClassTyp ClassTyp;
-enum FixTyp   { FixOfs, FixSeg, FixNear, FixFar, FixRel };   /* FixRel - relativni k RIP */
+enum FixTyp   { FixOfs, FixSeg, FixNear, FixFar, FixRel };   /* FixRel - relative to RIP */
 typedef enum FixTyp FixTyp;
 
 typedef struct ResultRec ResultRec;
 typedef ResultRec * ResultPtr;
 
-/* variantni zaznam z Pascalu - vsechny varianty jako samostatne polozky,
+/* variant record from Pascal - all variants as separate items,
    Pascal: class -> cls */
 struct ResultRec
 {
@@ -37,7 +37,7 @@ struct ResultRec
    TreePtr   FixTarget;
    TreePtr   FixAdd;
    longint   FixVal;
-   bool      Fix64;      /* 8bajtova polozka v segmentu USE64 - hodnota FixVal64 */
+   bool      Fix64;      /* 8-byte item in segment USE64 - value FixVal64 */
    int64_t   FixVal64;
 
    /* RepBeg */

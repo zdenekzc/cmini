@@ -1,6 +1,6 @@
 /* DEF.CC */
 
-/* spolecne typy, promenne a procedury assembleru (prevedeno z def.pas) */
+/* common types, variables and procedures of the assembler (translated from def.pas) */
 
 #include <string.h>
 #include <stdlib.h>
@@ -71,11 +71,11 @@ bool    elf;
 FILE *  ElfFile = NULL;
 char    ElfName [255 + 1];
 
-bool    ToaruTarget;    /* cil ToaruOS (-T / PASM_TARGET=toaru), viz code.c */
+bool    ToaruTarget;    /* target ToaruOS (-T / PASM_TARGET=toaru), see code.c */
 
-bool    pe;             /* PE pro Windows (-w), viz code.c */
+bool    pe;             /* PE for Windows (-w), see code.c */
 char    PeName [255 + 1];
-bool    cobj;           /* objekt COFF x64 (-m), viz code.c */
+bool    cobj;           /* COFF x64 object (-m), see code.c */
 char    CobjName [255 + 1];
 
 bool    lst;
@@ -130,9 +130,9 @@ void StrAddChr (char * dst, int size, char c)
 
 /********************************* CONST **********************************/
 
-/* nulovy vyraz a ST(0), ST(1) - konstanty, nastavi je Init (InitConst);
-   ne inicializatorem struktury: designatory .typ = ... nezna cparser
-   ani cmm, poradove hodnoty vsech polozek by byly necitelne */
+/* null expression and ST(0), ST(1) - constants, set by Init (InitConst);
+   not by a structure initializer: designators .typ = ... are unknown to cparser
+   and cmm, the ordinal values of all items would be unreadable */
 ExprRec zero;
 ExprRec st0;
 ExprRec st1;
@@ -193,7 +193,7 @@ bool RegRex (Register r)
 }
 
 static card RegTyp (Register r)
-/* velikost registru */
+/* register size */
 {
    if (r <= BH)   return byte;
    if (r <= DI)   return word;
@@ -392,8 +392,8 @@ void NewLabel (TreePtr ref, card p_typ)
 }
 
 void DefineLabel (TreePtr ref, card p_typ)
-/* Definice navesti (PROC, LABEL, DB ...), na ktere uz mohl byt
-   dopredny odkaz (ForwLabel) - puvodne hlasilo Duplicate identifier */
+/* Definition of labels (PROC, LABEL, DB ...) that may already have a forward
+   reference (ForwLabel) - originally reported as Duplicate identifier */
 {
    if (ref->ope.sort == mem && ! ref->def)
    {
@@ -450,7 +450,7 @@ void NewGroup (TreePtr ref)
 static TreeRec * InitArea; /* [1..KeyMax] */
 
 static TreePtr Enter (int a, int c)
-/* vyvazeny strom z serazene tabulky klicovych slov */
+/* balanced tree built from the sorted keyword table */
 {
    if (a > c) return NULL;
 
@@ -524,7 +524,7 @@ static void InitDisp (void)
       snprintf (n, sizeof (n), "TR%d", i);
       EnterSpec (n, tr, i);
    }
-   for (int i = 0; i <= 15; i++)      /* SSE: XMM8 .. XMM15 jen v USE64 (REX) */
+   for (int i = 0; i <= 15; i++)      /* SSE: XMM8 .. XMM15 only in USE64 (REX) */
    {
       snprintf (n, sizeof (n), "XMM%d", i);
       EnterSpec (n, xmm, i);
@@ -692,7 +692,7 @@ static void Info (ErrTyp msg)
    else
       StrSet (m, sizeof (m), s);
 
-   /* -w / -m pouzivaji kontroly ELF (-e / -c): "ELF executable" => "PE executable",
+   /* -w / -m use ELF checks (-e / -c): "ELF executable" => "PE executable",
       "ELF object" => "COFF object" */
    if ((pe || cobj) && msg != Use64NotAll)
    {

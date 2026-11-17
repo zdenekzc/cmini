@@ -1,6 +1,6 @@
 /* EXPR.CC */
 
-/* lexikalni analyza a vyrazy (prevedeno z expr.pas) */
+/* lexical analysis and expressions (translated from expr.pas) */
 
 #include <string.h>
 
@@ -47,14 +47,14 @@ static bool Special (char c)
    return c == CtrlM || c == CtrlJ || c == CtrlZ;
 }
 
-/* Pascal UpCase - jen 'a'..'z' */
+/* Pascal UpCase - only 'a'..'z' */
 static char UpCase (char c)
 {
    if (c >= 'a' && c <= 'z') return (char) (c - 'a' + 'A');
    return c;
 }
 
-#define MinLong (-1)          /* v TP: $FFFFFFFF jako longint */
+#define MinLong (-1)          /* in TP: $FFFFFFFF as longint */
 #define MaxLong 0x7FFFFFFF
 
 enum OpTyp
@@ -91,7 +91,7 @@ typedef struct
 #define ValueMax   16
 #define StackMax   16
 
-/* pole jsou v Pascalu indexovana od 1: stack [i] -> stack [i-1] */
+/* arrays are indexed from 1 in Pascal: stack [i] -> stack [i-1] */
 static card     StkTop;
 static StackRec stack [StackMax];
 
@@ -108,40 +108,40 @@ static bool InScaleSet (longint v)
    return v == 1 || v == 2 || v == 4 || v == 8;
 }
 
-/* Identifikator delsi nez AlphaLen: v Pascalu ma id delku > AlphaLen
-   (id[0] := chr (len)), takze ho SearchTree nikdy nenajde (porovnava se
-   jen prvnich AlphaLen znaku a pak delka) a NewIdentif ulozi jmeno
-   oriznute na AlphaLen znaku. V C je id oriznute a tento priznak
-   rika, ze SearchTree nema najit nic. */
+/* Identifier longer than AlphaLen: in Pascal the id has length > AlphaLen
+   (id[0] := chr (len)), so SearchTree never finds it (it compares only the first
+   AlphaLen characters and then the length), and NewIdentif stores the name
+   truncated to AlphaLen characters. In C the id is truncated and this flag
+   says that SearchTree must not find anything. */
 static bool     IdLong;
-static alpha id_orig;     /* identifikator, jak byl napsan (ELF objekt) */
+static alpha id_orig;     /* identifier as written (ELF object) */
 
 /********************************* INPUT **********************************/
 
-/* Zdrojovy text: soubor ModName, nebo text v pameti po castech
-   (SetSourceText - knihovna pasmlib.h, cparser); ModName je pak jen
-   jmeno pro chybova hlaseni.  Cte se po znacich (SrcGetc, SrcUngetc). */
+/* Source text: file ModName, or text in memory in parts
+   (SetSourceText - library pasmlib.h, cparser); ModName is then only the
+   name for error messages.  Read character by character (SrcGetc, SrcUngetc). */
 
-static const char * const * SrcParts = NULL;  /* casti textu (NULL = soubor) */
-static int  SrcCount = 0;                     /* pocet casti */
-static int  SrcPart = 0;                      /* aktualni cast */
-static long SrcPos = 0;                       /* pozice v ni */
+static const char * const * SrcParts = NULL;  /* parts of the text (NULL = file) */
+static int  SrcCount = 0;                     /* number of parts */
+static int  SrcPart = 0;                      /* current part */
+static long SrcPos = 0;                       /* position in it */
 
-/* Program jako spojovy seznam uzlu (asmlist.h, faze 2): jeden uzel = jedna
-   radka.  Instrukce a navesti preklada CompileLineBody (inst.c) primo
-   z uzlu (NodeDirect, NodeOperands), ostatni uzly se vytisknou do LineBuf
-   (NodeSourceText) a ctou jako text.  LineBuf pro vypis (.lst, .inl) se
-   plni vzdy. */
+/* Program as a linked list of nodes (asmlist.h, phase 2): one node = one
+   line.  Instructions and labels are translated by CompileLineBody (inst.c) directly
+   from the nodes (NodeDirect, NodeOperands), other nodes are printed into LineBuf
+   (NodeSourceText) and read as text.  LineBuf for the listing (.lst, .inl) is
+   always filled. */
 
-static bool          SrcNodes = false;   /* zdroj = seznam uzlu */
+static bool          SrcNodes = false;   /* source = list of nodes */
 static const AsmNode * SrcFirst = NULL;
-static const AsmNode * SrcNext = NULL;   /* dalsi radka */
-static const AsmNode * SrcCur = NULL;    /* prave radka */
-static bool          SrcCurText = false; /* LineBuf obsahuje tisk SrcCur */
-static int           NodeGen = 0;        /* cislo prekladu (platnost AsmLabel.sym) */
+static const AsmNode * SrcNext = NULL;   /* next line */
+static const AsmNode * SrcCur = NULL;    /* current line */
+static bool          SrcCurText = false; /* LineBuf contains the printout of SrcCur */
+static int           NodeGen = 0;        /* translation number (validity of AsmLabel.sym) */
 
-static const AsmNode * NodeOps = NULL;   /* operandy instrukce z uzlu (Insymbol, Expression) */
-static int           NodePos;            /* poradi symbolu: operand 0, carka, operand 1, ... */
+static const AsmNode * NodeOps = NULL;   /* instruction operands from the nodes (Insymbol, Expression) */
+static int           NodePos;            /* order of symbols: operand 0, comma, operand 1, ... */
 
 void SetSourceNodes (const AsmNode * first, bool on)
 {
@@ -173,7 +173,7 @@ static int SrcGetc (void)
 }
 
 static void SrcUngetc (int c)
-/* vraceni posledniho precteneho znaku (c != EOF) */
+/* return the last read character (c != EOF) */
 {
    if (SrcParts == NULL)
    {
@@ -183,13 +183,13 @@ static void SrcUngetc (int c)
    if (SrcPos > 0) SrcPos --;
    else
    {
-      /* znak byl posledni v predchozi neprazdne casti */
+      /* the character was the last one in the previous non-empty part */
       do SrcPart --; while (SrcParts [SrcPart] == NULL || SrcParts [SrcPart][0] == 0);
       SrcPos = (long) strlen (SrcParts [SrcPart]) - 1;
    }
 }
 
-/* eof (source) jako ve FPC: pravda, kdyz uz v souboru neni zadny znak */
+/* eof (source) as in FPC: true when there is no character left in the file */
 bool SourceEof (void)
 {
    if (SrcNodes) return SrcNext == NULL;
@@ -199,9 +199,9 @@ bool SourceEof (void)
    return false;
 }
 
-/* readln (source, LineBuf) jako ve FPC: radka konci LF, CR nebo CR LF,
-   do LineBuf (string [160]) se ulozi nejvyse LineLen znaku, zbytek
-   radky se preskoci */
+/* readln (source, LineBuf) as in FPC: a line ends with LF, CR or CR LF;
+   at most LineLen characters are stored into LineBuf (string [160]), the rest
+   of the line is skipped */
 static void ReadLine (void)
 {
    int len = 0;
@@ -233,7 +233,7 @@ void OpenSource (void)
       SrcCur = NULL;
       return;
    }
-   if (SrcParts != NULL) return;              /* text v pameti */
+   if (SrcParts != NULL) return;              /* text in memory */
    source = fopen (ModName, "rb");
    if (source == NULL) Abort (SrcFault);
 }
@@ -259,7 +259,7 @@ void NodeSourceText (void)
    if (SrcCur == NULL) return;
    if (! SrcCurText)
    {
-      AsmNodeLine (SrcCur, LineBuf, LineLen + 1);   /* jako ReadLine - nejvyse LineLen znaku */
+      AsmNodeLine (SrcCur, LineBuf, LineLen + 1);   /* like ReadLine - at most LineLen characters */
       SrcCurText = true;
    }
    NodeOps = NULL;
@@ -410,7 +410,7 @@ void NextElement (void)
 /******************************** INSYMBOL ********************************/
 
 static void NodeSy (void)
-/* symboly instrukce z uzlu:  Operand, Comma, Operand, ..., EOL */
+/* symbols of an instruction from a node:  Operand, Comma, Operand, ..., EOL */
 {
    int k = NodePos / 2;
    if (NodePos % 2 == 0 && k < NodeOps->nops) CurSy = Operand;
@@ -448,7 +448,7 @@ void Insymbol (void)
       if (ans == NULL)
       {
          NewIdentif (&ans, id);
-         StrSet (ans->orig, sizeof (alpha), id_orig);  /* pro linker (ELF objekt) */
+         StrSet (ans->orig, sizeof (alpha), id_orig);  /* for the linker (ELF object) */
       }
    }
 }
@@ -484,7 +484,7 @@ static void GetNumber (ExprRec * e)
       else if (c >= 'A' && c <= 'F') dig = (card) (c - 'A' + 10);
       else AsmError (BadNum);
       if (dig >= radix) AsmError (BadNum);
-      sum = sum * radix + dig;           /* preteceni jako longint v Pascalu */
+      sum = sum * radix + dig;           /* overflow as longint in Pascal */
       sum64 = sum64 * radix + dig;       /* x86-64 */
    }
 
@@ -504,7 +504,7 @@ static void GetChars (ExprRec * e)
 }
 
 static void IdentValue (TreePtr t, ExprRec * e)
-/* hodnota identifikatoru (GetIdentif, operand z uzlu) */
+/* value of the identifier (GetIdentif, operand from a node) */
 {
    ExprSort s;
 
@@ -814,7 +814,7 @@ static void BinaryCalc (ExprRec * z, OpTyp op, ExprRec x, ExprRec y)
                AsmError (InvOp);
             *z = zero;
             z->val = (longint) ((uint32_t) x.val - (uint32_t) y.val);
-            z->val64 = z->val;   /* rozdil navesti */
+            z->val64 = z->val;   /* difference of labels */
          }
          break;
 
@@ -826,10 +826,9 @@ static void BinaryCalc (ExprRec * z, OpTyp op, ExprRec x, ExprRec y)
          b64 = y.val64;
          c64 = 0;
 
-         /* shl / shr: ve FPC 32 bitove, pocet posunu mod 32,
-            shr je logicky posun;
-            soubezne 64bitovy vypocet (val64, pocet posunu mod 64);
-            v segmentu USE64 se deleni nulou a porovnani posuzuji podle 64 bitu */
+         /* shl / shr: in FPC 32-bit, the number of shifts mod 32, shr is a logical shift;
+            concurrently a 64-bit computation (val64, number of shifts mod 64);
+            in segment USE64 division by zero and comparison are judged by 64 bits */
          switch (op)
          {
             case DivOp:
@@ -891,7 +890,7 @@ static void Calc (small p)
    }
 }
 
-/* vnorena procedura SetOp z GetOp - par je parametr GetOp */
+/* nested procedure SetOp inside GetOp - par is a parameter of GetOp */
 static void SetOp (KindTyp par, OpTyp o, small p, KindTyp k)
 {
    if (k == par)
@@ -1015,8 +1014,8 @@ static void UnarySeq (void)
          brackets--;
       }
 
-      /* StkTop = 0: Pascal cte stack [0] mimo pole (range checks vypnuty),
-         tam nikdy neni BracketOp/ParOp -> chyba (overeno na pasm.bin) */
+      /* StkTop = 0: Pascal reads stack [0] outside the array (range checks are off),
+         a BracketOp/ParOp is never there -> error (verified on pasm.bin) */
       if (StkTop == 0 || stack [StkTop - 1].op != left)
       {
          switch (left)
@@ -1055,15 +1054,15 @@ static void BinarySeq (void)
    }
 }
 
-/***************************** OPERAND Z UZLU *****************************/
+/***************************** OPERAND FROM NODE **************************/
 
-/* Operand AsmOp => ExprRec stejnymi operacemi (UnaryCalc, BinaryCalc,
-   ConvReg) a ve stejnem poradi, jako kdyby se cetl jeho tisk (asmlist.c,
+/* Operand AsmOp => ExprRec by the same operations (UnaryCalc, BinaryCalc,
+   ConvReg) and in the same order as if its printout were read (asmlist.c,
    Operand):  qword ptr [rbp-16],  [rax+rcx*8+4],  L5,  offset msg, ... */
 
 static TreePtr RegSym [None];
 static TreePtr XmmSym [16];
-static signed char KeySym [KeyMax + 64];   /* 0 = nezjisteno, 1 = instrukce, -1 = text */
+static signed char KeySym [KeyMax + 64];   /* 0 = unknown, 1 = instruction, -1 = text */
 static int     SymGen = 0;
 
 static void NodeCache (void)
@@ -1076,7 +1075,7 @@ static void NodeCache (void)
 }
 
 static TreePtr StdName (const char * name)
-/* identifikator, jak by ho nasel Insymbol, jen kdyz je ve DispStd */
+/* identifier as Insymbol would find it, only when it is in DispStd */
 {
    alpha up;
    size_t len = strlen (name);
@@ -1108,7 +1107,7 @@ static TreePtr NodeXmm (int n)
 }
 
 static bool NodeKey (keyword k)
-/* jmeno instrukce (tisk) najde Insymbol jako stejne klicove slovo */
+/* the instruction name (printout) is found by Insymbol as the same keyword */
 {
    NodeCache ();
    if ((int) k <= 0 || (int) k >= KeyMax + 64) return false;
@@ -1121,8 +1120,8 @@ static bool NodeKey (keyword k)
 }
 
 TreePtr NodeLabel (AsmLabel * l)
-/* zaznam navesti jako po Insymbol (NewIdentif, orig);  NULL = jmeno nelze
-   prelozit primo (delsi nez AlphaLen, jine znaky, klicove slovo, registr) */
+/* label record as after Insymbol (NewIdentif, orig);  NULL = the name cannot be
+   translated directly (longer than AlphaLen, other characters, keyword, register) */
 {
    if (l->sym_gen == NodeGen) return (TreePtr) l->sym;
 
@@ -1195,7 +1194,7 @@ bool NodeDirect (const AsmNode * n)
 }
 
 static void NodeNumber (uint64_t u, ExprRec * e)
-/* cislo bez znamenka jako GetNumber */
+/* unsigned number as GetNumber */
 {
    *e = zero;
    e->val = (longint) (uint32_t) u;
@@ -1203,7 +1202,7 @@ static void NodeNumber (uint64_t u, ExprRec * e)
 }
 
 static void NodeSigned (int64_t v, ExprRec * e)
-/* -16 = unarni minus a cislo */
+/* -16 = unary minus and number */
 {
    if (v < 0)
    {
@@ -1231,7 +1230,7 @@ static void NodeDisp (ExprRec * acc, int64_t v)
 }
 
 static void NodeTerm (ExprRec * acc, bool * first, ExprRec t)
-/* scitanec adresy:  [a + b + ...] */
+/* address summand:  [a + b + ...] */
 {
    if (*first) *acc = t;
    else BinaryCalc (acc, AddOp, *acc, t);
@@ -1254,8 +1253,8 @@ static void NodeOperand (const AsmOp * o, ExprRec * e)
          break;
 
       case AO_IMM:
-         if (o->num == 0) NodeSigned (o->val, e);           /* desitkove, i zaporne */
-         else NodeNumber ((uint64_t) o->val, e);            /* bez znamenka, 0...h, ...h */
+         if (o->num == 0) NodeSigned (o->val, e);           /* decimal, also negative */
+         else NodeNumber ((uint64_t) o->val, e);            /* unsigned, 0...h, ...h */
          break;
 
       case AO_LABEL:
@@ -1338,7 +1337,7 @@ void Expression (ExprRec * e)
 {
    if (NodeOps != NULL)
    {
-      /* operand z uzlu */
+      /* operand from the node */
       if (CurSy != Operand) AsmError (Syntax);
       NodeOperand (&NodeOps->op [NodePos / 2], e);
       Insymbol ();
@@ -1354,8 +1353,8 @@ void Expression (ExprRec * e)
       *e = value [0];
    }
 
-   /* segment USE64: konstanta (i posunuti v adrese) se pocita v 64 bitech,
-      val = dolnich 32 bitu z val64 (ne 32bitovy vypocet, napr. 100000000h/10h) */
+   /* segment USE64: a constant (also the displacement in an address) is computed in 64 bits,
+      val = lower 32 bits of val64 (not a 32-bit computation, e.g. 100000000h/10h) */
    if (x64 && (e->sort == imm || e->sort == mem) &&
        e->target == NULL && e->add == NULL && e->frame == NULL && ! e->para)
       e->val = (longint) (uint32_t) (uint64_t) e->val64;

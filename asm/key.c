@@ -4,7 +4,7 @@
 
 const KeyRec KeyTable [KeyMax + 1] =
 {
-   { iOther, "" }, /* index 0 se nepouziva */
+   { iOther, "" }, /* index 0 is not used */
    { iDollar,    "$" },
    { iPeriod,    "." },
    { ip186,      ".186" },

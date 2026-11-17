@@ -1,4 +1,4 @@
-/* PASMLIB.CC - assembler pasm jako knihovna (pasmlib.h) */
+/* PASMLIB.CC - assembler pasm as a library (pasmlib.h) */
 
 #include <string.h>
 #include <stdio.h>
@@ -18,7 +18,7 @@ static void MakeName (char * result, const char * base, const char * ext)
 }
 
 static int Assemble (const char * src, const char * base, int flags, char * msg, int msg_size)
-/* src = soubor (nebo jen jmeno pro hlaseni, kdyz je text v pameti) */
+/* src = file (or only the name for messages, when the text is in memory) */
 {
    char name [255 + 1];
 
@@ -32,9 +32,9 @@ static int Assemble (const char * src, const char * base, int flags, char * msg,
    eobj = (flags & PASM_ELFOBJ) != 0;
    bin  = false;
 
-   /* Windows: PE (-w) je varianta spustitelneho ELF, COFF (-m) varianta
-      objektu ELF64 - stejne kontroly a stejny druhy pruchod, jiny zapis
-      (code.c).  Spolu s -e / -c nelze (sdileji vyrovnavaci pameti). */
+   /* Windows: PE (-w) is a variant of the executable ELF, COFF (-m) a variant of
+      the ELF64 object - the same checks and the same kind of pass, different output
+      (code.c).  Cannot be combined with -e / -c (they share buffers). */
    pe   = (flags & PASM_PE) != 0;
    cobj = (flags & PASM_COFF) != 0;
    if ((pe && elf) || (cobj && (eobj || obj)))
@@ -48,17 +48,17 @@ static int Assemble (const char * src, const char * base, int flags, char * msg,
    if (pe)   elf  = true;
    if (cobj) eobj = true;
 
-   /* Cil obrazce: ToaruOS menuje zakladnu, ne format (stale ELF64 exec).
-      Krome prepinace -T to jde rict i volajicimu, ktery flags jen prepisuje
-      (cmini -> PasmAssembleList), proto i prostredi PASM_TARGET=toaru. */
+   /* Target of the image: ToaruOS names the base, not the format (still ELF64 exec).
+      Besides the -T switch, a caller who only overwrites flags can also say it
+      (cmini -> PasmAssembleList), hence also the environment PASM_TARGET=toaru. */
    {
       const char * target = getenv ("PASM_TARGET");
       ToaruTarget = (flags & PASM_TOARU) != 0 ||
               (target != NULL && strcmp (target, "toaru") == 0);
-      if (pe) ToaruTarget = false;     /* PE (-w): zakladna Windows, PASM_TARGET se neuplatni */
+      if (pe) ToaruTarget = false;     /* PE (-w): Windows base, PASM_TARGET has no effect */
    }
 
-   /* vystupni soubory:  base + pripona,  implicitne src bez pripony */
+   /* output files:  base + extension,  by default src without extension */
    if (base != NULL)
       StrSet (name, sizeof (name), base);
    else

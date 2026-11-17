@@ -1,10 +1,10 @@
-/* OUT.H - vystup */
+/* OUT.H - output */
 
 #ifndef OUT_H
 #define OUT_H
 
 #ifdef __cplusplus
-extern "C" {   /* front-end je v cistem C (decl.c, ...); g++ (instr.cc, test_instr.cc) */
+extern "C" {   /* front-end is plain C (decl.c, ...); g++ (instr.cc, test_instr.cc) */
 #endif
 
 void OpenOut   (void);

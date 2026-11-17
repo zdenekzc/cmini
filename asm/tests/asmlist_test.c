@@ -1,12 +1,13 @@
-/* asmlist_test.c - tests/hello64.asm sestaveny pres asmlist.h (ciste C)
+/* asmlist_test.c - tests/hello64.asm assembled through asmlist.h (plain C)
 
-   Kod se generuje prvni, datovy segment se vlozi na zacatek az potom
-   (AsmSetCursor) - jako u x86::Builder z AsmJit.  Vysledek (hello64_list.bin)
-   musi byt bajtove shodny s  pasm -e hello64.asm  a skoncit kodem 35.
-   AsmAssemble (faze 2, uzly primo) a AsmAssembleText (faze 1, text) musi dat
-   stejny .bin i .lst (hello64_text.*) a stejne chybove hlaseni.
+   The code is generated first, the data segment is inserted at the beginning
+   afterwards (AsmSetCursor) - as with x86::Builder from AsmJit.  The result
+   (hello64_list.bin) must be byte-identical to  pasm -e hello64.asm  and exit
+   with code 35.  AsmAssemble (phase 2, nodes directly) and AsmAssembleText
+   (phase 1, text) must give the same .bin and .lst (hello64_text.*) and the
+   same error message.
 
-   preklad:  gcc -std=c99 -I .. asmlist_test.c ../asmlist.c ../libpasm.a -o asmlist_test
+   build:  gcc -std=c99 -I .. asmlist_test.c ../asmlist.c ../libpasm.a -o asmlist_test
 */
 
 #include "asmlist.h"
@@ -35,9 +36,9 @@ int main (void)
    AsmLabel * later = AsmNamedLabel (&p, "later");
 
    AsmDir (&p, ipX64, NULL, NULL);
-   AsmNode * head = AsmCursor (&p);           /* sem se pozdeji vlozi data */
+   AsmNode * head = AsmCursor (&p);           /* the data is inserted here later */
 
-   /* ---- kod ---- */
+   /* ---- code ---- */
    AsmDir (&p, iSegment, code, "use64");
    AsmBind (&p, start);
    AsmIns2 (&p, iLea, AsmReg (RSI), AsmMemLab (0, msg, 0));
@@ -118,7 +119,7 @@ int main (void)
    AsmDir (&p, iEnds, code, NULL);
    AsmDir (&p, iEnd, start, NULL);
 
-   /* ---- data: vlozit za .x64 (kurzor na zacatek) ---- */
+   /* ---- data: insert after .x64 (cursor at the beginning) ---- */
    AsmNode * save = AsmSetCursor (&p, head);
    AsmDir (&p, iSegment, data, "use64 para");
    AsmOp d1 [] = { AsmStr ("Hello, world"), AsmImm (10) };
@@ -152,7 +153,7 @@ int main (void)
       return 1;
    }
 
-   /* chyba v instrukci z uzlu (na konci):  mov 1, rax  => radka = poradi uzlu */
+   /* error in an instruction from a node (at the end):  mov 1, rax  => line = order of the node */
    AsmNode * e = AsmIns2 (&p, iMov, AsmImm (1), AsmReg (RAX));
    char m1 [512], m2 [512];
    int r1 = AsmAssemble (&p, "hello64_err", PASM_EXE, m1, sizeof (m1));

@@ -1,7 +1,7 @@
-/* SEM.C - pomocne funkce nad stromem deklaraci (decl.h), spolecne pro oba generatory
-   c-mini: translate.c (preklad do C) a instr.c (x86-64); ciste C jako front-end
-   (prelozi ho gcc, tcc, chibicc i c-mini sam). Vypoctene vlastnosti trid (potreba
-   konstruktoru, destruktoru, tabulka virtualnich metod) jsou ulozene v struct Type. */
+/* SEM.C - helper functions over the declaration tree (decl.h), shared by both
+   c-mini generators: translate.c (translation to C) and instr.c (x86-64); plain C as the front-end
+   (compiled by gcc, tcc, chibicc and c-mini itself). Computed class properties (need for a
+   constructor, destructor, virtual method table) are stored in struct Type. */
 
 #include "decl.h"
 
@@ -91,10 +91,10 @@ bool CallReturnsRef (ExprPtr e)
   return r != NULL && r->sort == Reference;
 }
 
-/****************************** KONSTRUKTOR, DESTRUKTOR *******************************/
+/****************************** CONSTRUCTOR, DESTRUCTOR *******************************/
 
-/* polozka (i pole) vyzaduje konstruktor / destruktor: trida, ktera ho potrebuje;
-   zero_fields - i retezec a kontejner (nuluji se, generator instr.cc je uvolnuje) */
+/* member (or array) needs a constructor / destructor: the class that needs it;
+   zero_fields - also strings and containers (they are zeroed, the instr.cc generator frees them) */
 static bool FieldNeeds (ObjectPtr f, bool ctor, bool zero_fields)
 {
   TypePtr c = ElemClass (f->type);
@@ -113,7 +113,7 @@ bool NeedsCtor (TypePtr cls, bool zero_fields)
   if (cls == NULL || !IsClsSort (cls->sort)) return false;
   int flag = zero_fields ? cls->need_ctor_z : cls->need_ctor;
   if (flag != 0) return flag == 2;
-  if (zero_fields) cls->need_ctor_z = 1; else cls->need_ctor = 1;   /* rekurze: zatim ne */
+  if (zero_fields) cls->need_ctor_z = 1; else cls->need_ctor = 1;   /* recursion: not yet */
   bool r = cls->ctor != NULL || IsPolymorphic (cls) || NeedsCtor (cls->base, zero_fields);
   for (NodePtr p = cls->list.first; p != NULL && !r; p = p->next)
      if (IsField (p->item) && FieldNeeds (p->item, true, zero_fields)) r = true;
@@ -135,10 +135,10 @@ bool NeedsDtor (TypePtr cls, bool zero_fields)
   return r;
 }
 
-/****************************** TABULKA VIRTUALNICH METOD *******************************/
+/****************************** VIRTUAL METHOD TABLE *******************************/
 
-/* sloty baze (je-li polymorfni), virtualni metoda se stejnym jmenem slot prekryje,
-   nova se prida na konec */
+/* base slots (if polymorphic): a virtual method with the same name overrides its slot,
+   a new one is appended at the end */
 static void VtCompute (TypePtr cls)
 {
   cls->vt_done = true;
@@ -205,8 +205,8 @@ int VtIndex (TypePtr cls, const char * name)
   return -1;
 }
 
-/* ukazatel na tabulku virtualnich metod (2026-11-16, drive zvlast v instr.c structBytes
-   a translate.c GetCls / VptrRoot): zavadi ho prvni polymorfni trida v hierarchii */
+/* pointer to the virtual method table (2026-11-16, previously separate in instr.c structBytes
+   and translate.c GetCls / VptrRoot): introduced by the first polymorphic class in the hierarchy */
 bool BaseIsPolymorphic (TypePtr cls)
 {
   return cls->base != NULL && IsPolymorphic (cls->base);
@@ -223,8 +223,8 @@ TypePtr VptrRoot (TypePtr cls)
   return cls;
 }
 
-/* objekt deklarovany const s inicializaci (const int N = 10; i const u aliasu typu) -
-   hodnota je konstanta (instr.c constValue, translate.c IsIntConstObj) */
+/* object declared const with an initializer (const int N = 10; also const via a type alias) -
+   the value is a constant (instr.c constValue, translate.c IsIntConstObj) */
 bool IsConstInit (ObjectPtr obj)
 {
   if (obj == NULL || obj->init == NULL) return false;
@@ -232,7 +232,7 @@ bool IsConstInit (ObjectPtr obj)
   return t != NULL && (t->Const || (obj->desc != NULL && obj->desc->Const));
 }
 
-/* presunuto z instr.cc / translate.c: bezstavove predikaty spolecne pro oba generatory */
+/* moved from instr.cc / translate.c: stateless predicates shared by both generators */
 
 bool isIntegralType (TypePtr t)
 {
@@ -262,7 +262,7 @@ long scalarSize (TypePtr t)
         case Int:
         case Enum:
         case NoSort: return t->length == Short ? 2 : t->length == Long ? 8 : 4;
-        default:     return 8;    /* ukazatel, reference, std::string, kontejner, funkce */
+        default:     return 8;    /* pointer, reference, std::string, container, function */
     }
 }
 
@@ -276,7 +276,7 @@ bool isStructVal (TypePtr t)
 bool isZeroInit (TypePtr t) { return IsStdString (t) || IsContainer (t); }
 
 
-int fpKind (TypePtr t)       /* 0 - neni, 1 - float, 2 - double */
+int fpKind (TypePtr t)       /* 0 - none, 1 - float, 2 - double */
 {
     if (t == NULL) return 0;
     if (t->sort == Double) return 2;
@@ -323,7 +323,7 @@ bool hasCopyCtor (TypePtr t)
 
 
 bool IsInClass (ObjectPtr f)
-/* metoda / konstruktor definovany uvnitr tridy => static inline */
+/* method / constructor defined inside a class => static inline */
 {
   return f->owner != NULL && !f->outdef;
 }
@@ -339,7 +339,7 @@ bool BaseHasField (TypePtr base, const char * name)
 
 
 TypePtr VT (TypePtr t)
-/* typ hodnoty: bez aliasu a reference */
+/* value type: without alias and reference */
 {
   t = Resolve (t);
   if (t != NULL && t->sort == Reference) t = Resolve (t->from);
@@ -364,7 +364,7 @@ bool IsCharPtrT (TypePtr t)
 
 
 TypePtr PtrClass (TypePtr t)
-/* ukazatel na tridu => trida, jinak NULL */
+/* pointer to a class => the class, otherwise NULL */
 {
   t = VT (t);
   if (t == NULL || (t->sort != Pointer && t->sort != Array) || t->from == NULL) return NULL;

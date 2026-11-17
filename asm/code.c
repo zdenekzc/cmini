@@ -1,6 +1,6 @@
 /* CODE.CC */
 
-/* preklad a vystupni soubory (prevedeno z code.pas) */
+/* translation and output files (translated from code.pas) */
 
 #include <string.h>
 #include <ctype.h>
@@ -9,7 +9,7 @@
 
 #include "code.h"
 
-/* aritmetika longint s pretecenim (jako v Pascalu) */
+/* longint arithmetic with overflow (as in Pascal) */
 
 static inline longint LAdd (longint a, longint b)
 {
@@ -26,7 +26,7 @@ static inline longint LMul (longint a, longint b)
    return (longint) ((uint32_t) a * (uint32_t) b);
 }
 
-/* Pascal: write (f, ' ':n) - retezec delky 1 zarovnany vpravo na sirku n */
+/* Pascal: write (f, ' ':n) - string of length 1 right-aligned to width n */
 static void WrSpaces (FILE * f, int n)
 {
    if (n < 1) n = 1;
@@ -64,8 +64,8 @@ static void WrSpaces (FILE * f, int n)
 enum DatTyp { enum_, iter };
 typedef enum DatTyp DatTyp;
 
-/* Pascal: packed record - do souboru se zapisuje typ (1 bajt),
-   len (2 bajty, little-endian) a data [1..len] */
+/* Pascal: packed record - the type (1 byte), len (2 bytes, little-endian)
+   and data [1..len] are written to the file */
 typedef struct
 {
    small typ;
@@ -180,14 +180,14 @@ static void PutBytes (ObjRec * rec, const small * bytes, card size)
    rec->len += size;
 }
 
-/* n: ObjStr = string [127] - jmeno se orizne na 127 znaku */
+/* n: ObjStr = string [127] - the name is truncated to 127 characters */
 static void PutName (ObjRec * rec, const char * n)
 {
    card s = (card) strlen (n);
    if (s > NameSize) s = NameSize;
    s = s + 1;
    if (rec->len + s > RecSize) Abort (Bug);
-   rec->data [rec->len + 1] = (small) (s - 1);   /* delkovy bajt */
+   rec->data [rec->len + 1] = (small) (s - 1);   /* length byte */
    memmove (&rec->data [rec->len + 2], n, s - 1);
    rec->len += s;
 }
@@ -345,7 +345,7 @@ static void ExtDef (void)
    }
 }
 
-/* v Pascalu se nikde nevola */
+/* not called anywhere in Pascal */
 MAYBE_UNUSED static void Comment (bool nopurge, bool nolist, small cls, const char * txt)
 {
    card i, n;
@@ -416,8 +416,8 @@ static void Convert (TreePtr ref, card * met, ObjInx * inx)
    if (*inx == 0) Abort (Bug);
 }
 
-/* zapis hodnoty longint jako 'size' bajtu (Pascal: move (FixVal, ..., size));
-   pri size > 4 jsou dalsi bajty nulove */
+/* writing of a longint value as 'size' bytes (Pascal: move (FixVal, ..., size));
+   when size > 4 the further bytes are zero */
 static void LongBytes (longint n, small * b)
 {
    uint32_t u = (uint32_t) n;
@@ -428,7 +428,7 @@ static void LongBytes (longint n, small * b)
    b [3] = (small) ((u >> 24) & 0xFF);
 }
 
-/* result: ResultRec - predava se hodnotou (kopie) */
+/* result: ResultRec - passed by value (copy) */
 static void PutFixup (ResultRec result)
 {
    bool  m, s;
@@ -693,18 +693,18 @@ static void CloseObj (void)
 
 /***************************** ELF EXECUTABLE ******************************/
 
-/* Spustitelny soubor ELF i386 pro Linux (prepinac -e).
+/* Executable ELF i386 file for Linux (switch -e).
 
-   Vsechny segmenty (musi byt USE32) se ulozi za sebou do jedineho useku,
-   ktery jadro nahraje od adresy ElfBase s pravy cteni, zapisu i provadeni.
-   Adresy (OFFSET navesti, DD navesti, [navesti]) se dosazuji primo jako
-   linearni adresy - linker ani relokace nejsou potreba.  Registry
-   segmentu se nepouzivaji (Linux nastavi ploche segmenty).
+   All segments (they must be USE32) are stored one after another in a single section,
+   which the kernel loads from the address ElfBase with read, write and execute rights.
+   Addresses (OFFSET of a label, DD label, [label]) are substituted directly as
+   linear addresses - neither a linker nor relocations are needed.  Segment
+   registers are not used (Linux sets flat segments).
 
-   Usporadani souboru:
-      0       hlavicka ELF (52 bajtu)
-      52      programova hlavicka PT_LOAD (32 bajtu)
-      84 ...  segmenty v poradi definice, zarovnane podle ALIGN */
+   File layout:
+      0       ELF header (52 bytes)
+      52      program header PT_LOAD (32 bytes)
+      84 ...  segments in the order of definition, aligned according to ALIGN */
 
 /* ELF64 (segmenty USE64, x86-64):
       0       hlavicka ELF (64 bajtu)
@@ -716,39 +716,39 @@ static void CloseObj (void)
 #define ElfBase64  0x00400000
 #define ElfHead64  (64 + 56)
 
-/* ToaruOS (prepinac -T, resp. prostredi PASM_TARGET=toaru): TENTYZ writer,
-   jen jina zakladna. Duvod neni esteticky - overeno behem 2026-11-10 na QEMU
-   + ISO 2.3.2 s vlastnim ELF64 (toaruos-tools/probe):
+/* ToaruOS (switch -T, resp. environment PASM_TARGET=toaru): the SAME writer,
+   only a different base. The reason is not aesthetic - verified on 2026-11-10 on QEMU
+   + ISO 2.3.2 with a custom ELF64 (toaruos-tools/probe):
 
-   * s zakladnou 0x400000 proces spadne na SIGSEGV jeste pred prvnim syscallem
-     (strace ukaze jen execve), tj. nizka adresa se jadru nelibi;
-   * 0x3F000000 je adresa, kterou pouziva jejich linker/link.ld a ktera je
-     i na staticke binarce /lib/ld.so; s ni probe1 i probe2 probehly vcetne
-     write(1) a parametru od shellu.
+   * with base 0x400000 the process crashes with SIGSEGV before the first syscall
+     (strace shows only execve), i.e. the kernel does not like a low address;
+   * 0x3F000000 is the address used by their linker/link.ld and which is
+     also on the static binary /lib/ld.so; with it probe1 and probe2 ran, including
+     write(1) and parameters from the shell.
 
-   Dalsi pozadavky zavadece (kernel/misc/elf64.c, kernel/arch/x86_64/user.c),
-   ktere nas output splnuje uz dnes: ET_EXEC (ET_DYN/PIE = -EINVAL,
-   elf64.c:276), jen PT_LOAD bez PT_DYNAMIC a PT_INTERP (s PT_DYNAMIC by se
-   execnul /lib/ld.so), mapovani po 4 KiB strankach; p_flags ani p_align se
-   v zavadeci vubec necitou, vsechno je RWX - proto ani nemuzeme cast obrazce
-   oznacit jako neprovaditelnou. e_machine se nekontroluje, entry = e_entry
-   (jadro nezada _start ani symboly), bss nulujeme sami.
-   Pozn. pro pouziti: syscally s PTR_VALIDATE (napr. open na cestu) vraci
-   -EFAULT, lezi-li buffer pod adresou e_entry - data tedy nesmi lezet pod
-   zakladnou obrazce. Overeno kontrastnim pokusem (probe2 se sekci .ktmp). */
+   Other requirements of the loader (kernel/misc/elf64.c, kernel/arch/x86_64/user.c),
+   which our output already meets today: ET_EXEC (ET_DYN/PIE = -EINVAL,
+   elf64.c:276), only PT_LOAD without PT_DYNAMIC and PT_INTERP (with PT_DYNAMIC
+   /lib/ld.so would be executed), mapping by 4 KiB pages; p_flags nor p_align
+   are read by the loader at all, everything is RWX - so we cannot even mark a part
+   of the image as non-executable. e_machine is not checked, entry = e_entry
+   (the kernel does not pass _start nor symbols), we zero bss ourselves.
+   Note for use: system calls with PTR_VALIDATE (e.g. open on a path) return
+   -EFAULT when the buffer lies below e_entry - so data must not lie below the
+   image base. Verified by a contrast experiment (probe2 with section .ktmp). */
 #define ElfBase64Toaru  0x3F000000
 #define ElfHeadMax ElfHead64
 #define ElfSegMax  64
 
 static bool    Elf64;                    /* ELF64 - segmenty USE64 */
-static bool    ElfObj;                   /* relokovatelny objekt ELF64 (prepinac -c) */
+static bool    ElfObj;                   /* relocatable ELF64 object (switch -c) */
 
-/* relokace objektu ELF64 (Elf64_Rela) */
+/* relocations of an ELF64 object (Elf64_Rela) */
 typedef struct
 {
-   longint offset;      /* misto v sekci */
+   longint offset;      /* place in the section */
    int     type;        /* R_X86_64_... */
-   int     sym;         /* index symbolu */
+   int     sym;         /* symbol index */
    int64_t addend;
 }
    ElfRela;
@@ -758,29 +758,29 @@ typedef struct
 #define R_X86_64_PLT32  4
 #define R_X86_64_32    10
 
-static ElfRela * RelaTab [ElfSegMax + 1];  /* relokace segmentu [1..ElfSegMax] */
+static ElfRela * RelaTab [ElfSegMax + 1];  /* relocations of segments [1..ElfSegMax] */
 static int       RelaCnt [ElfSegMax + 1];
 static int       RelaCap [ElfSegMax + 1];
 static longint ElfBase;
 static longint ElfHead;
 
-/* ToaruOS (-T): skok na vstupni bod hned za hlavickou, kdyz nejaky segment
-   lezi pod vstupnim bodem.  Jadro ToaruOS 2.3.2 odmita ukazatele pod e_entry
-   (PTR_INRANGE - napr. open na cestu vrati chybu, write ne; overeno v hostovi
-   2026-11-11, toaruos-tools/README.md); s JMP start na nejnizsi adrese
-   lezi vsechny segmenty nad e_entry.  Program, ktery zacina kodem se vstupnim
-   bodem (probe/toaru64.asm), skok nedostane - obraz zustane bajtove stejny. */
+/* ToaruOS (-T): jump to the entry point right after the header, when some segment
+   lies below the entry point.  The ToaruOS 2.3.2 kernel rejects pointers below e_entry
+   (PTR_INRANGE - e.g. open on a path returns an error, write does not); verified on the
+   host on 2026-11-11, toaruos-tools/README.md); with JMP start at the lowest address
+   all segments lie above e_entry.  A program that starts with code at the entry point
+   (probe/toaru64.asm) does not get the jump - the image stays byte-identical. */
 #define ToaruStubLen 5          /* E9 rel32 */
 static bool    ToaruStub;
 
 typedef small * ElfPtr;
 
-static ElfPtr  ElfImg [ElfSegMax + 1];   /* obsah segmentu [1..ElfSegMax] */
-static longint ElfLen [ElfSegMax + 1];   /* delka segmentu */
-static longint ElfAdr [ElfSegMax + 1];   /* adresa segmentu v pameti */
-static card    ElfCnt;                   /* pocet alokovanych */
-static longint ElfSize;                  /* velikost cele pameti */
-static bool    ElfOpen;                  /* ElfFile je otevren */
+static ElfPtr  ElfImg [ElfSegMax + 1];   /* contents of segments [1..ElfSegMax] */
+static longint ElfLen [ElfSegMax + 1];   /* length of segment */
+static longint ElfAdr [ElfSegMax + 1];   /* address of segment in memory */
+static card    ElfCnt;                   /* number allocated */
+static longint ElfSize;                  /* total memory size */
+static bool    ElfOpen;                  /* ElfFile is open */
 
 static longint ElfAlign (AlignTyp a)
 {
@@ -794,8 +794,8 @@ static longint ElfAlign (AlignTyp a)
    }
 }
 
-/* Windows PE / COFF - dale v souboru (WINDOWS PE A COFF) */
-#define PeBase     0x00400000   /* ImageBase (bez relokaci, pevna adresa) */
+/* Windows PE / COFF - further in the file (WINDOWS PE AND COFF) */
+#define PeBase     0x00400000   /* ImageBase (without relocations, fixed address) */
 #define PePage     0x1000       /* SectionAlignment */
 static longint PeAddr (TreePtr target);
 static void    PeLayout (longint rva);
@@ -831,20 +831,20 @@ static void OpenElf (void)
 
    ElfObj = eobj;
 
-   /* ELF32 nebo ELF64 - vsechny segmenty musi byt stejne */
+   /* ELF32 or ELF64 - all segments must be the same */
    Elf64 = SegHead.first != NULL && SegHead.first->data->ope.Seg64;
    if (ElfObj && SegHead.first != NULL && ! Elf64) Abort (EobjUse64);
    for (ref = SegHead.first; ref != NULL; ref = ref->next)
       if (ref->data->ope.Seg64 != Elf64) Abort (ElfMixed);
-   /* Zakladna obrazce: Linux 0x400000 (ELF64) / 0x08048000 (ELF32),
-      ToaruOS 0x3F000000 - duvod i mereni u definice ElfBase64Toaru.
-      Relokovatelny objekt (-c) zakladnu nema, tu urci az linker. */
+   /* Image base: Linux 0x400000 (ELF64) / 0x08048000 (ELF32),
+      ToaruOS 0x3F000000 - the reason and measurement at the definition of ElfBase64Toaru.
+      A relocatable object (-c) has no base, the linker determines it. */
    if (ToaruTarget && ! Elf64) Abort (ToaruUse64);
    ElfBase = (ToaruTarget && Elf64) ? ElfBase64Toaru : (Elf64 ? ElfBase64 : ElfBase32);
    ElfHead = Elf64 ? ElfHead64 : ElfHead32;
    if (pe)
    {
-      /* PE: hlavicky na 1. strance, kazdy segment je sekce od nove stranky */
+      /* PE: headers on the 1st page, each segment is a section starting on a new page */
       ElfBase = PeBase;
       ElfHead = PePage;
    }
@@ -862,7 +862,7 @@ static void OpenElf (void)
       a = pe ? PePage : ElfAlign (o->align);
       adr = LMul (LSub (LAdd (adr, a), 1) / a, a);
 
-      ElfAdr [o->SegInx] = ElfObj ? 0 : adr;    /* objekt: kazda sekce od 0 */
+      ElfAdr [o->SegInx] = ElfObj ? 0 : adr;    /* object: each section from 0 */
       ElfLen [o->SegInx] = o->SegLen;
       RelaTab [o->SegInx] = NULL;
       RelaCnt [o->SegInx] = 0;
@@ -877,7 +877,7 @@ static void OpenElf (void)
       ref = ref->next;
    }
    ElfSize = LSub (adr, ElfBase);
-   if (pe) PeLayout (ElfSize);   /* importy (thunky, IAT) za segmenty */
+   if (pe) PeLayout (ElfSize);   /* imports (thunks, IAT) after the segments */
 
    ToaruStub = false;
    if (ToaruTarget && Elf64 && ! ElfObj && Entry != NULL && Entry->FixTarget != NULL &&
@@ -891,7 +891,7 @@ static void OpenElf (void)
          if (ElfLen [i] > 0 && ElfAdr [i] < start) ToaruStub = true;
       if (ToaruStub)
       {
-         /* segmenty znovu od adresy za skokem (stejne zarovnani) */
+         /* segments again from the address after the jump (same alignment) */
          adr = ElfBase + ElfHead + ToaruStubLen;
          for (ref = SegHead.first; ref != NULL; ref = ref->next)
          {
@@ -906,7 +906,7 @@ static void OpenElf (void)
    }
 }
 
-/* zapis do prave prekladaneho segmentu */
+/* writing into the segment being assembled */
 static void ElfPut (longint pos, const small * bytes, longint size)
 {
    if ((ThisInx < 1) || (ThisInx > ElfCnt) ||
@@ -914,8 +914,8 @@ static void ElfPut (longint pos, const small * bytes, longint size)
    memmove (&ElfImg [ThisInx] [pos], bytes, (size_t) size);
 }
 
-/* linearni adresa: segment + posunuti
-   (pozor: uvnitr 'with target^.ope' by 'val' byla polozka ExprRec) */
+/* linear address: segment + displacement
+   (careful: inside 'with target^.ope' 'val' would be the item of ExprRec) */
 static longint ElfAddr (TreePtr target, longint offs)
 {
    if (target == NULL)
@@ -923,13 +923,13 @@ static longint ElfAddr (TreePtr target, longint offs)
    else
    {
       if (pe && target->ope.sort != segment)
-         return LAdd (PeAddr (target), offs);     /* import z DLL */
+         return LAdd (PeAddr (target), offs);     /* import from a DLL */
       if (target->ope.sort != segment) AsmError (ElfExtrn);
       return LAdd (ElfAdr [target->ope.SegInx], offs);
    }
 }
 
-/* index symbolu objektu ELF: 1..SegCnt sekce, potom externi symboly, potom verejne */
+/* index of an object ELF symbol: 1..SegCnt sections, then external symbols, then public */
 static int ElfSym (TreePtr target)
 {
    if (target->ope.sort == segment)
@@ -974,7 +974,7 @@ static void WriteElf (ResultRec * res)
 
          if (ElfObj && res->FixTarget != NULL)
          {
-            /* objekt ELF: misto se vynuluje, adresu doplni linker (Elf64_Rela) */
+            /* object ELF: the place is zeroed, the address is filled in by the linker (Elf64_Rela) */
             int     type = 0;
             int64_t addend = 0;
             if (RepLevel > 0) AsmError (EobjDup);
@@ -1006,7 +1006,7 @@ static void WriteElf (ResultRec * res)
 
          if (res->Fix64)
          {
-            /* 8 bajtu v segmentu USE64 */
+            /* 8 bytes in segment USE64 */
             int64_t v64;
             if (res->FixTarget == NULL)
                v64 = res->FixVal64;
@@ -1040,7 +1040,7 @@ static void WriteElf (ResultRec * res)
       {
          /* with RepStack [RepLevel] */
          RepRec * r = &RepStack [RepLevel];
-         /* prvni kopie je hotova, zbyvajici count-1 kopii */
+         /* the first copy is done, the remaining count-1 copies */
          n = LSub (ip, r->head);
          for (i = 1; i <= (longint) r->count - 1; i++)
             ElfPut (LAdd (r->head, LMul (i, n)), &ElfImg [ThisInx] [r->head], n);
@@ -1074,7 +1074,7 @@ static void H32 (small * hdr, card ofs, longint n)
 }
 
 static void H64 (small * hdr, card ofs, longint n)
-/* 64bitova polozka - adresy jsou mensi nez 2 GB */
+/* 64-bit item - addresses are less than 2 GB */
 {
    H32 (hdr, ofs, n);
    H32 (hdr, ofs + 4, 0);
@@ -1114,7 +1114,7 @@ static void CloseElf (void)
       Abort (ElfNoEntry);
    start = ElfAddr (Entry->FixTarget, v);
 
-   /* ToaruOS: vstupni bod je skok JMP start za hlavickou (viz ToaruStub) */
+   /* ToaruOS: the entry point is the jump JMP start after the header (see ToaruStub) */
    longint target = start;
    if (ToaruStub) start = ElfBase + ElfHead;
 
@@ -1123,7 +1123,7 @@ static void CloseElf (void)
 
    if (Elf64)
    {
-      /* hlavicka ELF64 */
+      /* ELF64 header */
       hdr [0] = 0x7F;  hdr [1] = 'E';
       hdr [2] = 'L';   hdr [3] = 'F';
       hdr [4] = 2;              /* ELFCLASS64 */
@@ -1185,7 +1185,7 @@ static void CloseElf (void)
    if (ToaruStub)
    {
       small jmp [ToaruStubLen];
-      small rel [8];                     /* LongBytes pise 8 bajtu */
+      small rel [8];                     /* LongBytes writes 8 bytes */
       LongBytes (LSub (target, LAdd (pos, ToaruStubLen)), rel);
       jmp [0] = 0xE9;                    /* JMP rel32 */
       memcpy (&jmp [1], rel, 4);
@@ -1208,7 +1208,7 @@ static void CloseElf (void)
    {
       int r = fclose (ElfFile);
       ElfFile = NULL;
-      ElfOpen = false;   /* soubor je zavren i pri chybe */
+      ElfOpen = false;   /* file is closed even on error */
       if (r != 0) Abort (ElfFault);
    }
    ElfOpen = false;
@@ -1220,17 +1220,17 @@ static void CloseElf (void)
 
 /************************* ELF RELOCATABLE OBJECT ***************************/
 
-/* Relokovatelny objekt ELF64 pro x86-64 (prepinac -c), napr. pro gcc / ld:
-     - kazdy segment (USE64) je sekce PROGBITS: segment se jmenem obsahujicim
-       CODE nebo TEXT => .text (AX), ostatni => .data (WA); dalsi segmenty
-       stejneho druhu .text.<jmeno>, .data.<jmeno>,
-     - relokace .rela<sekce>: R_X86_64_64, R_X86_64_32 (OFFSET, DQ, DD),
-       R_X86_64_PC32 (adresa relativni k RIP, skok do jineho segmentu),
-       R_X86_64_PLT32 (volani / skok na externi symbol),
-     - symboly: sekce (lokalni), EXTRN (nedefinovane), PUBLIC (globalni);
-       jmeno pro linker je  EXTRN X: NEAR 'jmeno' / PUBLIC X 'jmeno',
-       jinak identifikator, jak byl napsan,
-     - .note.GNU-stack (zasobnik neni spustitelny). */
+/* Relocatable ELF64 object for x86-64 (switch -c), e.g. for gcc / ld:
+     - each segment (USE64) is a PROGBITS section: a segment with a name containing
+       CODE or TEXT => .text (AX), others => .data (WA); further segments of the same
+       kind .text.<name>, .data.<name>,
+     - relocations .rela<section>: R_X86_64_64, R_X86_64_32 (OFFSET, DQ, DD),
+       R_X86_64_PC32 (address relative to RIP, a jump to another segment),
+       R_X86_64_PLT32 (call / jump to an external symbol),
+     - symbols: section (local), EXTRN (undefined), PUBLIC (global);
+       the name for the linker is  EXTRN X: NEAR 'name' / PUBLIC X 'name',
+       otherwise the identifier as written,
+     - .note.GNU-stack (the stack is not executable). */
 
 typedef struct
 {
@@ -1269,7 +1269,7 @@ static void BufAlign (ElfBuf * b, size_t a)
    while (b->len % a != 0) BufPut (b, NULL, 1);
 }
 
-static uint32_t BufStr (ElfBuf * b, const char * s)  /* retezec do tabulky, vraci posun */
+static uint32_t BufStr (ElfBuf * b, const char * s)  /* string into the table, returns the offset */
 {
    uint32_t ofs = (uint32_t) b->len;
    BufPut (b, s, strlen (s) + 1);
@@ -1294,14 +1294,14 @@ static bool ElfCodeSeg (TreePtr seg)
    return strstr (seg->name, "CODE") != NULL || strstr (seg->name, "TEXT") != NULL;
 }
 
-/* segment EH_FRAME => sekce .eh_frame (CFI pro unwind, viz cmm/instr-pasm.cc) */
+/* segment EH_FRAME => section .eh_frame (CFI for unwind, see cmm/instr-pasm.cc) */
 static bool ElfEhFrameSeg (TreePtr seg)
 {
    return strcmp (seg->name, "EH_FRAME") == 0;
 }
 
-/* segment INIT_ARRAY / FINI_ARRAY => sekce .init_array / .fini_array
-   (ukazatele DQ OFFSET f na funkce volane pred main / pri ukonceni) */
+/* segment INIT_ARRAY / FINI_ARRAY => section .init_array / .fini_array
+   (pointers DQ OFFSET f to functions called before main / at exit) */
 static uint32_t ElfArraySeg (TreePtr seg)
 {
    if (strcmp (seg->name, "INIT_ARRAY") == 0) return 14;   /* SHT_INIT_ARRAY */
@@ -1309,7 +1309,7 @@ static uint32_t ElfArraySeg (TreePtr seg)
    return 0;
 }
 
-/* sekce ELF (hlavicka Elf64_Shdr) */
+/* ELF section (Elf64_Shdr header) */
 static void ElfShdr (ElfBuf * b, uint32_t name, uint32_t type, uint64_t flags,
                      uint64_t offset, uint64_t size, uint32_t link, uint32_t info,
                      uint64_t align, uint64_t entsize)
@@ -1360,7 +1360,7 @@ static void CloseElfObj (void)
    for (ListPtr ref = SegHead.first; ref != NULL; ref = ref->next)
       segs [ref->data->ope.SegInx] = ref->data;
 
-   /* jmena sekci */
+   /* names of sections */
    BufStr (&shstr, "");
    bool text_used = false, data_used = false;
    for (i = 1; i <= n; i++)
@@ -1388,7 +1388,7 @@ static void CloseElfObj (void)
    uint32_t strtab_name = BufStr (&shstr, ".strtab");
    uint32_t shstr_name  = BufStr (&shstr, ".shstrtab");
 
-   /* indexy sekci: 1..n segmenty, potom relokace, note, symtab, strtab, shstrtab */
+   /* section indexes: 1..n segments, then relocations, note, symtab, strtab, shstrtab */
    int nrel = 0;
    for (i = 1; i <= n; i++)
       if (RelaCnt [i] > 0) nrel ++;
@@ -1398,7 +1398,7 @@ static void CloseElfObj (void)
    int shstr_idx  = strtab_idx + 1;
    int shnum      = shstr_idx + 1;
 
-   /* symboly: 0, sekce (lokalni), EXTRN, PUBLIC */
+   /* symbols: 0, sections (local), EXTRN, PUBLIC */
    BufStr (&strtab, "");
    ElfSymEnt (&symtab, 0, 0, 0, 0);
    for (i = 1; i <= n; i++)
@@ -1422,7 +1422,7 @@ static void CloseElfObj (void)
       }
    }
 
-   /* soubor: hlavicka, obsah sekci, relokace, symboly, retezce, hlavicky sekci */
+   /* file: header, section contents, relocations, symbols, strings, section headers */
    BufPut (&file, NULL, 64);
    for (i = 1; i <= n; i++)
    {
@@ -1478,7 +1478,7 @@ static void CloseElfObj (void)
    ElfShdr (&shdr, shstr_name, 3, 0, shstrofs, shstr.len, 0, 0, 1, 0);
    BufPut (&file, shdr.p, shdr.len);
 
-   /* hlavicka ELF64, ET_REL */
+   /* ELF64 header, ET_REL */
    static const small ident [16] = { 0x7F, 'E', 'L', 'F', 2, 1, 1, 0 };
    memcpy (file.p, ident, 16);
    BufPatch (&file, 16, 1, 2);          /* e_type = ET_REL */
@@ -1514,54 +1514,55 @@ static void CloseElfObj (void)
    FreeElf ();
 }
 
-/*************************** WINDOWS PE A COFF ******************************/
+/*************************** WINDOWS PE AND COFF ****************************/
 
-/* Spustitelny soubor PE pro Windows (prepinac -w, soubor .exe)
+/* Executable PE file for Windows (switch -w, file .exe)
    ------------------------------------------------------------
-   Varianta spustitelneho ELF (-e): stejny druhy pruchod, adresy se dosazuji
-   primo (pevna ImageBase 400000h, bez relokaci), jen jine hlavicky a importy.
-   USE32 => PE32 (i386), USE64 => PE32+ (x86-64); subsystem konzole.
+   A variant of the executable ELF (-e): the same kind of pass, addresses are substituted
+   directly (fixed ImageBase 400000h, without relocations), only different headers and imports.
+   USE32 => PE32 (i386), USE64 => PE32+ (x86-64); console subsystem.
 
-   Usporadani obrazce (RVA = adresa - ImageBase):
-      0       hlavicka MS-DOS (64 bajtu, e_lfanew = 40h), "PE\0\0", hlavicka
-              COFF (20), volitelna hlavicka (PE32 224 / PE32+ 240 bajtu),
-              hlavicky sekci (40 bajtu)
-      1000h   segmenty v poradi definice, kazdy od nove stranky (4 KiB):
-              jmeno obsahuje CODE nebo TEXT => .text (R X), jinak .data (R W);
-              dalsi segmenty stejneho druhu .<jmeno> (nejvyse 8 znaku)
-      ...     .itext - thunky importovanych funkci:  JMP [IAT] (FF 25)
-      ...     .idata - importy: popisovace DLL, ILT, IAT, jmena funkci a DLL
+   Layout of the image (RVA = address - ImageBase):
+      0       MS-DOS header (64 bytes, e_lfanew = 40h), "PE\0\0", COFF header
+              (20), optional header (PE32 224 / PE32+ 240 bytes),
+              section headers (40 bytes)
+      1000h   segments in the order of definition, each from a new page (4 KiB):
+              a name containing CODE or TEXT => .text (R X), otherwise .data (R W);
+              further segments of the same kind .<name> (at most 8 characters)
+      ...     .itext - thunks of imported functions:  JMP [IAT] (FF 25)
+      ...     .idata - imports: DLL descriptors, ILT, IAT, names of functions and DLLs
 
-   Importy: EXTRN X: NEAR 'kernel32.dll!ExitProcess' (bez "dll!" => kernel32.dll)
-      CALL X, JMP X, OFFSET X, [X]   => thunk (jako u linkeru: funkce)
-      jmeno __imp_ExitProcess         => polozka IAT (CALL QWORD PTR [X])
-   Thunk i IAT jsou sdilene pro vsechny EXTRN se stejnou DLL a funkci.
+   Imports: EXTRN X: NEAR 'kernel32.dll!ExitProcess' (without "dll!" => kernel32.dll)
+      CALL X, JMP X, OFFSET X, [X]   => thunk (as with a linker: function)
+      name __imp_ExitProcess         => IAT item (CALL QWORD PTR [X])
+   The thunk and the IAT are shared by all EXTRN with the same DLL and function.
 
-   Objekt COFF x64 (prepinac -m, soubor .obj)
+   COFF x64 object (switch -m, file .obj)
    ------------------------------------------
-   Varianta relokovatelneho objektu ELF64 (-c): stejne relokace z druheho
-   pruchodu (RelaTab), jine zapsani:
+   A variant of the relocatable ELF64 object (-c): the same relocations from the second
+   pass (RelaTab), different encoding:
       R_X86_64_64 => IMAGE_REL_AMD64_ADDR64, R_X86_64_32 => ADDR32,
-      R_X86_64_PC32 / PLT32 => REL32;  pricitana hodnota se zapise do sekce
-      (COFF nema addend v relokaci; REL32: + 4, misto se pocita od konce pole)
-   Sekce: .text, .data, dalsi .text$<jmeno>, .data$<jmeno> (linker je pripoji
-   za .text / .data), INIT_ARRAY => .CRT$XCU (konstruktory CRT), EH_FRAME =>
-   .eh_frame (jen data).  Jmeno 'dll!funkce' => funkce. */
+      R_X86_64_PC32 / PLT32 => REL32;  the added value is written into the section
+      (COFF has no addend in the relocation; REL32: + 4, the place is counted from the end of the field)
+   Sections: .text, .data, further .text$<name>, .data$<name> (the linker joins them
+   to .text / .data), INIT_ARRAY => .CRT$XCU (CRT constructors), EH_FRAME =>
+   .eh_frame (data only).  Name 'dll!function' => function. */
 
 typedef struct
 {
    char     dll [ChsLen + 1];
    char     name [ChsLen + 1];
    int      dllnum;
-   longint  iat;        /* RVA polozky IAT */
-   longint  thunk;      /* RVA thunku */
+   longint  iat;        /* RVA of the IAT item */
+   longint  thunk;      /* RVA of the thunk */
 }
    PeFunc;
 
-static PeFunc * PeFn;          /* importovane funkce, serazene podle DLL */
+static PeFunc * PeFn;          /* imported functions, sorted by DLL
+ */
 static int      PeFnCnt;
-static int *    PeExtFn;       /* ExtInx -> index v PeFn */
-static bool *   PeExtImp;      /* ExtInx: jmeno __imp_... (polozka IAT) */
+static int *    PeExtFn;       /* ExtInx -> index in PeFn */
+static bool *   PeExtImp;      /* ExtInx: name __imp_... (IAT item) */
 static int      PeDllCnt;
 static longint  PeThunkRva, PeThunkLen;
 static longint  PeIdataRva, PeIdataLen;
@@ -1584,7 +1585,7 @@ static longint PeAlignUp (longint n, longint a)
    return LMul (LSub (LAdd (n, a), 1) / a, a);
 }
 
-/* 'dll!funkce' => dll, funkce;  bez '!' => kernel32.dll */
+/* 'dll!function' => dll, function;  without '!' => kernel32.dll */
 static void PeSplit (const char * s, char * dll, char * name)
 {
    const char * x = strchr (s, '!');
@@ -1613,8 +1614,8 @@ static int PeStrCaseCmp (const char * a, const char * b)
    return tolower ((unsigned char) *a) - tolower ((unsigned char) *b);
 }
 
-/* rozvrzeni importu za segmenty (rva = konec segmentu) - vola OpenElf;
-   obsah .itext a .idata se pripravi hned, adresy pak zna druhy pruchod */
+/* layout of the imports after the segments (rva = end of segment) - calls OpenElf;
+   the contents of .itext and .idata are prepared right away, the addresses are then known to the second pass */
 static void PeLayout (longint rva)
 {
    int      next = ExtHead.count;
@@ -1637,7 +1638,7 @@ static void PeLayout (longint rva)
    PeFn     = (PeFunc *) calloc ((size_t) next, sizeof (PeFunc));
    if (PeExtFn == NULL || PeExtImp == NULL || all == NULL || PeFn == NULL) Abort (HeapFull);
 
-   /* funkce v poradi EXTRN (bez opakovani), cislo DLL podle prvniho vyskytu */
+   /* functions in EXTRN order (without repetition), DLL number by its first occurrence */
    int cnt = 0;
    int * ext2all = (int *) calloc ((size_t) next + 1, sizeof (int));
    if (ext2all == NULL) Abort (HeapFull);
@@ -1669,7 +1670,7 @@ static void PeLayout (longint rva)
       ext2all [x] = k;
    }
 
-   /* serazeni podle DLL (ILT a IAT kazde DLL jsou souvisle pole) */
+   /* sorted by DLL (ILT and IAT of each DLL are contiguous arrays) */
    int * all2fn = (int *) calloc ((size_t) cnt, sizeof (int));
    if (all2fn == NULL) Abort (HeapFull);
    PeFnCnt = 0;
@@ -1685,8 +1686,8 @@ static void PeLayout (longint rva)
    free (ext2all);
    free (all);
 
-   /* .idata: popisovace (DLL + 1) * 20, ILT, IAT (po DLL, s nulou na konci),
-      jmena funkci (hint 0, jmeno, zarovnano na 2), jmena DLL */
+   /* .idata: descriptors (DLL + 1) * 20, ILT, IAT (after the DLLs, with zero at the end),
+      function names (hint 0, name, aligned to 2), DLL names */
    PeThunkLen = 8 * PeFnCnt;
    PeIdataRva = PeAlignUp (LAdd (PeThunkRva, PeThunkLen), PePage);
    longint ilt  = (PeDllCnt + 1) * 20;
@@ -1716,19 +1717,19 @@ static void PeLayout (longint rva)
       for (; k < PeFnCnt && PeFn [k].dllnum == d; k++)
       {
          PeFn [k].iat = PeIdataRva + iat;
-         BufPatch (&PeIdata, (size_t) ilt, (uint32_t) hints [k], ptr);   /* jmenem (bit 31/63 = 0) */
-         BufPatch (&PeIdata, (size_t) iat, (uint32_t) hints [k], ptr);   /* loader prepise adresou */
+         BufPatch (&PeIdata, (size_t) ilt, (uint32_t) hints [k], ptr);   /* by name (bit 31/63 = 0) */
+         BufPatch (&PeIdata, (size_t) iat, (uint32_t) hints [k], ptr);   /* loader overwrites it with the address */
          ilt += ptr;
          iat += ptr;
       }
-      ilt += ptr;     /* nula na konci */
+      ilt += ptr;     /* zero at the end */
       iat += ptr;
    }
    free (hints);
    BufAlign (&PeIdata, 4);
    PeIdataLen = (longint) PeIdata.len;
 
-   /* .itext: JMP [IAT]  - x86-64 relativne k RIP, i386 absolutni adresa */
+   /* .itext: JMP [IAT]  - x86-64 relative to RIP, i386 absolute address */
    for (k = 0; k < PeFnCnt; k++)
    {
       longint at = PeThunkRva + 8 * k;
@@ -1741,7 +1742,7 @@ static void PeLayout (longint rva)
    }
 }
 
-/* adresa importu: thunk, nebo polozka IAT (__imp_...) */
+/* import address: thunk, or IAT item (__imp_...) */
 static longint PeAddr (TreePtr target)
 {
    ExprRec * o = &target->ope;
@@ -1751,7 +1752,7 @@ static longint PeAddr (TreePtr target)
    return LAdd (PeBase, PeExtImp [o->ExtInx] ? f->iat : f->thunk);
 }
 
-/* hlavicka sekce (obrazec PE i objekt COFF) */
+/* section header (layout of PE and COFF object) */
 static void PeShdr (ElfBuf * b, const char * name, longint vsize, longint rva,
                     longint rawsize, longint rawptr, longint relptr, int nrel,
                     uint32_t flags)
@@ -1776,8 +1777,8 @@ static void PeShdr (ElfBuf * b, const char * name, longint vsize, longint rva,
 #define PeScnRdata  0x40000040    /* CNT_INITIALIZED_DATA | MEM_READ */
 #define PeFileAlign 0x200
 
-/* jmeno sekce: prvni kodovy segment .text, prvni datovy .data,
-   ostatni sep = 0 => .<jmeno> (PE, 8 znaku),  sep = '$' => .text$<jmeno> (COFF) */
+/* section name: the first code segment .text, the first data .data,
+   other sep = 0 => .<name> (PE, 8 characters), sep = '$' => .text$<name> (COFF) */
 static void PeSecName (TreePtr seg, bool * text_used, bool * data_used, char sep,
                        char * name, int size)
 {
@@ -1828,7 +1829,7 @@ static void ClosePe (void)
    if (hdrsize > PePage) Abort (Unsupported);
    BufPut (&file, NULL, (size_t) hdrsize);
 
-   /* sekce: segmenty (prazdne se vynechaji), .itext, .idata */
+   /* sections: segments (empty ones are skipped), .itext, .idata */
    for (i = 1; i <= ElfCnt + 2; i++)
    {
       char name [16];
@@ -1877,18 +1878,18 @@ static void ClosePe (void)
    }
    longint image = PeAlignUp (PeIdataLen > 0 ? LAdd (PeIdataRva, PeIdataLen) : PeThunkRva, PePage);
 
-   /* hlavicka MS-DOS: jen "MZ" a e_lfanew (program pro DOS se nepise) */
+   /* MS-DOS header: only "MZ" and e_lfanew (no DOS program is written) */
    BufPatch (&file, 0, 0x5A4D, 2);
    BufPatch (&file, 60, 64, 4);
-   /* "PE\0\0" a hlavicka COFF */
+   /* "PE\0\0" and the COFF header */
    BufPatch (&file, 64, 0x00004550, 4);
    BufPatch (&file, 68, Elf64 ? 0x8664 : 0x14C, 2);   /* Machine */
    BufPatch (&file, 70, (uint32_t) nsec, 2);
-   BufPatch (&file, 72, 0, 4);                        /* TimeDateStamp (opakovatelny vystup) */
+   BufPatch (&file, 72, 0, 4);                        /* TimeDateStamp (repeatable output) */
    BufPatch (&file, 84, (uint32_t) opt, 2);           /* SizeOfOptionalHeader */
    BufPatch (&file, 86, Elf64 ? 0x0023 : 0x0103, 2);  /* RELOCS_STRIPPED | EXECUTABLE | LARGE_ADDRESS / 32BIT */
 
-   /* volitelna hlavicka (PE32 / PE32+) */
+   /* optional header (PE32 / PE32+) */
    size_t h = 88;
    BufPatch (&file, h + 0, Elf64 ? 0x20B : 0x10B, 2); /* Magic */
    BufPatch (&file, h + 2, 1, 1);                     /* MajorLinkerVersion */
@@ -1905,11 +1906,11 @@ static void ClosePe (void)
    }
    BufPatch (&file, h + 32, PePage, 4);               /* SectionAlignment */
    BufPatch (&file, h + 36, PeFileAlign, 4);          /* FileAlignment */
-   BufPatch (&file, h + 40, 6, 2);                    /* OS 6.0 (Vista a novejsi) */
+   BufPatch (&file, h + 40, 6, 2);                    /* OS 6.0 (Vista and newer) */
    BufPatch (&file, h + 48, 6, 2);                    /* Subsystem 6.0 */
    BufPatch (&file, h + 56, (uint32_t) image, 4);     /* SizeOfImage */
    BufPatch (&file, h + 60, (uint32_t) hdrsize, 4);   /* SizeOfHeaders */
-   BufPatch (&file, h + 68, 3, 2);                    /* Subsystem = WINDOWS_CUI (konzole) */
+   BufPatch (&file, h + 68, 3, 2);                    /* Subsystem = WINDOWS_CUI (console) */
    BufPatch (&file, h + 70, 0x8100, 2);               /* NX_COMPAT | TERMINAL_SERVER_AWARE */
    int p = Elf64 ? 8 : 4;
    size_t sz = h + 72;
@@ -1943,7 +1944,7 @@ static void ClosePe (void)
    FreeElf ();
 }
 
-/* symbol COFF (18 bajtu): jmeno do 8 znaku primo, delsi v tabulce retezcu */
+/* COFF symbol (18 bytes): name up to 8 characters directly, longer in the string table */
 static void CoffSymEnt (ElfBuf * b, ElfBuf * str, const char * name, uint32_t value,
                         int section, int type, int cls, int aux)
 {
@@ -1967,7 +1968,7 @@ static void CoffSymEnt (ElfBuf * b, ElfBuf * str, const char * name, uint32_t va
    BufNum (b, (uint32_t) aux, 1);
 }
 
-/* jmeno pro linker; 'dll!funkce' (z importu pro -w) => funkce */
+/* name for the linker; 'dll!function' (from imports for -w) => function */
 static const char * CoffSymName (TreePtr t)
 {
    const char * s = ElfSymName (t);
@@ -2002,10 +2003,10 @@ static void CloseCoffObj (void)
    for (ListPtr ref = SegHead.first; ref != NULL; ref = ref->next)
       segs [ref->data->ope.SegInx] = ref->data;
 
-   BufNum (&strtab, 0, 4);       /* delka tabulky - doplni se na konci */
+   BufNum (&strtab, 0, 4);       /* length of the table - filled in at the end */
 
-   /* symboly: sekce (STATIC + pomocny zaznam), EXTRN, PUBLIC;
-      index ELF (ElfSym): 1..n sekce => 2 (i-1), n + ExtInx => 2 n + ExtInx - 1 */
+   /* symbols: section (STATIC + auxiliary record), EXTRN, PUBLIC;
+      ELF index (ElfSym): 1..n sections => 2 (i-1), n + ExtInx => 2 n + ExtInx - 1 */
    for (i = 1; i <= n; i++)
    {
       if (ElfArraySeg (segs [i]) == 15) Abort (CoffSect);
@@ -2042,7 +2043,7 @@ static void CloseCoffObj (void)
    }
    int nsym = (int) (symtab.len / 18);
 
-   /* hlavicka (20), hlavicky sekci, data a relokace sekci, symboly, retezce */
+   /* header (20), section headers, data and relocations of sections, symbols, strings */
    BufPut (&file, NULL, 20 + 40 * (size_t) n);
    for (i = 1; i <= n; i++)
    {
@@ -2050,7 +2051,7 @@ static void CloseCoffObj (void)
       longint  rawptr, relptr = 0;
       char     name [16];
 
-      /* pricitane hodnoty relokaci do obsahu sekce */
+      /* added values of relocations into the section contents */
       for (k = 0; k < RelaCnt [i]; k++)
       {
          ElfRela * r = &RelaTab [i] [k];
@@ -2090,7 +2091,7 @@ static void CloseCoffObj (void)
          StrSet (name, sizeof (name), secname [i]);
       else
       {
-         snprintf (name, sizeof (name), "/%u", (unsigned) strtab.len);   /* jmeno v tabulce retezcu */
+         snprintf (name, sizeof (name), "/%u", (unsigned) strtab.len);   /* name in the string table */
          BufStr (&strtab, secname [i]);
       }
       PeShdr (&shdr, name, 0, 0, ElfLen [i], ElfLen [i] > 0 ? rawptr : 0, relptr, RelaCnt [i], flags);
@@ -2132,7 +2133,7 @@ static void WrHex (FILE * f, longint n, card typ)
    int i;
    static const char digit [16 + 1] = "0123456789ABCDEF";
 
-   /* FPC: shr na longint je logicky posun, pocet bitu se bere mod 32 */
+   /* FPC: shr on longint is a logical shift, the number of bits is taken mod 32 */
    for (i = 2 * typ - 1; i >= 0; i--)
       fputc (digit [((uint32_t) n >> ((4 * i) & 31)) & 15], f);
 }
@@ -2149,7 +2150,7 @@ static const char AlignTable [DwordAlign + 1][5 + 1] =
 static const char CombiTable [Combi7 + 1][7 + 1] =
    { "Private", "Memory", "Public", "", "", "Stack", "Common", "" };
 
-/* e: ExprRec - v Pascalu hodnotou, zde se nemeni */
+/* e: ExprRec - in Pascal passed by value, here it is not changed */
 static void Disp (const ExprRec * e)
 {
    card    i;
@@ -2367,7 +2368,7 @@ static void WriteLst (ResultRec * res)
       case Fixup:
          if (res->Fix64)
          {
-            /* 8 bajtu v segmentu USE64 */
+            /* 8 bytes in segment USE64 */
             uint64_t u = (res->FixTarget == NULL) ? (uint64_t) res->FixVal64
                                                   : (uint64_t) (int64_t) res->FixVal;
             LstRequest (res->FixTarget == NULL ? 17 : 19);
@@ -2555,9 +2556,9 @@ static void CompileResBody (void)
          if (r->FixAdd != NULL)
          {
             r->FixVal = LAdd (r->FixVal, r->FixAdd->ope.val);
-            r->FixVal64 = r->FixVal;   /* dopredny odkaz - 32 bitu */
-            /* dopredny odkaz: v 1. pruchodu byl cilem
-               soucasny segment, navesti muze byt v jinem */
+            r->FixVal64 = r->FixVal;   /* forward reference - 32 bits */
+            /* forward reference: in the 1st pass the target was
+               the current segment, the label may be in another one */
             {
                ExprRec * a = &r->FixAdd->ope;   /* with FixAdd^.ope */
                if ((a->sort == mem) && (a->target != NULL) &&
@@ -2574,8 +2575,8 @@ static void CompileResBody (void)
              ((r->FixTarget->ope.sort != segment) ||
               (r->FixTarget->ope.SegInx != ThisInx)))
          {
-            /* PE: skok / adresa relativni k RIP do jineho segmentu nebo na
-               import (thunk, IAT) - linearni adresy jsou zname */
+            /* PE: jump / address relative to RIP into another segment or to
+               an import (thunk, IAT) - linear addresses are known */
             r->FixVal = LSub (ElfAddr (r->FixTarget, r->FixVal),
                               LAdd (LAdd (ElfAdr [ThisInx], ip), r->FixWidth));
             r->FixFrame = NULL;
@@ -2587,13 +2588,13 @@ static void CompileResBody (void)
          else if ((r->FixSort == FixNear) && (r->FixTarget != NULL) &&
                   (r->FixTarget->ope.sort != segment))
          {
-            /* externi symbol - fixup zustane pro linker
-               (puvodne se cil vzdy pocital uvnitr segmentu) */
+            /* external symbol - the fixup stays for the linker
+               (originally the target was always computed inside the segment) */
          }
          else if (r->FixSort == FixNear && eobj && (r->FixTarget != NULL) &&
                   (r->FixTarget->ope.SegInx != ThisInx))
          {
-            /* objekt ELF: skok do jineho segmentu - relokace pro linker */
+            /* object ELF: jump to another segment - relocation for the linker */
          }
          else if (r->FixSort == FixNear)
          {
@@ -2610,11 +2611,11 @@ static void CompileResBody (void)
          }
          else if (r->FixSort == FixRel)
          {
-            /* adresa relativni k RIP (x86-64): cil - konec instrukce
-               (FixVal je jiz zmensena o bajty za adresou, viz PutRel) */
+            /* address relative to RIP (x86-64): target - end of instruction
+               (FixVal is already reduced by the bytes after the address, see PutRel) */
             if ((r->FixTarget != NULL) && (r->FixTarget->ope.sort != segment))
             {
-               if (! eobj) AsmError (ElfExtrn);    /* objekt ELF: relokace */
+               if (! eobj) AsmError (ElfExtrn);    /* object ELF: relocation */
             }
             else if ((r->FixTarget == NULL) || (r->FixTarget->ope.SegInx == ThisInx))
             {
@@ -2624,13 +2625,13 @@ static void CompileResBody (void)
             }
             else if (elf)
             {
-               /* jiny segment - linearni adresy v ELF */
+               /* another segment - linear addresses in ELF */
                r->FixVal = LSub (ElfAddr (r->FixTarget, r->FixVal),
                                  LAdd (LAdd (ElfAdr [ThisInx], ip), r->FixWidth));
                r->FixFrame = NULL;
                r->FixTarget = NULL;
             }
-            /* jinak (jen vypis) zustane jako odkaz do jineho segmentu */
+            /* otherwise (listing only) it stays a reference to another segment */
          }
          break;
 
@@ -2640,8 +2641,8 @@ static void CompileResBody (void)
          if (RepLevel > RepMax) Abort (Bug);
          RepStack [RepLevel].head   = ip;
          RepStack [RepLevel].blocks = 0;
-         /* puvodne se 'count' nenastavoval a po DUP se
-            ip vratilo na zacatek bloku */
+         /* originally 'count' was not set and after DUP
+            ip returned to the start of the block */
          RepStack [RepLevel].count  = (card) r->count;
          break;
 
@@ -2687,7 +2688,7 @@ static void CompileResBody (void)
    }
 }
 
-/* Pri chybe (AsmError) se pokracuje dalsi radkou, viz Def.Retry */
+/* On error (AsmError) processing continues with the next line, see Def.Retry */
 static void CompileRes (void)
 {
    if (setjmp (LineJump) == 0) CompileResBody ();
@@ -2723,8 +2724,8 @@ static void SecondPass (void)
 
 /********************************** MAIN ***********************************/
 
-/* Uzavreni souboru po preruseni prekladu (Abort, AsmError);
-   chyby pri zavirani se ignoruji, jiz zavrene soubory maji ukazatel NULL */
+/* Closing of files after an interruption of the assembly (Abort, AsmError);
+   errors while closing are ignored, already closed files have a NULL pointer */
 static void CloseAll (void)
 {
    if (source != NULL) { fclose (source); source = NULL; }
@@ -2773,48 +2774,48 @@ void Compile (void)
 
 /********************************* LINKER ***********************************/
 
-/* Staticky linker ELF64 x86-64 pro ToaruOS (PasmLink v pasmlib.h, pasm -x,
-   cmini -L): relokovatelne objekty (pasm -c, gcc -c) a archivy .a (libc.a
-   ToaruOS) => samostatny spustitelny ELF64 ET_EXEC - bez ld.so v hostovi.
+/* Static linker ELF64 x86-64 for ToaruOS (PasmLink in pasmlib.h, pasm -x,
+   cmini -L): relocatable objects (pasm -c, gcc -c) and archives .a (ToaruOS libc.a)
+   => standalone executable ELF64 ET_EXEC - without ld.so on the host.
 
-   Vstupy v poradi prikazove radky linkeru:  crt0.o crti.o program.o libc.a crtn.o
-     - objekt se pripoji vzdy, z archivu jen cleny, ktere definuji dosud
-       nedefinovany symbol (opakovane, dokud nejaky pribude); archiv se cte
-       sam (bez ar x) - libc.a ToaruOS ma dva cleny math.o;
-     - symboly: GLOBAL / WEAK, silny symbol dvakrat => chyba, nedefinovany
-       slaby => 0; linker sam definuje _GLOBAL_OFFSET_TABLE_,
-       __init_array_start / __init_array_end (pre_main z libc.a je vola),
+   Inputs in the order of the linker command line:  crt0.o crti.o program.o libc.a crtn.o
+     - an object is always linked, from an archive only the members that define
+       a so far undefined symbol (repeatedly, while some are added); the archive is read
+       by itself (without ar x) - ToaruOS libc.a has two members math.o;
+     - symbols: GLOBAL / WEAK, a strong symbol twice => error, an undefined
+       weak one => 0; the linker itself defines _GLOBAL_OFFSET_TABLE_,
+       __init_array_start / __init_array_end (pre_main from libc.a calls them),
        __bss_start, _edata, _end, end.
 
-   Obrazec (jako pasm -e -T: jedina PT_LOAD R W X od 0x3F000000, bez sekci):
-       3F000000  hlavicka ELF64 + programova hlavicka (120 bajtu)
-       3F000080  .text (crt0.o prvni => _start je nejnize)  .init  .fini
-                 .rodata*  .data*  pole konstruktoru (.init_array*, .ctors* -
-                 nejdriv z archivu = libc, pak z objektu programu)  GOT
-                 .bss (jen p_memsz - jadro ToaruOS doplni nuly)
-   Nic nesmi lezet pod e_entry: jadro ToaruOS odmita ukazatele pod vstupnim
-   bodem (PTR_INRANGE) a stdio libc pak write opakuje do nekonecna - zmereno
-   s GNU ld, ktery dava .rodata pred .text (README toaruos-tools §5g).
-   .eh_frame, .comment, .note* se vynechaji.
+   Layout (as pasm -e -T: the only PT_LOAD R W X from 0x3F000000, without sections):
+       3F000000  ELF64 header + program header (120 bytes)
+       3F000080  .text (crt0.o first => _start is lowest)  .init  .fini
+                 .rodata*  .data*  array of constructors (.init_array*, .ctors* -
+                 first from the archive = libc, then from the program objects)  GOT
+                 .bss (only p_memsz - the ToaruOS kernel fills in zeros)
+   Nothing may lie below e_entry: the ToaruOS kernel rejects pointers below the entry
+   point (PTR_INRANGE) and the libc stdio then repeats write endlessly - measured
+   with GNU ld, which puts .rodata before .text (README toaruos-tools §5g).
+   .eh_frame, .comment, .note* are omitted.
 
-   Relokace: R_X86_64_64, PC32, PLT32, 32, 32S, PC64, GOTPCREL, GOTPCRELX,
-   REX_GOTPCRELX (GOT = tabulka 8bajtovych adres, jedna polozka na symbol). */
+   Relocations: R_X86_64_64, PC32, PLT32, 32, 32S, PC64, GOTPCREL, GOTPCRELX,
+   REX_GOTPCRELX (GOT = table of 8-byte addresses, one item per symbol). */
 
 #define LnkBase    0x3F000000ULL
-#define LnkHead    128               /* hlavicka + PT_LOAD (120), zarovnano */
+#define LnkHead    128               /* header + PT_LOAD (120), aligned */
 #define LnkMaxSym  8192
 
 typedef struct
 {
-   const small * data;   /* cely objekt (patri souboru) */
+   const small * data;   /* whole object (belongs to the file) */
    size_t   size;
    int      shnum;
    size_t   shoff;
-   int      symsec;       /* index .symtab, 0 = zadna */
-   const char * name;     /* jmeno pro hlaseni */
-   bool     member;       /* clen archivu (libc) */
-   uint64_t * secaddr;    /* adresa sekce ve vystupu, 0 = vynechana */
-   int      * symglob;    /* index globalniho symbolu, -1 = lokalni */
+   int      symsec;       /* index of .symtab, 0 = none */
+   const char * name;     /* name for messages */
+   bool     member;       /* archive member (libc) */
+   uint64_t * secaddr;    /* address of the section in the output, 0 = omitted */
+   int      * symglob;    /* index of global symbol, -1 = local */
 }
    LnkObj;
 
@@ -2823,18 +2824,18 @@ typedef struct
    const char * name;
    bool     defined;
    bool     weak;
-   int      obj;          /* definujici objekt, -1 = linker / absolutni */
-   int      sec;          /* sekce v objektu (SHN_ABS = 0xFFF1) */
+   int      obj;          /* defining object, -1 = linker / absolute */
+   int      sec;          /* section in the object (SHN_ABS = 0xFFF1) */
    uint64_t value;
-   int      got;          /* polozka GOT + 1, 0 = zadna */
+   int      got;          /* GOT item + 1, 0 = none */
 }
    LnkSym;
 
 typedef struct
 {
-   const small * data;    /* soubor archivu (cely) */
+   const small * data;    /* archive file (whole) */
    size_t   size;
-   size_t * moff;         /* zacatek clenu (ELF) */
+   size_t * moff;         /* start of members (ELF) */
    size_t * msize;
    bool   * used;
    int      count;
@@ -2846,7 +2847,7 @@ static int       LnkObjCnt, LnkObjCap;
 static LnkSym  * LnkSyms;
 static int       LnkSymCnt;
 static int       LnkGotCnt;
-static small * * LnkFiles;           /* nactene soubory - uvolni se na konci */
+static small * * LnkFiles;           /* loaded files - released at the end */
 static int       LnkFileCnt, LnkFileCap;
 static jmp_buf   LnkJump;
 static char      LnkMsg [512];
@@ -2905,7 +2906,7 @@ static small * LnkReadFile (const char * name, size_t * size)
    return p;
 }
 
-/* hlavicka sekce i objektu o */
+/* header of section i of object o */
 static const small * LnkShdr (LnkObj * o, int i)
 {
    return o->data + o->shoff + (size_t) i * 64;
@@ -2919,7 +2920,7 @@ static const char * LnkSecName (LnkObj * o, int i)
    return (const char *) (o->data + LnkRd (st + 24, 8) + LnkRd (sh, 4));
 }
 
-/* symbol k objektu o: ukazatel na Elf64_Sym a jeho jmeno */
+/* symbol of object o: pointer to Elf64_Sym and its name */
 static const small * LnkSymEnt (LnkObj * o, int k)
 {
    const small * sh = LnkShdr (o, o->symsec);
@@ -2947,7 +2948,7 @@ static int LnkFind (const char * name)
    return -1;
 }
 
-static int LnkGlobal (const char * name)                 /* najit nebo zalozit */
+static int LnkGlobal (const char * name)                 /* find or create */
 {
    int i = LnkFind (name);
    if (i >= 0) return i;
@@ -2971,7 +2972,7 @@ static void LnkCheckElf (const small * p, size_t n, const char * name)
       LnkError ("Not an ELF64 x86-64 relocatable object", name);
 }
 
-/* pripojit objekt: globalni symboly do tabulky */
+/* add object: global symbols into the table */
 static void LnkAddObj (const small * p, size_t n, const char * name, bool member)
 {
    LnkObj * o;
@@ -3012,7 +3013,7 @@ static void LnkAddObj (const small * p, size_t n, const char * name, bool member
          if (shndx == 0xFFF2) LnkError ("COMMON symbols not supported", y->name);
          if (y->defined && ! (bind == 2) && ! y->weak)
             LnkError ("Duplicate symbol", y->name);
-         if (y->defined && (bind == 2 || ! y->weak)) continue;      /* silny / prvni slaby zustava */
+         if (y->defined && (bind == 2 || ! y->weak)) continue;      /* strong / first weak one stays */
          y->defined = true;
          y->weak = (bind == 2);
          y->obj = LnkObjCnt;
@@ -3023,7 +3024,7 @@ static void LnkAddObj (const small * p, size_t n, const char * name, bool member
    LnkObjCnt ++;
 }
 
-/* definuje clen archivu (objekt p) nejaky dosud nedefinovany (silne odkazovany) symbol? */
+/* does archive member (object p) define some so far undefined (strongly referenced) symbol? */
 static bool LnkMemberNeeded (const small * p, size_t n)
 {
    LnkObj t;
@@ -3072,7 +3073,7 @@ static void LnkArchive (const small * p, size_t n, const char * name)
       num [10] = 0;
       sz = (size_t) strtoul (num, NULL, 10);
       if (h [58] != 0x60 || h [59] != 0x0A || pos + 60 + sz > n) LnkError ("Bad archive", name);
-      if (h [0] != '/')                       /* "/" tabulka symbolu, "//" dlouha jmena */
+      if (h [0] != '/')                       /* "/" symbol table, "//" long names */
       {
          a.moff [a.count] = pos + 60;
          a.msize [a.count] = sz;
@@ -3081,7 +3082,7 @@ static void LnkArchive (const small * p, size_t n, const char * name)
       }
       pos = pos + 60 + sz + (sz & 1);
    }
-   /* cleny, dokud nejaky definuje nedefinovany symbol */
+   /* members, as long as some of them define an undefined symbol */
    do
    {
       more = false;
@@ -3099,7 +3100,7 @@ static void LnkArchive (const small * p, size_t n, const char * name)
    free (a.used);
 }
 
-/* skupina vystupu podle jmena a typu sekce: 0 = vynechat */
+/* group of output by name and section type: 0 = omit */
 #define LnkText  1
 #define LnkInit  2
 #define LnkFini  3
@@ -3120,7 +3121,7 @@ static int LnkGroup (LnkObj * o, int i)
    if (type == 14 || strncmp (nm, ".init_array", 11) == 0 || strncmp (nm, ".ctors", 6) == 0)
       return LnkArr;
    if (type == 15 || type == 16 || strncmp (nm, ".fini_array", 11) == 0 || strncmp (nm, ".dtors", 6) == 0)
-      return 0;                     /* fini_array: ToaruOS libc je nevola (kap. 67) */
+      return 0;                     /* fini_array: ToaruOS libc does not call them (chap. 67) */
    if (strcmp (nm, ".init") == 0) return LnkInit;
    if (strcmp (nm, ".fini") == 0) return LnkFini;
    if (flags & 4) return LnkText;                                    /* SHF_EXECINSTR */
@@ -3134,7 +3135,7 @@ static uint64_t LnkAlignUp (uint64_t a, uint64_t al)
    return (a + al - 1) / al * al;
 }
 
-/* adresa symbolu k objektu o (lokalni i globalni) */
+/* address of symbol of object o (local and global) */
 static uint64_t LnkSymAddr (LnkObj * o, int k, int * glob)
 {
    const small * s = LnkSymEnt (o, k);
@@ -3145,7 +3146,7 @@ static uint64_t LnkSymAddr (LnkObj * o, int k, int * glob)
       LnkSym * y = &LnkSyms [g];
       if (! y->defined)
       {
-         if (y->weak || (s [4] >> 4) == 2) return 0;                /* slaby nedefinovany */
+         if (y->weak || (s [4] >> 4) == 2) return 0;                /* weak undefined */
          LnkError ("Undefined symbol", y->name);
       }
       if (y->obj < 0 || y->sec == 0xFFF1) return y->value;
@@ -3202,7 +3203,7 @@ static void LnkBody (const char * out, const char * const * inputs, int count)
    int i, j, k, grp, pass;
    int g_got, g_ia0, g_ia1, g_bss, g_edata, g_end, g_end2;
 
-   /* 1. vstupy */
+   /* 1. inputs */
    for (i = 0; i < count; i++)
    {
       size_t n;
@@ -3210,7 +3211,7 @@ static void LnkBody (const char * out, const char * const * inputs, int count)
       if (n >= 8 && memcmp (p, "!<arch>\n", 8) == 0) LnkArchive (p, n, inputs [i]);
       else LnkAddObj (p, n, inputs [i], false);
    }
-   /* symboly, ktere dava linker */
+   /* symbols the linker provides */
    g_got = LnkGlobal ("_GLOBAL_OFFSET_TABLE_");
    g_ia0 = LnkGlobal ("__init_array_start");
    g_ia1 = LnkGlobal ("__init_array_end");
@@ -3221,7 +3222,7 @@ static void LnkBody (const char * out, const char * const * inputs, int count)
    if (LnkFind ("_start") < 0 || ! LnkSyms [LnkFind ("_start")].defined)
       LnkError ("Undefined symbol", "_start");
 
-   /* 2. polozky GOT (symboly s relokaci GOTPCREL*) */
+   /* 2. GOT items (symbols with GOTPCREL* relocations) */
    LnkGotCnt = 0;
    for (i = 0; i < LnkObjCnt; i++)
    {
@@ -3248,8 +3249,8 @@ static void LnkBody (const char * out, const char * const * inputs, int count)
       }
    }
 
-   /* 3. rozvrzeni: skupiny v poradi, v kazde objekty v poradi vstupu
-         (pole konstruktoru: nejdriv cleny archivu = libc, pak program) */
+   /* 3. layout: groups in order, in each the objects in input order
+         (constructor arrays: first the archive members = libc, then the program) */
    addr = LnkBase + LnkHead;
    for (grp = LnkText; grp <= LnkBss; grp++)
    {
@@ -3257,7 +3258,7 @@ static void LnkBody (const char * out, const char * const * inputs, int count)
       if (grp == LnkBss)
       {
          addr = LnkAlignUp (addr, 8);
-         gotaddr = addr;                                               /* GOT pred .bss */
+         gotaddr = addr;                                               /* GOT before .bss */
          addr += (uint64_t) LnkGotCnt * 8;
          edata = addr;
       }
@@ -3282,7 +3283,7 @@ static void LnkBody (const char * out, const char * const * inputs, int count)
    end = addr;
    if (end - LnkBase > 0x40000000ULL) LnkError ("Program too large", NULL);
 
-   /* symboly linkeru */
+   /* linker symbols */
    LnkSyms [g_got].defined = true;   LnkSyms [g_got].value = gotaddr;
    LnkSyms [g_ia0].defined = true;   LnkSyms [g_ia0].value = initbeg;
    LnkSyms [g_ia1].defined = true;   LnkSyms [g_ia1].value = initend;
@@ -3291,7 +3292,7 @@ static void LnkBody (const char * out, const char * const * inputs, int count)
    LnkSyms [g_end].defined = true;   LnkSyms [g_end].value = end;
    LnkSyms [g_end2].defined = true;  LnkSyms [g_end2].value = end;
 
-   /* 4. obsah: sekce (PROGBITS) do obrazu, GOT */
+   /* 4. contents: sections (PROGBITS) into the image, GOT */
    img = (small *) LnkAlloc ((size_t) (edata - LnkBase));
    for (i = 0; i < LnkObjCnt; i++)
    {
@@ -3316,7 +3317,7 @@ static void LnkBody (const char * out, const char * const * inputs, int count)
          LnkWr (img + (gotaddr + (uint64_t) (y->got - 1) * 8 - LnkBase), v, 8);
       }
 
-   /* 5. relokace */
+   /* 5. relocations */
    for (i = 0; i < LnkObjCnt; i++)
    {
       LnkObj * o = &LnkObjs [i];
@@ -3402,9 +3403,9 @@ static void LnkFree (void)
    LnkSyms = NULL; LnkSymCnt = 0;
 }
 
-/* staticke slinkovani pro ToaruOS (pasmlib.h PasmLink); 0 = v poradku,
-   jinak hlaseni v msg */
-static int LnkRc;                     /* staticka - longjmp ji neprepise */
+/* static linking for ToaruOS (pasmlib.h PasmLink); 0 = OK,
+   otherwise the message in msg */
+static int LnkRc;                     /* static - longjmp does not overwrite it */
 
 int LinkToaru (const char * out, const char * const * inputs, int count, char * msg, int msg_size)
 {

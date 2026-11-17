@@ -1,11 +1,11 @@
-/* IFC.H - rozhrani vstupu a vystupu front-endu (inp.c, out.c) k ovladaci
+/* IFC.H - input/output interface of the front-end (inp.c, out.c) to the driver
 
-   Funkce definuje ovladac (test_instr.cc):
-      getInpText     zdrojovy text (ukonceny nulou), plati do konce prekladu
-      clearOutLines  zacatek vystupu (OpenOut)
-      showOutLine    jedna radka vystupu (bez konce radky)
-      showError      chybove hlaseni - nevraci se (test_instr.cc: longjmp na setjmp
-                     v ovladaci; ne vyjimka C++ - front-end v C nema .eh_frame)
+   The driver (test_instr.cc) defines these functions:
+      getInpText     source text (terminated by zero), valid until the end of compilation
+      clearOutLines  start of output (OpenOut)
+      showOutLine    one line of output (without line end)
+      showError      error message - does not return (test_instr.cc: longjmp to setjmp
+                     in the driver; not a C++ exception - the C front-end has no .eh_frame)
 */
 
 #ifndef IFC_H

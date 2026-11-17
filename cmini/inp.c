@@ -1,4 +1,4 @@
-/* INP.C - vstup a chybova hlaseni (text od ovladace, ifc.h) */
+/* INP.C - input and error reporting (text supplied by the driver, ifc.h) */
 
 #include <string.h>
 
@@ -7,19 +7,19 @@
 
 #include "ifc.h"
 
-char   ch;         /* zpracovavany znak */
-int    InpPos;     /* pozice ve vstupnim textu */
-int    InpColNum;  /* cislo sloupce */
-int    InpLineNum; /* cislo radky */
+char   ch;         /* character being processed */
+int    InpPos;     /* position in input text */
+int    InpColNum;  /* column number */
+int    InpLineNum; /* line number */
 
-static const char * InpTxt;  /* vstupni text */
-static int          InpLen;  /* delka vstupniho textu */
+static const char * InpTxt;  /* input text */
+static int          InpLen;  /* length of input text */
 
 /********************************* INPUT **********************************/
 
 void OpenInp (void)
 {
-  InpTxt = getInpText (); /* text od ovladace */
+  InpTxt = getInpText (); /* text from the driver */
   if (InpTxt == NULL) InpTxt = "";
   InpLen = strlen (InpTxt);
   InpPos = 0;
@@ -27,14 +27,14 @@ void OpenInp (void)
   InpColNum = 0;
   InpLineNum = 1;
 
-  NextChar (); /* precti prvni znak */
+  NextChar (); /* read first character */
 }
 
 /* ---------------------------------------------------------------------- */
 
 void CloseInp (void)
 {
-  /* v nasem pripade nic */
+  /* nothing in our case */
 }
 
 /* ---------------------------------------------------------------------- */
@@ -43,26 +43,26 @@ void NextChar (void)
 {
   if (InpPos < InpLen)
   {
-     ch = InpTxt [InpPos]; /* precti jeden znak */
+     ch = InpTxt [InpPos]; /* read one character */
      InpPos ++;
 
-     InpColNum ++; /* cislo sloupce */
+     InpColNum ++; /* column number */
      if (ch == LF)
      {
-        InpLineNum ++; /* cislo radky */
+        InpLineNum ++; /* line number */
         InpColNum = 0;
      }
   }
 
   else if (InpPos == InpLen)
   {
-     ch = NUL; /* znak 0 - konec vstupniho textu */
+     ch = NUL; /* character 0 - end of input text */
      InpPos ++;
   }
 
   else
   {
-     Error ("End of source"); /* konec vstupniho textu jiz byl ohlasen */
+     Error ("End of source"); /* end of input text has already been reported */
   }
 }
 

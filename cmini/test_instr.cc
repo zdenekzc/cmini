@@ -2,22 +2,22 @@
 /* TEST_INSTR.CC */
 
 /*
-   Testy generatoru kodu (instr.cc, instr1.cc ... instr5.cc) bez Qt.
-   Kazdy test je kratky program v C: prelozi se, spusti se jeho main
-   a vysledek se porovna s ocekavanou hodnotou.
+   Tests of the code generators (instr.cc, instr1.cc ... instr5.cc) without Qt.
+   Each test is a short program in C: it is compiled, its main is run
+   and the result is compared with the expected value.
 
-   Preklad a spusteni:  tests/build-test.sh
-   Vypis assembleru:    ./test_instr.bin -v
-   Preklad souboru:     ./test_instr.bin [-v] [-p] [-0|-1|-2|-3|-4|-5] tests/examples/quicksort.cc
-   Testy jednoho generatoru: ./test_instr.bin -0   (CPARSER_RTL=own => instr.cc s vlastni knihovnou)
-                        (-v vypis assembleru, -p vypis zpracovaneho zdrojoveho textu,
-                         -0 generator z instr.cc (text pro asm/pasm.bin, ELF64),
-                         -1 instr1.cc (vychozi), -2 instr2.cc, -3 instr3.cc, -4 instr4.cc, -5 instr5.cc)
-   Testy se spousteji pro vsechny generatory (instr.cc, instr1.cc ... instr5.cc);
-   instr.cc umi vse jako instr5.cc a navic tridy (v testech ma uroven 6:
+   Compilation and run:  tests/build-test.sh
+   Assembler listing:    ./test_instr.bin -v
+   Compile a file:       ./test_instr.bin [-v] [-p] [-0|-1|-2|-3|-4|-5] tests/examples/quicksort.cc
+   Tests of one generator: ./test_instr.bin -0   (CPARSER_RTL=own => instr.cc with its own library)
+                        (-v assembler listing, -p print of the processed source text,
+                         -0 generator from instr.cc (text for asm/pasm.bin, ELF64),
+                         -1 instr1.cc (default), -2 instr2.cc, -3 instr3.cc, -4 instr4.cc, -5 instr5.cc)
+   Tests are run for all generators (instr.cc, instr1.cc ... instr5.cc);
+   instr.cc can do everything instr5.cc can, and in addition classes (in the tests it has level 6:
    min_gen <= 6 <= max_gen).
-   instr.cc je napsan v podmnozine c-mini (prelozi ho i cparser a cmini.bin -C)
-   a sklada program jako seznam instrukci asm/asmlist.h (CHANGELOG.txt, kapitola 30).
+   instr.cc is written in the c-mini subset (it is also compiled by cparser and cmini.bin -C)
+   and assembles the program as a list of instructions asm/asmlist.h (CHANGELOG.txt, chapter 30).
 */
 
 #include "ifc.h"
@@ -25,7 +25,7 @@
 #include "out.h"
 #include "lex.h"
 #ifdef USE_LEXER
-#include "lexer.h"   /* lexer.c misto lex.c (preprocesor) */
+#include "lexer.h"   /* lexer.c instead of lex.c (preprocessor) */
 #endif
 #include "decl.h"
 #include "instr.h"
@@ -46,9 +46,9 @@ using namespace std;
 
 static string source;
 
-/* C linkage (inp.c, out.c); showError se nevraci: skoci pres longjmp na setjmp
-   v runFile, runFiles nebo v cyklu testu (main). Bez vyjimek C++ - front-end v C
-   nemusi mit .eh_frame (TinyCC; cmini/Makefile: -fno-asynchronous-unwind-tables) */
+/* C linkage (inp.c, out.c); showError does not return: it jumps via longjmp to setjmp
+   in runFile, runFiles or in the test loop (main). Without C++ exceptions - the front-end in C
+   need not have .eh_frame (TinyCC; cmini/Makefile: -fno-asynchronous-unwind-tables) */
 const char * getInpText (void) { return source.c_str (); }
 void clearOutLines (void) { }
 static bool print_source = false;
@@ -60,11 +60,11 @@ void showError (const char * msg) { error_msg = msg; longjmp (error_jump, 1); }
 /* ---------------------------------------------------------------------- */
 
 static bool verbose = false;
-/* NO_ASMJIT: jen generator instr.cc (-0, assembler pasm jako knihovna),
-   instr1.cc ... instr5.cc (asmjit) se neprekladaji */
+/* NO_ASMJIT: only the generator instr.cc (-0, assembler pasm as library),
+   instr1.cc ... instr5.cc (asmjit) are not compiled */
 #ifdef NO_ASMJIT
 static int  generator = 0;
-static int  max_generator = 0;  /* testy bez parametru: jen instr.cc */
+static int  max_generator = 0;  /* tests without a parameter: only instr.cc */
 #else
 static int  generator = 1;     /* 0 = instr.cc, 1 .. 5 = instr1.cc .. instr5.cc */
 static int  max_generator = 5;
@@ -75,14 +75,14 @@ struct TestCase
     const char * name;
     const char * source;
     long         expected;
-    bool         error = false;   /* ocekava se chyba prekladu */
-    int          min_gen = 1;     /* test plati jen pro generatory min_gen .. max_gen */
+    bool         error = false;   /* a compile error is expected */
+    int          min_gen = 1;     /* the test applies only to generators min_gen .. max_gen */
     int          max_gen = 99;
 };
 
 static const TestCase tests [] =
 {
-    /* vyrazy */
+    /* expressions */
     { "number",      "int main () { return 42; }",                     42 },
     { "hex",         "int main () { return 0x10 + 010; }",             24 },
     { "arith",       "int main () { return 2 + 3 * 4 - 1; }",          13 },
@@ -101,11 +101,11 @@ static const TestCase tests [] =
     { "and",         "int main () { return (2 && 3) + (2 && 0) + (0 && 3); }", 1 },
     { "or",          "int main () { return (0 || 5) + (0 || 0) + (7 || 0); }", 2 },
 
-    /* zkracene vyhodnoceni */
+    /* short-circuit evaluation */
     { "and short 2", "int a; int main () { if (0 && (a = 1)) a = 5; return a; }", 0 },
     { "or short",    "int a; int main () { if (1 || (a = 1)) a = a + 5; return a; }", 5 },
 
-    /* promenne a prikazy */
+    /* variables and statements */
     { "global init", "int a = 7; int main () { return a; }",            7 },
     { "assign",      "int a, b; int main () { a = 10 + 20; b = a * 2; return b; }", 60 },
     { "if",          "int main () { if (1) return 1; return 2; }",      1 },
@@ -119,7 +119,7 @@ static const TestCase tests [] =
     { "no return",   "int a; int main () { a = 5; }",                   0 },
     { "two fces",    "int f () { return 1; } int main () { return 2; }", 2 },
 
-    /* lokalni promenne, parametry, volani */
+    /* local variables, parameters, calls */
     { "local var",   "int main () { int x; x = 1; return x; }",          1 },
     { "local init",  "int main () { int x = 3, y = x * 2; return x + y; }", 9 },
     { "param",       "int main (int argc, char * * argv) { return argc; }", 1 },
@@ -144,7 +144,7 @@ static const TestCase tests [] =
     { "libc",        "int main () { srand (1); return abs (-5) + (rand () >= 0); }", 6 },
     { "printf",      "int main () { return printf (\"printf test %d\\n\", 42); }", 15 },
 
-    /* hluboke vnoreni - v instr2.cc dojdou registry (zaloha push) */
+    /* deep nesting - in instr2.cc the registers run out (push backup) */
     { "deep right",  "int main () { return 1+(2+(3+(4+(5+(6+(7+(8+(9+(10+(11+(12+(13+(14+(15+16)))))))))))))); }", 136 },
     { "deep left",   "int main () { return ((((((((((((((1-2)-3)-4)-5)-6)-7)-8)-9)-10)-11)-12)-13)-14)-15); }", -118 },
     { "deep calls",  "int f (int x) { return x * (x + (x - (x * 2))); } "
@@ -155,7 +155,7 @@ static const TestCase tests [] =
                      "int main () { return 100 + (g(3) + (g(4) - (g(2) * (g(1) + g(0))))); }", 97 },
     { "deep printf", "int main () { return 1 + (2 + (3 + (4 + (5 + (6 + (7 + (8 + (9 + (10 + (11 + (12 + (13 + printf (\"\"))))))))))))); }", 91 },
 
-    /* argumenty volani - poradi, vnorena volani, cykly v registrech */
+    /* call arguments - order, nested calls, loops in registers */
     { "args order",  "int f (int a, int b, int c, int d, int e, int g) { return ((((a*10+b)*10+c)*10+d)*10+e)*10+g; } "
                      "int main () { return f (1, 2, 3, 4, 5, 6); }", 123456 },
     { "args nested", "int f (int a, int b, int c, int d, int e, int g) { return ((((a*10+b)*10+c)*10+d)*10+e)*10+g; } "
@@ -175,7 +175,7 @@ static const TestCase tests [] =
                      "f (2,2,2,2,2,2), 4, f (3,3,3,3,3, 1+(2+(3+(4+(5+(6+(7+(8+(9+(10+(11+(12+13)))))))))))) ); }", 240 },
     { "args printf", "int main () { return printf (\"%d %d %d %d %d\\n\", 1, 2 * (3 + 4), 5, 6 - (7 - (8 - 9)), abs (-10)); }", 13 },
 
-    /* promenne v registrech (instr5.cc) */
+    /* variables in registers (instr5.cc) */
     { "reg for",     "int main () { int s = 0; for (int i = 0; i < 10; i++) s += i; return s; }", 45 },
     { "reg for 2",   "int m[5][6]; int main () { int s = 0; for (int i = 0; i < 5; i++) for (int k = 0; k < 6; k++) m[i][k] = i * k; "
                      "for (int i = 0; i < 5; i++) for (int k = 0; k < 6; k++) s += m[i][k]; return s; }", 150 },
@@ -193,7 +193,7 @@ static const TestCase tests [] =
     { "reg global",  "int i; int main () { int s = 0; for (i = 0; i < 4; i++) s += i; return s * 10 + i; }", 64 },
     { "reg printf",  "int main () { int s = 0; for (int i = 0; i < 3; i++) s += printf (\"%d\", i); printf (\"\\n\"); return s; }", 3 },
 
-    /* struktury, ukazatele, konstruktory (instr5.cc) */
+    /* structs, pointers, constructors (instr5.cc) */
     { "ptr",         "int main () { int x = 5; int * p = &x; *p = *p + 1; return x; }", 6, false, 5 },
     { "ptr array",   "int a[4]; int main () { int * p = a; p[2] = 7; return a[2]; }", 7, false, 5 },
     { "ptr param",   "void set (int * p, int v) { *p = v; } int main () { int x; set (&x, 9); return x; }", 9, false, 5 },
@@ -205,7 +205,7 @@ static const TestCase tests [] =
     { "new",         "struct N { int v; N * next; }; int main () { N * h = nullptr; for (int i = 1; i <= 5; i++) { N * n = new N; n->v = i; n->next = h; h = n; } "
                      "int s = 0; while (h != nullptr) { s = s * 10 + h->v; h = h->next; } return s; }", 54321, false, 5 },
     { "new zero",    "struct N { int a; int b[3]; N * p; }; int main () { N * n = new N; return n->a + n->b[0] + n->b[2] + (n->p == nullptr); }", 1, false, 5 },
-    /* struktury hodnotou (instr.cc): parametr = kopie, vysledek funkce, T x = f (), f ().x */
+    /* structs by value (instr.cc): parameter = copy, function result, T x = f (), f ().x */
     { "sval param",  "struct P { int x; int y; }; int f (P p) { p.x = 100; return p.x + p.y; } "
                      "int main () { P a; a.x = 1; a.y = 2; int r = f (a); return r * 10 + a.x; }", 1021, false, 6 },
     { "sval ret",    "struct P { long x; long y; long z; }; P mk (long a) { P p; p.x = a; p.y = 2 * a; p.z = 3 * a; return p; } "
@@ -274,7 +274,7 @@ static const TestCase tests [] =
     { "union",       "union U { int a; int b; }; int main () { U u; u.a = 7; return u.b; }", 7, false, 5 },
     { "argv",        "int main (int argc, char * argv []) { return argc; }", 1 },
 
-    /* zatim nepodporovane => chyba */
+    /* not supported yet => error */
     { "struct value","struct P { int x; }; P a, b; int main () { a = b; return 0; }", 0, true, 5, 5 },
     { "ptr arith",   "int a[3]; int main () { int * p = a; p = p + 1; return 0; }", 0, true, 5, 5 },
     { "char ptr",    "int main () { char * s = \"abc\"; return s[0]; }", 0, true, 5, 5 },
@@ -282,7 +282,7 @@ static const TestCase tests [] =
     { "pointer",     "int main () { int x; int * p = &x; *p = 1; return x; }", 0, true, 1, 4 },
     { "no main",     "int f () { return 1; }",                          0, true },
 
-    /* tridy, dedicnost, konstruktory, virtualni metody - jen instr.cc (uroven 6) */
+    /* classes, inheritance, constructors, virtual methods - only instr.cc (level 6) */
     { "class",       "class A { public: int x; int get () { return x; } void set (int v) { x = v; } };"
                      "int main () { A a; a.set (7); return a.get (); }", 7, false, 6 },
     { "ctor default","class A { public: int x; A () { x = 5; } }; int main () { A a; A * p = new A; return a.x * 10 + p->x; }", 55, false, 6 },
@@ -331,7 +331,7 @@ static const TestCase tests [] =
     { "vptr fields", "class A { public: int a; A () { a = 1; } }; class B : public A { public: int b; B () { b = 2; } virtual int s () { return a + b; } };"
                      "class C : public B { public: int c; C () { c = 3; } int s () { return a * 100 + b * 10 + c; } };"
                      "int main () { B * p = new C; A * q = p; return p->s () * 10 + q->a; }", 1231, false, 6 },
-    /* std::string - jen instr.cc (uroven 6) */
+    /* std::string - only instr.cc (level 6) */
     { "str assign",  "#include <string>\nusing namespace std;\n"
                      "int main () { string a; string b = \"abc\"; a = b; return a.length () * 10 + a.empty () + b.size (); }", 33, false, 6 },
     { "str concat",  "int main () { std::string a = \"ab\"; std::string b = a + \"cd\" + 'e'; b += a; b += 'x'; b += \"\";"
@@ -356,7 +356,7 @@ static const TestCase tests [] =
     { "undefined",   "int f (int x); int main () { return f (1); }",    0, true },
 
 #ifdef USE_LEXER
-    /* preprocesor (lexer.c) */
+    /* preprocessor (lexer.c) */
     { "pp define",   "#define N 10\nint main () { return N + 1; }", 11 },
     { "pp macro",    "#define SQ(x) ((x) * (x))\n#define MAX(a, b) ((a) > (b) ? (a) : (b))\n"
                      "int main () { return MAX (SQ (3), MAX (2, 7)); }", 9 },
@@ -434,8 +434,8 @@ static int runFile (const char * file_name)
     string text = buf.str ();
 
 #ifdef USE_LEXER
-    LexFileName (file_name); /* adresar pro #include "..." */
-    LexDefine ("__CPARSER__", "1");   /* zdrojovy text muze rozlisit cparser a g++ */
+    LexFileName (file_name); /* directory for #include "..." */
+    LexDefine ("__CPARSER__", "1");   /* the source text can be distinguished by cparser and g++ */
 #endif
 
     if (setjmp (error_jump) == 0)
@@ -448,14 +448,14 @@ static int runFile (const char * file_name)
     }
     else
     {
-        /* chyba pri prehravani tela metody (konec tridy): pozice symbolu */
+        /* error when replaying the body of a method (end of class): position of the symbol */
         if (ReplaySymbol != nullptr && ReplayFile != nullptr)
         {
             cerr << ReplayFile << ":" << ReplayLine << ": error: " << error_msg << endl;
             return 1;
         }
 #ifdef USE_LEXER
-        /* chyba ve vlozenem souboru: soubor a radka z preprocesoru */
+        /* error in an included file: file and line from the preprocessor */
         if (LexCurrentFile () != nullptr)
         {
             cerr << LexCurrentFile () << ":" << LexCurrentLine () << ": error: " << error_msg << endl;
@@ -487,9 +487,9 @@ static string absPath (string path)
     return path;
 }
 
-/* vice souboru:  -c => objekty .o;  jinak preklad po souborech do docasnych
-   objektu, slinkovani (i .o, .a, -l..., -L...) a spusteni nebo ulozeni (-o) */
-static bool keep_asm = false;   /* -S: s objektem (-c) i text pro assembler x.o => x.asm */
+/* several files:  -c => objects .o;  otherwise compile file by file into temporary
+   objects, link them (also .o, .a, -l..., -L...) and run or save (-o) */
+static bool keep_asm = false;   /* -S: with the object (-c) also the text for the assembler x.o => x.asm */
 
 static int runFiles (vector <string> sources, vector <string> inputs, bool compile_only)
 {
@@ -546,7 +546,7 @@ static int runFiles (vector <string> sources, vector <string> inputs, bool compi
             else if (in.compare (0, 2, "-L") == 0) all.push_back ("-L" + absPath (in.substr (2)));
             else all.push_back (absPath (in));
         }
-        vector <char *> args;   /* pred setjmp - longjmp nevola destruktory */
+        vector <char *> args;   /* before setjmp - longjmp does not call destructors */
         for (string & a : all) args.push_back ((char *) a.c_str ());
         if (setjmp (error_jump) == 0)
         {
@@ -569,7 +569,7 @@ int main (int argc, char * argv [])
 {
     int arg = 1;
     bool compile_only = false;   /* -c */
-    bool gen_given = false;      /* -0 .. -5 bez souboru => testy jen tohoto generatoru */
+    bool gen_given = false;      /* -0 .. -5 without a file => tests of only this generator */
     for (; arg < argc && argv [arg][0] == '-'; arg ++)
         if (strlen (argv [arg]) == 2 && argv [arg][1] >= '0' && argv [arg][1] <= '5')
         {
@@ -582,14 +582,14 @@ int main (int argc, char * argv [])
             print_source = true;
 #ifdef USE_LEXER
         else if (strcmp (argv [arg], "-I") == 0 && arg + 1 < argc)
-            LexIncludeDir (argv [++ arg]);       /* adresar pro #include */
+            LexIncludeDir (argv [++ arg]);       /* directory for #include */
 #endif
         else if (strcmp (argv [arg], "-o") == 0 && arg + 1 < argc)
-            InstrOutputFile = argv [++ arg];     /* jen -0: ulozit program, nespoustet */
+            InstrOutputFile = argv [++ arg];     /* only -0: save the program, do not run it */
         else if (strcmp (argv [arg], "-c") == 0)
-            compile_only = true;                 /* jen -0: objekty .o */
+            compile_only = true;                 /* only -0: objects .o */
         else if (strcmp (argv [arg], "-S") == 0)
-            keep_asm = true;                     /* s -c: i text pro assembler (x.o => x.asm) */
+            keep_asm = true;                     /* with -c: also the text for the assembler (x.o => x.asm) */
         else if (strcmp (argv [arg], "-0") == 0)
             generator = 0;
         else if (strcmp (argv [arg], "-1") == 0)
@@ -603,8 +603,8 @@ int main (int argc, char * argv [])
         else if (strcmp (argv [arg], "-5") == 0)
             generator = 5;
 
-    /* test_instr.bin [-v] soubor.c => prelozit a spustit soubor;
-       -c a.c b.c => objekty;  a.c b.c x.o -lm => slinkovat a spustit (-o ulozit) */
+    /* test_instr.bin [-v] file.c => compile and run the file;
+       -c a.c b.c => objects;  a.c b.c x.o -lm => link and run (-o save) */
     if (arg < argc)
     {
         vector <string> sources, inputs;
@@ -640,7 +640,7 @@ int main (int argc, char * argv [])
             string status;
             bool ok;
 
-            int g = generator == 0 ? 6 : generator;   /* instr.cc: instr5.cc + tridy */
+            int g = generator == 0 ? 6 : generator;   /* instr.cc: instr5.cc + classes */
             if (g < t.min_gen || g > t.max_gen)
             {
                 skipped ++;

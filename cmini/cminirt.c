@@ -1,4 +1,4 @@
-/* CMINIRT.C - behova knihovna pro programy prelozene translate.c (viz cminirt.h) */
+/* CMINIRT.C - runtime library for programs compiled by translate.c (see cminirt.h) */
 
 #include "cminirt.h"
 #include <stdio.h>
@@ -10,7 +10,7 @@ static void cm_fatal (const char * what)
    abort ();
 }
 
-/****************************** PAMET *******************************/
+/****************************** MEMORY *******************************/
 
 void * cm_new (size_t size)
 {
@@ -37,10 +37,10 @@ void cm_pure_virtual (void)
    abort ();
 }
 
-/***************************** VYJIMKY ******************************/
+/***************************** EXCEPTIONS ******************************/
 
-/* zasobnik bloku try: jmp_buf a seznam typu obsluh ("|int|Fault|...|"); "" = blok uklidu
-   (cmm-classes.cc exc_lower: destruktory lokalnich objektu, konec obsluhy) */
+/* stack of try blocks: jmp_buf and list of handler types ("|int|Fault|...|"); "" = cleanup block
+   (cmm-classes.cc exc_lower: destructors of local objects, end of handler) */
 #define CM_TRY_MAX 1024
 #define CM_EXC_MAX 64
 
@@ -48,19 +48,19 @@ static jmp_buf      cm_try_buf [CM_TRY_MAX];
 static const char * cm_try_catches [CM_TRY_MAX];
 static int          cm_try_top = 0;
 
-/* sirici se vyjimka (mezi throw a catch) */
+/* propagating exception (between throw and catch) */
 static void *       cm_exc_ptr = NULL;
 static const char * cm_exc_types = NULL;
 static void      (* cm_exc_drop) (void *) = NULL;
 
-/* obsluhovane vyjimky (vnorene obsluhy) */
+/* exceptions being handled (nested handlers) */
 static void *       cm_hnd_ptr [CM_EXC_MAX];
 static const char * cm_hnd_types [CM_EXC_MAX];
 static void      (* cm_hnd_drop [CM_EXC_MAX]) (void *);
 static int          cm_hnd_top = 0;
 
-/* obsluha opustena prikazem return s hodnotou (cm_exc_end (2)) - vyjimka se zrusi az pri
-   dalsim volani (hodnota vyrazu za return se z ni mohla jeste cist) */
+/* handler left by return with a value (cm_exc_end (2)) - the exception is cleared only at the
+   next call (the value of the expression after return may still be read from it) */
 static void *       cm_dead_ptr = NULL;
 static void      (* cm_dead_drop) (void *) = NULL;
 
@@ -96,7 +96,7 @@ void cm_exc_keep (void * p)
    (void) p;
 }
 
-/* typ (jmeno bez |) je v seznamu "|a|b|" */
+/* type (name without |) is in the list "|a|b|" */
 static int cm_exc_has (const char * list, const char * type, size_t n)
 {
    const char * p;
@@ -106,7 +106,7 @@ static int cm_exc_has (const char * list, const char * type, size_t n)
    return 0;
 }
 
-/* nektery blok try zachyti sirici se vyjimku (jinak jako g++ terminate bez uklidu) */
+/* some try block catches the propagating exception (otherwise as g++ terminate without cleanup) */
 static int cm_exc_caught (void)
 {
    int k;
@@ -130,7 +130,7 @@ static void cm_unwind (void)
 {
    if (! cm_exc_caught ())
    {
-      /* jako g++: terminate called after throwing an instance of 'int' */
+      /* as g++: terminate called after throwing an instance of 'int' */
       const char * t = cm_exc_types != NULL ? cm_exc_types + 1 : "?";
       const char * e = strchr (t, '|');
       fflush (stdout);
@@ -142,7 +142,7 @@ static void cm_unwind (void)
    longjmp (cm_try_buf [cm_try_top], 1);
 }
 
-/* throw x; - kopie hodnoty (drop: destruktor kopie, delete; NULL => free) */
+/* throw x; - copy of value (drop: destructor of the copy, delete; NULL => free) */
 void cm_throw (const char * types, void * data, int size, void (* drop) (void *))
 {
    void * p;
@@ -155,7 +155,7 @@ void cm_throw (const char * types, void * data, int size, void (* drop) (void *)
    cm_unwind ();
 }
 
-/* throw; - znovu vyhodi obsluhovanou vyjimku */
+/* throw; - rethrows the exception being handled */
 void cm_rethrow (void)
 {
    if (cm_hnd_top == 0)
@@ -170,7 +170,7 @@ void cm_rethrow (void)
    cm_unwind ();
 }
 
-/* konec bloku uklidu - vyjimka se siri dal */
+/* end of cleanup block - exception propagates further */
 void cm_exc_resume (void)
 {
    if (cm_exc_types == NULL)
@@ -188,7 +188,7 @@ int cm_catch (const char * type)
    return cm_exc_has (cm_exc_types, type, strlen (type));
 }
 
-/* zacatek obsluhy: sirici se vyjimka => obsluhovana */
+/* start of handler: propagating exception => being handled */
 int cm_exc_begin (void)
 {
    cm_exc_bury ();
@@ -213,8 +213,8 @@ void * cm_exc_data (void)
    return cm_hnd_top > 0 ? cm_hnd_ptr [cm_hnd_top - 1] : NULL;
 }
 
-/* konec obsluhy: escaped 0 - normalne (vyjimka se zrusi), 1 - obsluhu opustila vyjimka
-   (throw; => tataz vyjimka se siri dal, jinak se obsluhovana zrusi), 2 - return s hodnotou */
+/* end of handler: escaped 0 - normally (the exception is cleared), 1 - the exception left the handler
+   (throw; => the same exception propagates further, otherwise the handled one is cleared), 2 - return with a value */
 void cm_exc_end (int escaped)
 {
    void * p;
@@ -240,8 +240,8 @@ void cm_exc_end (int escaped)
 
 /****************************** STRING ******************************/
 
-/* hlavicka pred znaky retezce; magic odlisi retezec z cm_alloc_str od jineho ukazatele
-   (retezcova konstanta, char * z knihovny C) - pro ten jsou cm_retain a cm_release prazdne */
+/* header before the string characters; magic distinguishes a string from cm_alloc_str from another pointer
+   (string literal, char * from the C library) - for those cm_retain and cm_release are empty */
 typedef struct
 {
    unsigned int magic;
@@ -251,9 +251,9 @@ typedef struct
 
 #define CM_STR_MAGIC 0x52545343u
 
-static long        cm_str_alive = 0;      /* zive retezce (CM_STR_STATS) */
-static int         cm_rc_on = 0;          /* zasobnik zapnuty (prvni cm_tmp_mark) */
-static cm_string * cm_pool = NULL;        /* docasne retezce (kazdy drzi 1 referenci) */
+static long        cm_str_alive = 0;      /* live strings (CM_STR_STATS) */
+static int         cm_rc_on = 0;          /* stack enabled (first cm_tmp_mark) */
+static cm_string * cm_pool = NULL;        /* temporary strings (each holds 1 reference) */
 static long        cm_pool_n = 0;
 static long        cm_pool_cap = 0;
 
@@ -269,7 +269,7 @@ static cm_strhdr * cm_hdr (const char * s)
    return h->magic == CM_STR_MAGIC ? h : NULL;
 }
 
-/* novy retezec - 1 reference patri zasobniku (je-li zapnuty) */
+/* new string - 1 reference belongs to the stack (if enabled) */
 static cm_string cm_pool_push (cm_string s)
 {
    if (! cm_rc_on || s == NULL) return s;
@@ -388,7 +388,7 @@ cm_string cm_str_char (int c)
    return r;
 }
 
-/* std::to_string (v) - podle typu argumentu (generatory cmm) */
+/* std::to_string (v) - by argument type (cmm generators) */
 cm_string cm_str_long (long long v)
 {
    char buf [32];
@@ -405,7 +405,7 @@ cm_string cm_str_ulong (unsigned long long v)
 
 cm_string cm_str_double (double v)
 {
-   int n = snprintf (NULL, 0, "%f", v);   /* jako g++: %f (1e300 => 301 cislic) */
+   int n = snprintf (NULL, 0, "%f", v);   /* as g++: %f (1e300 => 301 digits) */
    cm_string r = cm_alloc_str (n);
    snprintf (r, n + 1, "%f", v);
    return r;
@@ -421,14 +421,14 @@ cm_string cm_cat (const char * a, const char * b)
    return r;
 }
 
-/* novy retezec uz ulozeny (cm_store, cm_assign): bez zasobniku (cmini, basic v cmm.bin
-   z g++) referenci z vytvoreni nikdo nevlastni - uvolnit */
+/* new string already stored (cm_store, cm_assign): without the stack (cmini, basic v cmm.bin
+   z g++) nobody owns the reference from creation - free it */
 static void cm_drop_new (cm_string r)
 {
    if (! cm_rc_on) cm_release (r);
 }
 
-/* s += b: polozka, prvek (stara hodnota zustane - muze byt sdilena kopii objektu) */
+/* s += b: member, element (old value stays - may be shared by a copy of the object) */
 cm_string cm_append (cm_string * s, const char * b)
 {
    cm_string r = cm_cat (*s, b);
@@ -528,7 +528,7 @@ void * cm_seq_at (cm_Seq * s, long i, size_t esize)
    return s->data + i * esize;
 }
 
-/* x muze byt prvek tehoz kontejneru (s.add (s.get (0))) - cm_seq_grow uvolni stara data */
+/* x may be an element of the same container (s.add (s.get (0))) - cm_seq_grow frees the old data */
 static long cm_seq_inside (cm_Seq * s, const void * x, size_t esize)
 {
    const char * p = (const char *) x;
@@ -623,7 +623,7 @@ static bool cm_key_eq (int kind, intptr_t a, intptr_t b)
    return a == b;
 }
 
-/* index klice, -1 = neni */
+/* key index, -1 = none */
 static int cm_dict_find (cm_Dict * d, int kind, intptr_t key)
 {
    if (d->cap == 0) return -1;
@@ -643,7 +643,7 @@ static void cm_dict_insert (cm_Dict * d, intptr_t key, const void * val)
    d->used [i] = 1;
    d->keys [i] = key;
    if (val != NULL) memcpy (d->vals + (size_t) i * d->vsize, val, d->vsize);
-   else memset (d->vals + (size_t) i * d->vsize, 0, d->vsize);   /* nova hodnota: nuly */
+   else memset (d->vals + (size_t) i * d->vsize, 0, d->vsize);   /* new value: zeros */
    d->size ++;
 }
 
@@ -674,8 +674,8 @@ void * cm_dict_ref (cm_Dict * d, int kind, intptr_t key, size_t vsize)
          cm_dict_rehash (d, d->cap == 0 ? 16 : 2 * d->cap);
       if (kind == CM_KSTR)
       {
-         /* klic: vlastni kopie (docasny retezec by se uvolnil; konstanta muze byt bez
-            hlavicky) - mimo zasobnik docasnych hodnot */
+         /* key: own copy (a temporary string would be freed; a constant may be without
+            header) - outside the stack of temporary values */
          int on = cm_rc_on;
          cm_rc_on = 0;
          key = (intptr_t) cm_str ((const char *) key);
@@ -689,7 +689,7 @@ void * cm_dict_ref (cm_Dict * d, int kind, intptr_t key, size_t vsize)
 
 void * cm_dict_get (cm_Dict * d, int kind, intptr_t key, size_t vsize)
 {
-   static double small [8];   /* nulova hodnota pro chybejici klic (i objekt) */
+   static double small [8];   /* zero value for missing key (also object) */
    static void * zero = small;
    static size_t zero_size = sizeof (small);
    int i = cm_dict_find (d, kind, key);
@@ -729,7 +729,7 @@ cm_Dict cm_dict_copy (cm_Dict * d)
       memcpy (r.keys, d->keys, (size_t) d->cap * sizeof (intptr_t));
       memcpy (r.vals, d->vals, (size_t) d->cap * d->vsize);
       memcpy (r.used, d->used, (size_t) d->cap);
-      if (d->kind == CM_KSTR)   /* klice vlastni kopie (cm_dict_ref) - kazdy slovnik +1 */
+      if (d->kind == CM_KSTR)   /* keys: own copies (cm_dict_ref) - each dictionary +1 */
          for (int i = 0; i < d->cap; i++)
             if (d->used [i]) cm_retain ((cm_string) d->keys [i]);
    }
@@ -743,13 +743,13 @@ cm_Dict * cm_dict_box (cm_Dict d)
    return p;
 }
 
-/************************ POPIS TYPU (cm_Type) ***********************/
+/************************ TYPE DESCRIPTION (cm_Type) ***********************/
 
 const cm_Type cm_type_str = { CM_T_STR, sizeof (cm_string), NULL, NULL, 0, NULL };
 
-/* bitova kopie hodnoty => vlastni kopie (retezce +1, nova data kontejneru) */
-/* kopie hodnoty: p je bitova kopie src, uprava podle popisu (retezce +1, kontejnery vlastni
-   kopii, objekt s kopirovacim konstruktorem - CM_T_UOBJ - ten se zavola se zdrojem src) */
+/* bitwise copy of value => own copy (strings +1, new container data) */
+/* copy of value: p is a bitwise copy of src, adjusted according to the description (strings +1, containers with their own
+   copy, object with copy constructor - CM_T_UOBJ - that one is called with the source src) */
 typedef void (* cm_copy_fn) (void * dst, const void * src);
 
 static void cm_fix_copy (void * p, const void * src, const cm_Type * t)
@@ -780,7 +780,7 @@ static void cm_fix_copy (void * p, const void * src, const cm_Type * t)
       {
          cm_Dict * d = (cm_Dict *) p;
          char * old = d->vals;
-         * d = cm_dict_copy (d);   /* klice +1, hodnoty na stejnych indexech */
+         * d = cm_dict_copy (d);   /* keys +1, values at the same indexes */
          if (t->elem != NULL)
             for (int i = 0; i < d->cap; i++)
                if (d->used [i]) cm_fix_copy (d->vals + (size_t) i * d->vsize, old + (size_t) i * d->vsize, t->elem);
@@ -793,10 +793,10 @@ static void cm_fix_copy (void * p, const void * src, const cm_Type * t)
       case CM_T_UOBJ:
          if (p == src)
          {
-            /* kopie na miste (cm_copy (x, x, t)): zdroj je docasna bitova kopie */
+            /* copy in place (cm_copy (x, x, t)): the source is a temporary bitwise copy */
             void * tmp = cm_new (t->size);
             memcpy (tmp, p, t->size);
-            ((cm_copy_fn) (void *) t->elem) (p, tmp);   /* kopirovaci konstruktor T (const T &) */
+            ((cm_copy_fn) (void *) t->elem) (p, tmp);   /* copy constructor T (const T &) */
             free (tmp);
          }
          else
@@ -805,9 +805,9 @@ static void cm_fix_copy (void * p, const void * src, const cm_Type * t)
    }
 }
 
-/* mode: 0 - konec hodnoty (objekt: destruktor tridy), 1 - konec destruktoru (jen retezce
-   a kontejnery; vnorene objekty a baze rusi destruktory), 2 - stara hodnota pri prirazeni
-   (retezce a kontejnery i ve vnorenych objektech, bez destruktoru - jako operator = v C++) */
+/* mode: 0 - end of value (object: class destructor), 1 - end of destructor (only strings
+   and containers; nested objects and bases run their destructors), 2 - old value on assignment
+   (strings and containers also in nested objects, without destructor - as operator = in C++) */
 static void cm_drop_value (void * p, const cm_Type * t, int fields_only)
 {
    if (t == NULL) return;
@@ -843,18 +843,18 @@ static void cm_drop_value (void * p, const cm_Type * t, int fields_only)
          break;
       }
       case CM_T_UOBJ:
-         /* objekt s kopirovacim konstruktorem vlastni prostredky - destruktor vzdy (i stara
-            hodnota pri prirazeni); konec destruktoru obklopujici tridy ho preskoci (vyse) */
+         /* object with copy constructor owns resources - destructor always (also old
+            value on assignment); end of destructor of the enclosing class skips it (above) */
          if (t->dtor != NULL) t->dtor (p);
          break;
       case CM_T_OBJ:
          if (t->dtor != NULL && fields_only == 0)
-            t->dtor (p);   /* destruktor tridy uvolni i polozky */
+            t->dtor (p);   /* class destructor also frees members */
          else
             for (long i = t->nfields - 1; i >= 0; i--)
             {
                const cm_Type * ft = t->fields [i].type;
-               /* destruktor tridy: vnorene objekty a baze uvolni sam (jejich destruktory) */
+               /* class destructor: nested objects and bases free themselves (their destructors) */
                if (fields_only == 1 && ft != NULL && (ft->kind == CM_T_OBJ || ft->kind == CM_T_UOBJ)) continue;
                cm_drop_value ((char *) p + t->fields [i].offset, ft, fields_only == 2 ? 2 : 0);
             }
@@ -881,7 +881,7 @@ void cm_copy (void * dst, const void * src, const cm_Type * t)
 void cm_set (void * dst, const void * src, const cm_Type * t)
 {
    if (dst == src) return;
-   cm_drop_value (dst, t, 2);   /* stara hodnota - bez destruktoru (operator =) */
+   cm_drop_value (dst, t, 2);   /* old value - without destructor (operator =) */
    memmove (dst, src, t->size);
 }
 
@@ -891,7 +891,7 @@ void cm_copy_set (void * dst, const void * src, const cm_Type * t)
    void * tmp = t->size <= 64 ? NULL : cm_new (t->size);
    char small [64];
    void * v = tmp != NULL ? tmp : small;
-   cm_copy (v, src, t);   /* nejdriv kopie - src muze byt soucasti stare hodnoty dst */
+   cm_copy (v, src, t);   /* copy first - src may be part of the old value of dst */
    cm_drop_value (dst, t, 2);
    memcpy (dst, v, t->size);
    free (tmp);
@@ -974,15 +974,15 @@ void * cm_dyncast_ref (void * p, size_t vptr_offset, const cm_ClassInfo * target
    return r;
 }
 
-/* neuspesny dynamic_cast <T &> u trid prevedenych na struktury (cmm --plain-classes) */
+/* failed dynamic_cast <T &> for classes converted to structs (cmm --plain-classes) */
 void cm_bad_cast (void)
 {
    cm_fatal ("dynamic_cast (bad_cast)");
 }
 
-/*************************** GENERATORY cmm ***************************/
+/*************************** GENERATORS cmm ***************************/
 
-/* instr-asm.cc: prvek hodnotou (do 8 bajtu, little endian), kopie do mista */
+/* instr-asm.cc: element by value (up to 8 bytes, little endian), copy to the place */
 
 void cm_seq_add_v (cm_Seq * s, intptr_t x, size_t esize)
 {

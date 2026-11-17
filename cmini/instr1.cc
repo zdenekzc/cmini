@@ -2,48 +2,48 @@
 /* INSTR.CC */
 
 /*
-   Generator strojoveho kodu pro x86-64 pomoci asmjit::x86::Assembler.
+   Machine code generator for x86-64 using asmjit::x86::Assembler.
 
-   Zasobnikovy model:
-     - vysledek kazdeho (pod)vyrazu je v registru rax,
-     - mezivysledky se docasne ukladaji na zasobnik (push / pop),
-     - rcx, rdx a r11 jsou pomocne registry.
+   Stack model:
+     - the result of each (sub)expression is in register rax,
+     - intermediate results are temporarily stored on the stack (push / pop),
+     - rcx, rdx and r11 are auxiliary registers.
 
-   Pamet:
-     - kazda promenna (int, bool, char, ukazatel, ...) zabira 8 bajtu,
-       pole N prvku zabira N * 8 bajtu,
-     - globalni promenne lezi v pameti, kterou alokuje generator,
-     - parametry a lokalni promenne lezi v ramci funkce: [rbp - offset],
-     - reference (int & x) je ulozena jako adresa.
+   Memory:
+     - each variable (int, bool, char, pointer, ...) takes 8 bytes,
+       an array of N elements takes N * 8 bytes,
+     - global variables lie in memory allocated by the generator,
+     - parameters and local variables lie in the function frame: [rbp - offset],
+     - a reference (int & x) is stored as an address.
 
-   Volani funkci - konvence System V AMD64:
-     - parametry v rdi, rsi, rdx, rcx, r8, r9 (nejvyse 6),
-     - vysledek v rax,
-     - pred instrukci call je rsp zarovnan na 16 bajtu
-       (proto si pocitame hloubku zasobniku - promenna depth),
-     - al = 0 (pocet vektorovych registru pro funkce s promennym poctem parametru),
-     - funkce bez tela (printf, rand, ...) se hledaji v knihovnach pres dlsym.
+   Function calls - System V AMD64 convention:
+     - parameters in rdi, rsi, rdx, rcx, r8, r9 (at most 6),
+     - result in rax,
+     - before the call instruction rsp is aligned to 16 bytes
+       (that is why we count the stack depth - variable depth),
+     - al = 0 (number of vector registers for functions with a variable number of parameters),
+     - functions without a body (printf, rand, ...) are looked up in libraries via dlsym.
 
-   Kazda funkce s telem ma vlastni navesti a ramec:
+   Every function with a body has its own label and frame:
        push rbp / mov rbp, rsp / sub rsp, N  ...  mov rsp, rbp / pop rbp / ret
 
-   Na zacatku kodu je skok na main, takze vstupni bod je zacatek kodu.
+   At the start of the code there is a jump to main, so the entry point is the start of the code.
 
-   Zatim nepodporovano: ukazatele (krome predani do knihovnich funkci),
-   struktury, float / double, switch, goto, vice nez 6 parametru.
-*/
+   Not supported yet: pointers (except passing them to library functions),
+   structs, float / double, switch, goto, more than 6 parameters.
+   */
 
 #include "instr.h"
 #include "decl.h"
 
-#include "asmjit/x86.h"    /* asmjit.h je v nove verzi prazdny */
+#include "asmjit/x86.h"    /* asmjit.h is empty in the new version */
 using namespace asmjit;
 using namespace asmjit::x86;
 
-/* Podporovane verze asmjit:
-     - 1.24 a novejsi (_library/asmjit) - API ve stylu snake_case,
-     - 1.11 (balik asmjit-devel ve Fedore) - API ve stylu camelCase.
-   Mezilehle verze nebyly zkouseny. */
+/* Supported asmjit versions:
+     - 1.24 and newer (_library/asmjit) - API in snake_case style,
+     - 1.11 (asmjit-devel package in Fedora) - API in camelCase style.
+   Intermediate versions were not tested. */
 
 #if ASMJIT_LIBRARY_VERSION >= ASMJIT_LIBRARY_MAKE_VERSION(1, 24, 0)
    #define ASMJIT_SNAKE_CASE_API 1
@@ -70,9 +70,9 @@ static void InstrError (string msg)
 
 /* ---------------------------------------------------------------------- */
 
-/* asmjit hlasi chyby pres ErrorHandler.
-   Vyjimku zde vyhodit nelze (asmjit je noexcept),
-   proto si prvni chybu zapamatujeme a ohlasime ji po vygenerovani kodu. */
+/* asmjit reports errors via ErrorHandler.
+   An exception cannot be thrown here (asmjit is noexcept),
+   so we remember the first error and report it after the code has been generated. */
 
 class AsmErrorHandler : public ErrorHandler
 {
@@ -98,13 +98,13 @@ public:
 
 /* ---------------------------------------------------------------------- */
 
-/* umisteni promenne */
+/* variable location */
 struct Variable
 {
     bool      global = false;
-    int64_t * addr = nullptr;  /* globalni promenna */
-    int       offset = 0;      /* lokalni promenna: [rbp + offset] */
-    bool      ref = false;     /* reference - v pameti je adresa */
+    int64_t * addr = nullptr;  /* global variable */
+    int       offset = 0;      /* local variable: [rbp + offset] */
+    bool      ref = false;     /* reference - in memory is the address */
 };
 
 struct LoopLabels
@@ -113,7 +113,7 @@ struct LoopLabels
     Label continue_label;
 };
 
-static const int VAR_SIZE = 8; /* velikost jedne promenne v bajtech */
+static const int VAR_SIZE = 8; /* size of one variable in bytes */
 
 /* ---------------------------------------------------------------------- */
 
@@ -126,16 +126,16 @@ public:
     AsmErrorHandler error_handler;
     x86::Assembler  a;
 
-    vector <unique_ptr <int64_t []>> storage;  /* pamet globalnich promennych */
-    deque <string>                   strings;  /* retezcove konstanty */
+    vector <unique_ptr <int64_t []>> storage;  /* memory of global variables */
+    deque <string>                   strings;  /* string constants */
     map <ObjectPtr, Variable>        vars;
     map <ObjectPtr, Label>           fce_labels;
 
     ObjectPtr current_fce = nullptr;
     Label     epilogue_label;
-    int       frame_size = 0;          /* velikost lokalnich promennych */
-    int       depth = 0;               /* pocet 8-bajtovych polozek na zasobniku (push) */
-    vector <LoopLabels> loops;         /* pro break a continue */
+    int       frame_size = 0;          /* size of local variables */
+    int       depth = 0;               /* number of 8-byte items on the stack (push) */
+    vector <LoopLabels> loops;         /* for break and continue */
 
     typedef long (*MainType) (int, char * *);
 
@@ -193,7 +193,7 @@ public:
         char arg0 [] = "program_name";
         char * argv [] = { arg0, nullptr };
         long result = fn (1, argv);
-        fflush (stdout);   /* vystup printf z prekladaneho programu */
+        fflush (stdout);   /* printf output of the compiled program */
 
         jit_runtime.release (fn);
         return result;
@@ -201,7 +201,7 @@ public:
 
     /* ------------------------------------------------------------------ */
 
-    /* rozdily v API mezi verzemi asmjit */
+    /* differences in the API between asmjit versions */
 
     Label newLabel ()
     {
@@ -223,7 +223,7 @@ public:
 
     /* ------------------------------------------------------------------ */
 
-    /* push / pop s pocitanim hloubky zasobniku */
+    /* push / pop with counting of the stack depth */
 
     void push (const Gp & reg)
     {
@@ -299,7 +299,7 @@ public:
         }
     }
 
-    /* pocet 8-bajtovych promennych, ktere zabira typ (pole => pocet prvku) */
+    /* number of 8-byte variables occupied by the type (array => number of elements) */
     static long typeCount (TypePtr type)
     {
         if (type != nullptr && type->sort == Array)
@@ -334,7 +334,7 @@ public:
                 InstrError (string ("Global references are not supported: ") + obj->name);
 
             long count = typeCount (obj->type);
-            int64_t * mem = new int64_t [count] ();   /* vynulovano */
+            int64_t * mem = new int64_t [count] ();   /* zeroed */
             storage.emplace_back (mem);
 
             if (obj->init != nullptr)
@@ -359,7 +359,7 @@ public:
 
         long count = var.ref ? 1 : typeCount (obj->type);
         frame_size += count * VAR_SIZE;
-        var.offset = - frame_size;     /* pole: prvky od [rbp+offset] smerem nahoru */
+        var.offset = - frame_size;     /* array: elements from [rbp+offset] upward */
         vars [obj] = var;
     }
 
@@ -376,7 +376,7 @@ public:
         }
     }
 
-    /* projdi telo funkce a prirad lokalnim promennym misto v ramci */
+    /* walk the function body and assign the local variables their place in the frame */
     void collectLocals (StatPtr stat)
     {
         if (stat == nullptr) return;
@@ -429,7 +429,7 @@ public:
         frame_size = 0;
         depth = 0;
 
-        /* parametry */
+        /* parameters */
         vector <ObjectPtr> params;
         for (NodePtr p = decl->type->list.first; p != nullptr; p = p->next)
         {
@@ -446,9 +446,9 @@ public:
         if (params.size () > 6)
             InstrError (string ("More than 6 parameters are not supported: ") + decl->name);
 
-        /* lokalni promenne */
+        /* local variables */
         collectLocals (decl->body);
-        int frame = (frame_size + 15) & ~15;   /* rsp zustane zarovnany na 16 */
+        int frame = (frame_size + 15) & ~15;   /* rsp stays aligned to 16 */
 
         a.comment ((string ("function ") + decl->name).c_str ());
         a.bind (fce_labels [decl]);
@@ -462,7 +462,7 @@ public:
 
         codeStat (decl->body);
 
-        a.xor_ (eax, eax);        /* bez return => vysledek 0 */
+        a.xor_ (eax, eax);        /* no return => result 0 */
         a.bind (epilogue_label);
         a.mov (rsp, rbp);
         a.pop (rbp);
@@ -481,7 +481,7 @@ public:
         a.movzx (rax, al);
     }
 
-    /* rax := adresa promenne (u reference adresa ulozena v promenne) */
+    /* rax := address of the variable (for a reference the address is stored in the variable) */
     void codeVarAddress (ExprPtr expr)
     {
         const Variable & var = variable (expr);
@@ -494,7 +494,7 @@ public:
             a.mov (rax, qword_ptr (rax));
     }
 
-    /* rax := adresa l-hodnoty */
+    /* rax := address of the l-value */
     void codeAddress (ExprPtr expr)
     {
         expr = skipParens (expr);
@@ -539,11 +539,11 @@ public:
         }
     }
 
-    /* rax := hodnota promenne nebo prvku pole */
+    /* rax := value of the variable or array element */
     void codeLoad (ExprPtr expr)
     {
         if (expr->type->sort == Array)
-            codeAddress (expr);           /* pole => adresa prvniho prvku */
+            codeAddress (expr);           /* array => address of the first element */
         else
         {
             codeAddress (expr);
@@ -600,8 +600,8 @@ public:
         codeExpr (expr->e1);
         push (rax);
         codeExpr (expr->e2);
-        a.mov (rcx, rax);         /* rcx = pravy operand */
-        pop (rax);                /* rax = levy operand */
+        a.mov (rcx, rax);         /* rcx = right operand */
+        pop (rax);                /* rax = left operand */
         codeOperation (expr->op);
     }
 
@@ -613,9 +613,9 @@ public:
         a.test (rax, rax);
 
         if (expr->op == LOGAND)
-            a.jz (end_label);    /* levy = 0 => vysledek 0 */
+            a.jz (end_label);    /* left = 0 => result 0 */
         else
-            a.jnz (end_label);   /* levy != 0 => vysledek 1 */
+            a.jnz (end_label);   /* left != 0 => result 1 */
 
         codeExpr (expr->e2);
         a.bind (end_label);
@@ -650,7 +650,7 @@ public:
         codeAddress (expr->e1);
         push (rax);
         codeExpr (expr->e2);
-        pop (r11);                /* r11 = adresa */
+        pop (r11);                /* r11 = address */
 
         if (expr->op != ASSIGN)
         {
@@ -679,7 +679,7 @@ public:
 
         if (postfix)
         {
-            a.mov (rdx, rax);                   /* vysledek = puvodni hodnota */
+            a.mov (rdx, rax);                   /* result = original value */
             if (expr->op == DPLUS) a.add (rdx, 1); else a.sub (rdx, 1);
             a.mov (qword_ptr (rcx), rdx);
         }
@@ -714,7 +714,7 @@ public:
         vector <ExprPtr> args;
         collectArgs (expr->e2, args);
 
-        /* chybejici argumenty => implicitni hodnoty parametru:  int level = 0 */
+        /* missing arguments => default values of parameters:  int level = 0 */
         {
             size_t i = 0;
             for (NodePtr p = fce->type->list.first; p != nullptr; p = p->next, i++)
@@ -733,14 +733,14 @@ public:
         if (args.size () > 6)
             InstrError (string ("More than 6 arguments are not supported: ") + fce->name);
 
-        /* argumenty postupne na zasobnik */
+        /* arguments one after another onto the stack */
         NodePtr par = fce->type->list.first;
         for (ExprPtr arg : args)
         {
             TypePtr ptype = (par != nullptr) ? par->item->type : nullptr;   /* nullptr => ... */
 
             if (ptype != nullptr && ptype->sort == Reference)
-                codeAddress (arg);                 /* reference => adresa */
+                codeAddress (arg);                 /* reference => address */
             else
                 codeExpr (arg);
             push (rax);
@@ -748,14 +748,14 @@ public:
             if (ptype != nullptr) par = par->next;
         }
 
-        /* ze zasobniku do registru */
+        /* from the stack into registers */
         for (int i = (int) args.size () - 1; i >= 0; i--)
             pop (*arg_regs [i]);
 
-        bool pad = (depth % 2) != 0;               /* zarovnani rsp na 16 bajtu */
+        bool pad = (depth % 2) != 0;               /* alignment of rsp to 16 bytes */
         if (pad) a.sub (rsp, 8);
 
-        a.xor_ (eax, eax);                         /* al = 0 vektorovych registru */
+        a.xor_ (eax, eax);                         /* al = 0 vector registers */
 
         if (fce->body != nullptr)
         {
@@ -772,7 +772,7 @@ public:
 
         if (pad) a.add (rsp, 8);
 
-        /* knihovni funkce vraci int, bool, char jen v dolni casti rax */
+        /* library functions return int, bool, char only in the low part of rax */
         TypePtr res = fce->type->from;
         if (fce->body == nullptr && res != nullptr && res->length != Long)
         {
@@ -889,21 +889,21 @@ public:
 
     /* ------------------------------------------------------------------ */
 
-    /* vyhodnot podminku a nastav priznaky (ZF=1 <=> nepravda) */
+    /* evaluate the condition and set the flags (ZF=1 <=> false) */
     void codeCond (ExprPtr expr)
     {
         codeExpr (expr);
         a.test (rax, rax);
     }
 
-    /* deklarace lokalnich promennych - inicializace */
+    /* declarations of local variables - initialization */
     void codeLocalDecls (Queue & decl)
     {
         for (NodePtr p = decl.first; p != nullptr; p = p->next)
         {
             ObjectPtr obj = p->item;
             if (vars.find (obj) == vars.end ())
-                continue;         /* typedef, extern, deklarace funkce */
+                continue;         /* typedef, extern, function declaration */
 
             Variable & var = vars [obj];
 
@@ -997,17 +997,17 @@ public:
 
     void codeFor (StatPtr stat)
     {
-        // for (e1;e2;e3) s1     nebo  for (deklarace; e2; e3) s1
+        // for (e1;e2;e3) s1     or  for (declaration; e2; e3) s1
         a.comment ("for statement");
         Label begin_label = newLabel ();
         Label next_label = newLabel ();
         Label end_label = newLabel ();
 
         codeLocalDecls (stat->decl);
-        codeExpr (stat->e1);              /* inicializace */
+        codeExpr (stat->e1);              /* initialization */
 
         a.bind (begin_label);
-        if (stat->e2 != nullptr)          /* for (;;) => bez testu */
+        if (stat->e2 != nullptr)          /* for (;;) => without test */
         {
             codeCond (stat->e2);
             a.jz (end_label);
@@ -1018,7 +1018,7 @@ public:
         loops.pop_back ();
 
         a.bind (next_label);
-        codeExpr (stat->e3);              /* inkrement */
+        codeExpr (stat->e3);              /* increment */
         a.jmp (begin_label);
 
         a.bind (end_label);

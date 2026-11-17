@@ -2,8 +2,8 @@
 
 /***************************************************************************/
 /*                                                                         */
-/*         PASM - assembler i386 z EASM (puvodne ASM.PAS)                  */
-/*         verze pro Linux - prikazova radka (prevedeno z pasm.pas)        */
+/*         PASM - i386 assembler from EASM (originally ASM.PAS)            */
+/*         version for Linux - command line (translated from pasm.pas)     */
 /*                                                                         */
 /***************************************************************************/
 
@@ -43,7 +43,7 @@ static void Usage (void)
 }
 
 static void FSplit (const char * path, char * dir, char * name, char * ext)
-/* jako FSplit z jednotky Dos: adresar (vcetne '/'), jmeno, pripona (vcetne '.') */
+/* like FSplit from the Dos unit: directory (including '/'), name, extension (including '.') */
 {
    const char * slash = strrchr (path, '/');
    const char * base = (slash == NULL) ? path : slash + 1;
@@ -68,7 +68,7 @@ static void MakeName (char * result, const char * dir, const char * name, const 
    StrAdd (result, 255 + 1, ext);
 }
 
-/* prekladac - pasmlib.c (PasmAssemble) */
+/* assembler - pasmlib.c (PasmAssemble) */
 
 int main (int argc, char * argv [])
 {
@@ -80,12 +80,12 @@ int main (int argc, char * argv [])
    char base [255 + 1];
    char msg [512];
    bool any_ = false;
-   bool link = false;          /* -x: objekt + PasmLink s libc ToaruOS */
+   bool link = false;          /* -x: object + PasmLink with the ToaruOS libc */
    int flags = 0;
 
    SrcName [0] = 0;
 
-   /* pasm -k out.bin vstupy... - jen staticky linker (PasmLink) */
+   /* pasm -k out.bin inputs... - only the static linker (PasmLink) */
    if (argc >= 2 && strcmp (argv [1], "-k") == 0)
    {
       if (argc < 4) Usage ();
@@ -126,13 +126,13 @@ int main (int argc, char * argv [])
    if (SrcName [0] == 0) Usage ();
    if (! any_)
       flags = PASM_EXE;
-   /* -T muze byt jen k -e: meni zakladnu obrazce, ktery pise -e. Objekt OMF
-      ani ET_REL (.o) zadnou zakladnou nedisponuje (tu urci az linker). */
+   /* -T can only be used with -e: it changes the base of the image written by -e.
+      Neither the OMF object nor ET_REL (.o) has a base (the linker determines it). */
    else if (((flags & PASM_TOARU) != 0) && ((flags & PASM_EXE) == 0))
       Usage ();
-   /* -x a -e pisi oba file.bin */
+   /* -x and -e both write file.bin */
    if (link && ((flags & PASM_EXE) != 0)) Usage ();
-   /* -m a -o pisi oba file.obj, -w a -e / -m a -c sdileji vystupni pamet */
+   /* -m and -o both write file.obj, -w with -e / -m with -c share the output memory */
    if ((((flags & PASM_COFF) != 0) && ((flags & (PASM_OBJ | PASM_ELFOBJ)) != 0)) ||
        (((flags & PASM_PE) != 0) && ((flags & PASM_EXE) != 0)))
       Usage ();
@@ -151,7 +151,7 @@ int main (int argc, char * argv [])
 
    if (link)
    {
-      /* staticky s libc ToaruOS:  crt0.o crti.o file.o libc.a crtn.o  => file.bin */
+      /* statically with the ToaruOS libc:  crt0.o crti.o file.o libc.a crtn.o  => file.bin */
       const char * dir = getenv ("PASM_LIBDIR");
       char crt0 [255 + 1], crti [255 + 1], libc [255 + 1], crtn [255 + 1];
       char obj [255 + 1], out [255 + 1];

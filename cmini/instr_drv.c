@@ -1,8 +1,8 @@
-/* instr_drv.c - cmini.bin: prekladac c-mini (front-end decl, expr, stat, sem, lexer)
-   se dvema rezimy (viz usage):
-     -C        => preklad do C (translate.c): vystup -o soubor.c nebo stdout
-     bez -C    => generator instr.cc: assembler pasm (program, objekt, ToaruOS, libc ToaruOS)
-   pouziti: tests/build-translate.sh, tests/02-cmini-asm.sh, tests/03-cmini-c.sh */
+/* instr_drv.c - cmini.bin: compiler c-mini (front-end decl, expr, stat, sem, lexer)
+   with two modes (see usage):
+     -C        => translation to C (translate.c): output -o file.c or stdout
+     no -C     => generator instr.cc: assembler pasm (program, object, ToaruOS, ToaruOS libc)
+   used by: tests/build-translate.sh, tests/02-cmini-asm.sh, tests/03-cmini-c.sh */
 
 #include "decl.h"
 #include "lexer.h"
@@ -11,7 +11,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* translate.c - vstup, lexer a preklad do C (volani z main) */
+/* translate.c - input, lexer and translation to C (called from main) */
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -50,8 +50,8 @@ static void Usage (FILE * f, int code)
 int main (int argc, char * argv [])
 {
   int a = 1;
-  int to_c = 0;                     /* -C: vystup v C (translate.c) */
-  int verbose = 0;                  /* -v: vypis assembleru (rezim pasm) */
+  int to_c = 0;                     /* -C: output in C (translate.c) */
+  int verbose = 0;                  /* -v: print the assembler listing (pasm mode) */
   const char * out = NULL;          /* -o */
 
   for (; a < argc && argv [a][0] == '-'; a++)

@@ -3,45 +3,45 @@
 #ifndef INSTR_H
 #define INSTR_H
 
-/* instr.c - generator kodu x86-64 v C (seznam instrukci asm/asmlist.h,
-   assembler pasm jako knihovna asm/libpasm.a); hlavicku ctou gcc, tcc,
-   cmini (instr_drv.c, instr.c) i g++ (test_instr.cc, instr1.cc .. instr5.cc) */
+/* instr.c - x86-64 code generator in C (list of instructions asm/asmlist.h,
+   assembler pasm as library asm/libpasm.a); this header is read by gcc, tcc,
+   cmini (instr_drv.c, instr.c) and g++ (test_instr.cc, instr1.cc .. instr5.cc) */
 
 #ifdef __cplusplus
-extern "C" {   /* instr.c je C */
+extern "C" {   /* instr.c is C */
 #endif
 
-/* InstrOutputFile != NULL => runInstructions program nespusti, ulozi
-   spustitelny soubor pod timto jmenem (text pro assembler jmeno.asm
-   a vypis jmeno.lst) a vrati 0 */
+/* InstrOutputFile != NULL => runInstructions does not run the program, but saves the
+   executable under this name (text for the assembler name.asm
+   and listing name.lst) and returns 0 */
 extern const char * InstrOutputFile;
-/* InstrAsmFile != NULL => vygenerovany text pro assembler (AsmPrint) se ulozi do tohoto souboru
-   (i pri chybe assembleru; rezim pasm, bez -C) */
+/* InstrAsmFile != NULL => the generated text for the assembler (AsmPrint) is saved to this file
+   (also on an assembler error; pasm mode, without -C) */
 extern const char * InstrAsmFile;
 
-/* InstrObjectFile != NULL => runInstructions vytvori jen objekt ELF64
-   (verejne funkce a promenne PUBLIC, chybejici EXTRN), main neni povinna */
+/* InstrObjectFile != NULL => runInstructions creates only an ELF64 object
+   (public functions and variables PUBLIC, missing ones EXTRN), main is not required */
 extern const char * InstrObjectFile;
 
-/* InstrToaru != 0 (nebo prostredi PASM_TARGET=toaru) => samostatny program
-   (vlastni behova knihovna, pasm -e) pro ToaruOS: cisla syscallu ToaruOS,
-   halda pres sbrk, obraz od 0x3F000000 (pasm -T); s glibc / objektem bez vlivu */
+/* InstrToaru != 0 (or environment PASM_TARGET=toaru) => standalone program
+   (own runtime library, pasm -e) for ToaruOS: ToaruOS syscall numbers,
+   heap via sbrk, image from 0x3F000000 (pasm -T); no glibc involved, object mode has no effect */
 extern int InstrToaru;
 
-/* InstrToaruLib != NULL (cmini -L DIR) => program pro ToaruOS s libc ToaruOS:
-   rezim libc (pasm -c), ale misto gcc staticky linker pasm (PasmLink) s
-   DIR/crt0.o crti.o libc.a crtn.o (z /lib ToaruOS); vyzaduje -o */
+/* InstrToaruLib != NULL (cmini -L DIR) => program for ToaruOS with the ToaruOS libc:
+   libc mode (pasm -c), but instead of gcc the static linker of pasm (PasmLink) with
+   DIR/crt0.o crti.o libc.a crtn.o (from ToaruOS /lib); requires -o */
 extern const char * InstrToaruLib;
 
-/* prelozi globalni deklarace (glist), spusti main a vrati jeho vysledek;
-   verbose => vytiskne vypis assembleru (prog.lst) */
+/* translates the global declarations (glist), runs main and returns its result;
+   verbose => prints the assembler listing (prog.lst) */
 long runInstructions (int verbose);
 
-/* prelozi, vytiskne vypis, spusti main a vytiskne vysledek */
+/* translates, prints the listing, runs main and prints the result */
 void instructions (void);
 
-/* slinkuje objekty (a knihovny -l..., soubory .a) gcc; out != NULL =>
-   ulozi program, jinak ho spusti a vrati vysledek main */
+/* links the objects (and libraries -l..., .a files) with gcc; out != NULL =>
+   saves the program, otherwise runs it and returns the result of main */
 long InstrLink (char * * inputs, int n_inputs, const char * out);
 
 #ifdef __cplusplus
@@ -50,28 +50,28 @@ long InstrLink (char * * inputs, int n_inputs, const char * out);
 
 #ifdef __cplusplus
 
-/* generatory s knihovnou asmjit (C++): instr1.cc .. instr5.cc */
+/* generators using the asmjit library (C++): instr1.cc .. instr5.cc */
 
-/* prelozi globalni deklarace (glist), spusti main a vrati jeho vysledek;
-   verbose => vytiskne vygenerovany assembler */
+/* translates the global declarations (glist), runs main and returns its result;
+   verbose => prints the generated assembler */
 long runInstructions1 (bool verbose);
 
-/* prelozi, vytiskne assembler, spusti main a vytiskne vysledek */
+/* translates, prints the assembler, runs main and prints the result */
 void instructions1 ();
 
-/* totez, varianta instr2.cc (x86::Builder, mezivysledky v registrech misto push / pop) */
+/* the same, variant instr2.cc (x86::Builder, intermediate results in registers instead of push / pop) */
 long runInstructions2 (bool verbose);
 void instructions2 ();
 
-/* totez, varianta instr3.cc (jako instr2.cc + prehazovani operandu podle potreby registru) */
+/* the same, variant instr3.cc (like instr2.cc + swapping operands as needed by registers) */
 long runInstructions3 (bool verbose);
 void instructions3 ();
 
-/* totez, varianta instr4.cc (jako instr3.cc + argumenty volani v registrech misto zasobniku) */
+/* the same, variant instr4.cc (like instr3.cc + call arguments in registers instead of the stack) */
 long runInstructions4 (bool verbose);
 void instructions4 ();
 
-/* totez, varianta instr5.cc (jako instr4.cc + promenne v registrech, push/pop callee-saved registru) */
+/* the same, variant instr5.cc (like instr4.cc + variables in registers, push/pop of callee-saved registers) */
 long runInstructions5 (bool verbose);
 void instructions5 ();
 

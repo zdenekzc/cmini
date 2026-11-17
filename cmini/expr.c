@@ -43,7 +43,7 @@ char * NewStr (char * s)
 }
 
 IDENT_PTR ReadIdentPtr (void)
-/* precti ze vstupu libovolny identifikator */
+/* read any identifier from the input */
 {
   if (sy!=IDENT) Error ("Identifier expected");
   char * id = NewStr (IdentVal);
@@ -52,7 +52,7 @@ IDENT_PTR ReadIdentPtr (void)
 }
 
 void ReadIdent (IDENT_TYP id)
-/* precti ze vstupu libovolny identifikator */
+/* read any identifier from the input */
 {
   if (sy!=IDENT) Error ("Identifier expected");
   strmov (id, sizeof (IDENT_TYP), IdentVal);
@@ -85,8 +85,8 @@ Type IntDef          = { Int, Signed },
      StringDef       = { Pointer, NoSign, NoLength, false, false, NULL },   /* from = &CharDef (InitTypes) */
      NullPtrDef      = { Pointer, NoSign, NoLength, false, false, NULL };   /* from = &VoidDef (InitTypes) */
 
-/* cmini (preklad sebou samym): v inicializatoru globalni promenne nesmi byt adresa
-   jine promenne - ukazatele se nastavi az pri inicializaci (InitDecl) */
+/* cmini (compiling itself): in the initializer of a global variable the address of another
+   variable must not appear - pointers are set only at initialization (InitDecl) */
 void InitTypes (void)
 {
   StringDef.from = &CharDef;
@@ -108,12 +108,12 @@ static TypePtr Std (int level)
 }
 
 int CalcLevel (TypePtr typ)
-/* Urci kategorii, do ktere patri zadany typ */
+/* Determine the category to which the given type belongs */
 {
   switch (typ->sort)
   {
      case Char:
-     case Bool:     /* bool se v aritmetice povysuje na int */
+     case Bool:     /* bool is promoted to int in arithmetic */
      case Enum:
         return IntLev;
 
@@ -147,37 +147,37 @@ int CalcLevel (TypePtr typ)
 /***************************** TYPE CHECKING ******************************/
 
 bool IsInteger (TypePtr t)
-/* test, zda t je celociselny typ - Char, Enum, Int */
+/* test whether t is an integer type - Char, Enum, Int */
 {
   return IsIntegerSort (t->sort);
 }
 
 bool IsFloat (TypePtr t)
-/* test, zda t je realny typ */
+/* test whether t is a real type */
 {
   return IsFloatSort (t->sort);
 }
 
 bool IsNumeric (TypePtr t)
-/* test, zda t je celociselny nebo realny typ */
+/* test whether t is an integer or real type */
 {
   return IsNumericSort (t->sort);
 }
 
 bool IsPointer (TypePtr t)
-/* test, zda t je ukazatel - Pointer */
+/* test whether t is a pointer - Pointer */
 {
   return t->sort==Pointer;
 }
 
 bool IsPtr (TypePtr t)
-/* test, zda t je ukazatel, odkaz nebo pole - Pointer, Reference, Array */
+/* test whether t is a pointer, reference or array - Pointer, Reference, Array */
 {
   return IsPtrSort (t->sort);
 }
 
 bool IsOperand (TypePtr t)
-/* test, zda t je celociselny typ, realny typ nebo ukazatel */
+/* test whether t is an integer type, real type or pointer */
 /* Char, Enum, Int, Float, Double, Pointer */
 {
   while (t->sort == Reference)
@@ -186,7 +186,7 @@ bool IsOperand (TypePtr t)
 }
 
 bool IsString (TypePtr t)
-/* test, zda t je retezec */
+/* test whether t is a string */
 {
   sort_typ sort;
   TypePtr from;
@@ -214,33 +214,33 @@ void InvOp (void)
 }
 
 void CheckInteger (TypePtr t)
-/* kontrola, zda t je celociselny typ - Char, Enum, Int */
+/* check whether t is an integer type - Char, Enum, Int */
 {
   if (!IsInteger (t)) InvOp ();
 }
 
 static inline void CheckNumeric (TypePtr t)
-/* kontrola, zda t je celociselny nebo realny typ */
+/* check whether t is an integer or real type */
 /* Char, Enum, Int, Float, Double */
 {
   if (!IsNumeric (t)) InvOp ();
 }
 
 void CheckOperand (TypePtr t)
-/* kontrola, zda t je celociselny typ, realny typ nebo ukazatel */
+/* check whether t is an integer type, real type or pointer */
 /* Char, Enum, Int, Float, Double, Pointer */
 {
   if (!IsOperand (t)) InvOp ();
 }
 
 void CheckPtr (TypePtr t)
-/* kontrola, zda t je ukazatel, odkaz nebo pole - Pointer, Reference, Array */
+/* check whether t is a pointer, reference or array - Pointer, Reference, Array */
 {
   if (!IsPtr (t)) InvOp ();
 }
 
 void CheckString (TypePtr t)
-/* kontrola, zda t je retezec */
+/* check whether t is a string */
 {
   if (!IsString (t)) InvOp ();
 }
@@ -248,7 +248,7 @@ void CheckString (TypePtr t)
 /* ---------------------------------------------------------------------- */
 
 TypePtr integers (TypePtr t1, TypePtr t2)
-/* operace s celociselnymi operandy */
+/* operation on integer operands */
 {
   int a, b;
 
@@ -261,7 +261,7 @@ TypePtr integers (TypePtr t1, TypePtr t2)
 }
 
 TypePtr arit (TypePtr t1, TypePtr t2)
-/* operace s numerickymi operandy */
+/* operation on numeric operands */
 {
   int a, b;
 
@@ -274,7 +274,7 @@ TypePtr arit (TypePtr t1, TypePtr t2)
 }
 
 TypePtr pointers (TypePtr t1, TypePtr t2)
-/* kontrola, zda t1 a t2 jsou ukazatele stejneho typu */
+/* check whether t1 and t2 are pointers of the same type */
 {
   if (IsInteger (t1))
   {
@@ -293,7 +293,7 @@ TypePtr pointers (TypePtr t1, TypePtr t2)
 }
 
 void compare (TypePtr t1, TypePtr t2)
-/* kontrola, zda lze porovnavat typy t1 a t2 */
+/* check whether types t1 and t2 can be compared */
 {
   if (IsInteger (t1))
      CheckOperand (t2);
@@ -317,8 +317,8 @@ bool IsContainer (TypePtr t)
 }
 
 bool SameType (TypePtr t1, TypePtr t2)
-/* stejny typ: zakladni typy podle druhu, znamenka a delky, ukazatele
-   a kontejnery podle typu prvku; tridy a vycty podle identity */
+/* same type: basic types by kind, sign and length, pointers
+   and containers by element type; classes and enums by identity */
 {
   t1 = Resolve (t1);
   t2 = Resolve (t2);
@@ -343,7 +343,7 @@ bool SameType (TypePtr t1, TypePtr t2)
 
 static void MethodParam (TypePtr fn, TypePtr type, ExprPtr init);
 
-/* vestavene metody Sequence <T> a Dictionary <K, V> */
+/* built-in methods of Sequence <T> and Dictionary <K, V> */
 static ObjectPtr ContainerMethod (IDENT_TYP id, TypePtr typ)
 {
   TypePtr T = typ->elem;
@@ -413,15 +413,15 @@ static ObjectPtr ContainerMethod (IDENT_TYP id, TypePtr typ)
 }
 
 bool IsStringLike (TypePtr t)
-/* std::string, char * nebo retezcova konstanta */
+/* std::string, char * or string constant */
 {
   if (t == NULL) return false;
   if (t->sort == StdString) return true;
-  return (t->sort == Pointer || t->sort == Array) && t->from != NULL && t->from->sort == Char;   /* i char msg [512] */
+  return (t->sort == Pointer || t->sort == Array) && t->from != NULL && t->from->sort == Char;   /* also char msg [512] */
 }
 
 static void CheckStringOperand (TypePtr t, bool allow_char)
-/* allow_char: znak (i celociselna hodnota jako znak - s += 'a' + i) */
+/* allow_char: character (also an integer value as a character - s += 'a' + i) */
 {
   if (IsStringLike (t)) return;
   if (allow_char && t != NULL && IsIntegerSort (t->sort)) return;
@@ -429,7 +429,7 @@ static void CheckStringOperand (TypePtr t, bool allow_char)
 }
 
 static TypePtr StringResult (ExprPtr e1, SYMBOL op, TypePtr t1, TypePtr t2)
-/* operace se std::string:  +  =  +=  ==  !=  <  <=  >  >=  */
+/* operations with std::string:  +  =  +=  ==  !=  <  <=  >  >=  */
 {
   switch (op)
   {
@@ -471,16 +471,16 @@ static ExprPtr NumConst (const char * value, TypePtr type)
 }
 
 static void MethodParam (TypePtr fn, TypePtr type, ExprPtr init)
-/* parametr vestavene metody (bez jmena), init = implicitni hodnota */
+/* parameter of a built-in method (no name), init = default value */
 {
   ObjectPtr p = NewObject ((char *) "", type);
   p->init = init;
   Append (&fn->list, p);
 }
 
-/* vestavene metody std::string:  c_str (), length (), size (), empty (),
+/* built-in methods of std::string:  c_str (), length (), size (), empty (),
    substr (pos = 0, n = npos), find (s, pos = 0), rfind (s, pos = npos), clear ()
-   (argument s metod find a rfind: std::string, konstanta, char * nebo znak) */
+   (argument s of the methods find and rfind: std::string, constant, char * or character) */
 static ObjectPtr StringMethod (IDENT_TYP id)
 {
   TypePtr res;
@@ -489,7 +489,7 @@ static ObjectPtr StringMethod (IDENT_TYP id)
   else if (strcmp (id, "length") == 0 || strcmp (id, "size") == 0) res = &IntDef;
   else if (strcmp (id, "empty") == 0) res = &BoolDef;
   else if (strcmp (id, "clear") == 0) res = &VoidDef;
-  else if (strcmp (id, "reserve") == 0)       /* bez ucinku - retezce se nemeni */
+  else if (strcmp (id, "reserve") == 0)       /* no effect - strings are not changed */
   {
      fn = Link (Function, &VoidDef);
      MethodParam (fn, &UnsignedLongDef, NULL);
@@ -561,7 +561,7 @@ void CheckLValue (ExprPtr e)
 }
 
 void CheckAssign (TypePtr t1, TypePtr t2)
-/* kontrola, zda promenne typu t1 lze priradit vyraz typu t2 */
+/* check whether variables of type t1 can be assigned an expression of type t2 */
 {
   if (IsStdString (t1))
   {
@@ -572,18 +572,18 @@ void CheckAssign (TypePtr t1, TypePtr t2)
      Error ("Invalid conversion of std::string");
   if (IsContainer (t1) || IsContainer (t2))
   {
-     /* Sequence <T>, Dictionary <K, V> - stejny typ (prirazeni je kopie) */
+     /* Sequence <T>, Dictionary <K, V> - same type (assignment is a copy) */
      if (! SameType (t1, t2)) Error ("Incompatible Sequence / Dictionary types");
      return;
   }
   if (t1 != NULL && t2 != NULL && IsClsSort (t1->sort) && IsClsSort (t2->sort))
   {
-     /* objekt tridy do reference na stejnou tridu nebo na bazi:  f (*p) */
+     /* object of a class to a reference to the same class or to its base:  f (*p) */
      for (TypePtr t = t2; t != NULL; t = t->base)
         if (t == t1) return;
      Error ("Incompatible structure types");
   }
-  /* jmeno funkce => ukazatel na funkci:  int (*f) (int) = g; */
+  /* function name => pointer to function:  int (*f) (int) = g; */
   if (t2 != NULL && t2->sort == Function)
   {
      if (t1 == NULL || t1->sort != Pointer || t1->from == NULL || Resolve (t1->from)->sort != Function)
@@ -595,7 +595,7 @@ void CheckAssign (TypePtr t1, TypePtr t2)
 }
 
 void CheckCall (TypePtr t, ExprPtr exp)
-/* kontrola, zda funkce typu t muze byt volana s parametry exp */
+/* check whether a function of type t can be called with parameters exp */
 {
   NodePtr par; /* formal parameter */
   ExprPtr arg; /* argument expression */
@@ -631,8 +631,8 @@ void CheckCall (TypePtr t, ExprPtr exp)
      if (par->item->type->sort == Reference)
      {
         TypePtr rt = par->item->type->from;
-        if (! (rt->Const && IsStdString (rt)))   /* const string & => i hodnota */
-           CheckLValue (arg);                     /* T & <= lvalue typu T */
+        if (! (rt->Const && IsStdString (rt)))   /* const string & => also a value */
+           CheckLValue (arg);                     /* T & <= lvalue of type T */
         CheckAssign (rt, arg->type);
      }
      else
@@ -642,7 +642,7 @@ void CheckCall (TypePtr t, ExprPtr exp)
      par = par->next;
   }
 
-  /* parametry s implicitni hodnotou:  int level = 0 */
+  /* parameters with default value:  int level = 0 */
   while (par!=NULL && par->item->type!=NULL && par->item->init!=NULL)
      par = par->next;
 
@@ -653,8 +653,8 @@ void CheckCall (TypePtr t, ExprPtr exp)
 }
 
 TypePtr add (TypePtr t1, TypePtr t2)
-/* kontrola, zda lze vyrazy typu t1 a t2 scitat */
-/* t1 a t2 mouhou byt NULL */
+/* check whether expressions of types t1 and t2 can be added */
+/* t1 and t2 may be NULL */
 {
   TypePtr res;
 
@@ -683,8 +683,8 @@ TypePtr add (TypePtr t1, TypePtr t2)
 }
 
 TypePtr sub (TypePtr t1, TypePtr t2)
-/* kontrola, zda lze vyrazy typu t1 a t2 odcitat */
-/* t1 a t2 mouhou byt NULL */
+/* check whether expressions of types t1 and t2 can be subtracted */
+/* t1 and t2 may be NULL */
 {
   TypePtr res;
 
@@ -709,7 +709,7 @@ TypePtr sub (TypePtr t1, TypePtr t2)
 /********************************** CALC **********************************/
 
 ExprPtr calc (ExprPtr e1, ExprPtr e2, SYMBOL op)
-/* Vytvor vyraz z operandu 'e1', 'e2' a operatoru 'op', urci typ vysledku */
+/* Create an expression from operands 'e1', 'e2' and operator 'op', determine the type of the result */
 {
   ExprPtr ans;
   TypePtr t1 = NULL;
@@ -738,19 +738,19 @@ ExprPtr calc (ExprPtr e1, ExprPtr e2, SYMBOL op)
         break;
 
      case LBRACK:  /* [ ] */
-        if (t1->sort == StdSequence)     /* seq [i] - prvek (cteni i zapis) */
+        if (t1->sort == StdSequence)     /* seq [i] - element (read and write) */
         {
            CheckAssign (&IntDef, t2);
            res = t1->elem;
            break;
         }
-        if (t1->sort == StdDictionary)   /* dict [k] - hodnota (chybejici klic se vlozi) */
+        if (t1->sort == StdDictionary)   /* dict [k] - value (a missing key is inserted) */
         {
            CheckAssign (t1->key, t2);
            res = t1->elem;
            break;
         }
-        if (IsStdString (t1))            /* s [i] - znak retezce (jen cteni) */
+        if (IsStdString (t1))            /* s [i] - character of the string (read only) */
         {
            CheckAssign (&IntDef, t2);
            res = &CharDef;
@@ -765,7 +765,7 @@ ExprPtr calc (ExprPtr e1, ExprPtr e2, SYMBOL op)
 
      case FCE:     /* ( ) */
         if (t1->sort == Pointer && t1->from != NULL && Resolve (t1->from)->sort == Function)
-           t1 = Resolve (t1->from);         /* volani pres ukazatel na funkci:  f (a, b) */
+           t1 = Resolve (t1->from);         /* call via pointer to function:  f (a, b) */
         CheckCall (t1, e2);
         res = t1->from;
         break;
@@ -913,7 +913,7 @@ ExprPtr calc (ExprPtr e1, ExprPtr e2, SYMBOL op)
 }
 
 ExprPtr calc3 (ExprPtr e1, ExprPtr e2, ExprPtr e3, SYMBOL op)
-/* Operace s tremi operandy */
+/* Operation with three operands */
 {
   ExprPtr ans;
   TypePtr t1, t2, t3, res;
@@ -924,7 +924,7 @@ ExprPtr calc3 (ExprPtr e1, ExprPtr e2, ExprPtr e3, SYMBOL op)
 
   CheckOperand (t1);
 
-  /* jmeno funkce => ukazatel na funkci:  c ? f : NULL */
+  /* function name => pointer to function:  c ? f : NULL */
   if (t2 != NULL && t2->sort == Function) t2 = Link (Pointer, t2);
   if (t3 != NULL && t3->sort == Function) t3 = Link (Pointer, t3);
 
@@ -953,7 +953,7 @@ ExprPtr calc3 (ExprPtr e1, ExprPtr e2, ExprPtr e3, SYMBOL op)
 }
 
 ExprPtr calci (ExprPtr e1, IDENT_TYP id, SYMBOL op)
-/* Vytvor vyraz z operandu 'e1', 'id' a operatoru 'op', urci typ vysledku */
+/* Create an expression from operands 'e1', 'id' and operator 'op', determine the type of the result */
 {
   ExprPtr ans;
   TypePtr res;
@@ -1022,7 +1022,7 @@ ExprPtr calci (ExprPtr e1, IDENT_TYP id, SYMBOL op)
   ans->op = op;
   ans->e1 = e1;
   ans->id = id;
-  ans->obj = obj;      /* polozka struktury */
+  ans->obj = obj;      /* structure member */
   ans->type = res;
 
   return ans;
@@ -1034,8 +1034,8 @@ TypePtr declaration_specifiers (void);   /* decl.c */
 bool IsType (ObjectPtr obj);              /* decl.c */
 
 ObjectPtr ImplicitFunction (char * name)
-/* volani nedeklarovane funkce => implicitni deklarace  int name (...)
-   (napr. printf, rand, ... - hlavickove soubory nezpracovavame) */
+/* call of an undeclared function => implicit declaration  int name (...)
+   (e.g. printf, rand, ... - we do not process header files) */
 {
   TypePtr typ = Link (Function, &IntDef);
   Append (&typ->list, NewObject ("...", NULL));
@@ -1049,8 +1049,8 @@ ObjectPtr ImplicitFunction (char * name)
 }
 
 /* cout, cerr, endl (take std::cout, std::cerr, std::endl):  cout << a << b << endl;
-   V primary jen ZNACKA (IDENT bez objektu); shift_expr ji prevede na volani cm_out_*
-   (cminirt.c). Nedeklarovane jmeno => znacka; deklarovana promenna ma prednost. */
+   In primary only a MARK (IDENT without an object); shift_expr converts it into a call of cm_out_*
+   (cminirt.c). An undeclared name => mark; a declared variable takes precedence. */
 static bool IsStreamName (char * s)
 {
    return strcmp (s, "cout") == 0 || strcmp (s, "cerr") == 0 || strcmp (s, "endl") == 0;
@@ -1084,7 +1084,7 @@ ExprPtr primary (void)
         ans = NewStr (IdentVal);
         obj = Lookup (IdentVal);
 
-        /* kvalifikovane jmeno metody:  Base::f (...)  - volani bez virtualniho mechanismu */
+        /* qualified method name:  Base::f (...)  - call without the virtual mechanism */
         if (obj != NULL && IsType (obj) && IsClsSort (Resolve (obj->type)->sort))
         {
            TypePtr cls = Resolve (obj->type);
@@ -1094,7 +1094,7 @@ ExprPtr primary (void)
            if (sy != IDENT) Error ("Identifier expected");
            ObjectPtr m = FindMember (cls, IdentVal);
 
-           /* T::max (staticka polozka),  T::f (...) (staticka metoda) */
+           /* T::max (static member),  T::f (...) (static method) */
            if (!m->method)
            {
               if (!m->fce && m->storage != Static) ErrorId ("Static member expected", IdentVal);
@@ -1157,10 +1157,10 @@ ExprPtr primary (void)
            e->id = ans;
            e->obj = obj;
            e->type = obj->type;
-           return e; /* NextSymbol jiz bylo zavolano */
+           return e; /* NextSymbol has already been called */
         }
         res = obj->type;
-        if (res->sort == Reference)  /* reference se chova jako promenna typu T */
+        if (res->sort == Reference)  /* reference behaves as a variable of type T */
            res = res->from;
         break;
 
@@ -1212,7 +1212,7 @@ ExprPtr primary (void)
         break;
 
      case CHR:
-        {   /* C99: deklarace nesmi byt hned za navestim */
+        {   /* C99: a declaration must not directly follow a label */
            char tmp [2];
            tmp [0] = ChrVal;
            tmp [1] = 0;
@@ -1239,7 +1239,7 @@ ObjectPtr declarator (TypePtr typ);      /* decl.c */
 bool IsDecl (void);
 
 static TypePtr TypeName (void)
-/* jmeno typu v pretypovani:  int,  char *,  const T *,  unsigned char */
+/* type name in a cast:  int,  char *,  const T *,  unsigned char */
 {
   TypePtr t = declaration_specifiers ();
   ObjectPtr o = declarator (t);
@@ -1248,15 +1248,15 @@ static TypePtr TypeName (void)
 }
 
 static ExprPtr CastNode (TypePtr type, ExprPtr e)
-/* uzel pretypovani:  op = STATIC_CAST_, type = cilovy typ, e1 = vyraz,
-   obj = objekt bez jmena s cilovym typem (vypis -p) */
+/* cast node:  op = STATIC_CAST_, type = target type, e1 = expression,
+   obj = object without name with the target type (print -p) */
 {
   type = Resolve (type);
   if (IsClsSort (type->sort))
      Error ("Cast to structure is not supported");
   if (type->sort == StdString && e->op == COMMA)
   {
-     /* string (p, n) - n znaku od ukazatele p,  string (n, c) - n znaku c */
+     /* string (p, n) - n characters from pointer p,  string (n, c) - n characters c */
      TypePtr a = Resolve (e->e1->type);
      TypePtr b = Resolve (e->e2->type);
      if (e->e1->op == COMMA || b == NULL || !IsIntegerSort (b->sort))
@@ -1275,7 +1275,7 @@ static ExprPtr CastNode (TypePtr type, ExprPtr e)
 }
 
 bool IsPolymorphic (TypePtr cls)
-/* trida s virtualnimi metodami (i zdedenymi) */
+/* class with virtual methods (also inherited) */
 {
   for (TypePtr t = Resolve (cls); t != NULL; t = t->base)
      for (NodePtr p = t->list.first; p != NULL; p = p->next)
@@ -1291,9 +1291,9 @@ static bool IsBaseOf (TypePtr base, TypePtr cls)
 }
 
 static ExprPtr DynamicCastNode (TypePtr type, ExprPtr e)
-/* uzel DYNAMIC_CAST_:  type = T * (vysledek) nebo T (reference - l-hodnota),
-   e1 = vyraz, obj = objekt bez jmena s cilovym typem (vypis -p),
-   id = "&" u reference, "^" u pretypovani k bazi (bez kontroly za behu) */
+/* DYNAMIC_CAST_ node:  type = T * (result) or T (reference - l-value),
+   e1 = expression, obj = object without name with the target type (print -p),
+   id = "&" for a reference, "^" for a cast to the base (without a check at runtime) */
 {
   type = Resolve (type);
   bool ref = type->sort == Reference;
@@ -1325,7 +1325,7 @@ static ExprPtr DynamicCastNode (TypePtr type, ExprPtr e)
 }
 
 ExprPtr StringConstruct (ExprPtr args)
-/* string (args) - prima inicializace  string s (p, n); */
+/* string (args) - direct initialization  string s (p, n); */
 {
   return CastNode (NewType (StdString), args);
 }
@@ -1334,7 +1334,7 @@ ExprPtr primary_expr (void)
 {
   ExprPtr t1;
 
-  /* dynamic_cast <T *> (p),  dynamic_cast <T &> (x) - kontrola typu za behu */
+  /* dynamic_cast <T *> (p),  dynamic_cast <T &> (x) - type check at runtime */
   if (sy==DYNAMIC_CAST_)
   {
      NextSymbol ();
@@ -1360,7 +1360,7 @@ ExprPtr primary_expr (void)
      return CastNode (type, e);
   }
 
-  /* funkcni pretypovani na jmeno typu:  Kind (0),  string (p)  (ne tridy) */
+  /* functional cast to a type name:  Kind (0),  string (p)  (not classes) */
   if (sy==IDENT && IsDecl () && PeekSymbol () == LPAR)
   {
      ObjectPtr tobj = Lookup (IdentVal);
@@ -1397,7 +1397,7 @@ ExprPtr primary_expr (void)
   else if (sy==CHAR_ || sy==INT_ || sy==BOOL_ || sy==LONG_ || sy==SHORT_ ||
            sy==UNSIGNED_ || sy==SIGNED_)
   {
-     /* funkcni pretypovani:  char (n),  int (c) */
+     /* functional cast:  char (n),  int (c) */
      TypePtr type = declaration_specifiers ();
      CheckSymbol (LPAR);
      ExprPtr e = expression ();
@@ -1417,7 +1417,7 @@ ExprPtr postfix_expr (void)
 }
 
 ExprPtr postfix_tail (ExprPtr t1)
-/* postfixove operatory za vyrazem t1:  [ ]  ( )  .  ->  ++  -- */
+/* postfix operators following expression t1:  [ ]  ( )  .  ->  ++  -- */
 {
   ExprPtr t2;
 
@@ -1537,7 +1537,7 @@ ExprPtr unary_expr (void)
      }
      ExprPtr args = NULL;
      ExprPtr count = NULL;
-     if (sy==LBRACK)                         /* new T [n] - pole */
+     if (sy==LBRACK)                         /* new T [n] - array */
      {
         NextSymbol ();
         count = expression ();
@@ -1586,8 +1586,8 @@ ExprPtr unary_expr (void)
 
   else if (sy==SIZEOF_)
   {
-     /* sizeof (T),  sizeof vyraz;  uzel SIZEOF_: e2 = vyraz, nebo obj = objekt
-        bez jmena s typem T (e2 == NULL) */
+     /* sizeof (T),  sizeof expression;  node SIZEOF_: e2 = expression, or obj = object
+        without name with type T (e2 == NULL) */
      NextSymbol ();
      if (sy==LPAR)
      {
@@ -1627,7 +1627,7 @@ ExprPtr unary_expr (void)
 
 ExprPtr cast_expr (void)
 {
-  /* (T) e - pretypovani, jinak (e) a postfixove operatory */
+  /* (T) e - cast, otherwise (e) and postfix operators */
   if (sy==LPAR)
   {
      NextSymbol ();
@@ -1681,8 +1681,8 @@ ExprPtr add_expr (void)
   return (t1);
 }
 
-/* vystup cout / cerr => libc:  printf (fmt, v)  stdout (stejny buffer jako printf),
-   dprintf (2, fmt, v)  stderr.  Formatovaci retezec je literal (STR). */
+/* output cout / cerr => libc:  printf (fmt, v)  stdout (same buffer as printf),
+   dprintf (2, fmt, v)  stderr.  The format string is a literal (STR). */
 static ExprPtr OutCall (bool err, char * fmt, ExprPtr value)
 {
    ObjectPtr obj;
@@ -1711,7 +1711,7 @@ static ExprPtr OutCall (bool err, char * fmt, ExprPtr value)
    call->e2 = args;
    call->type = &IntDef;
 
-   if (err)     /* cerr je svazany s cout (cerr.tie): nejdriv se vyprazdni stdout => fflush (0) */
+   if (err)     /* cerr is tied to cout (cerr.tie): first stdout is flushed => fflush (0) */
    {
       ExprPtr fl, fn2;
       ObjectPtr fo = Lookup ("fflush");
@@ -1731,7 +1731,7 @@ static ExprPtr OutCall (bool err, char * fmt, ExprPtr value)
    return call;
 }
 
-/* jeden prvek  cout << t2  (typ operandu urcuje formát printf) */
+/* one element  cout << t2  (type of the operand determines the printf format) */
 static ExprPtr StreamCall (bool err, ExprPtr t2)
 {
    TypePtr t;
@@ -1748,7 +1748,7 @@ static ExprPtr StreamCall (bool err, ExprPtr t2)
    if (t->sort == Char)
       return OutCall (err, "%c", CastNode (&IntDef, t2));
    if (IsFloat (t))
-      return OutCall (err, "%g", CastNode (&DoubleDef, t2));     /* jako cout: presnost 6 */
+      return OutCall (err, "%g", CastNode (&DoubleDef, t2));     /* as cout: precision 6 */
    if (IsInteger (t) && isUnsignedType (t))
       return OutCall (err, "%lu", CastNode (&UnsignedLongDef, t2));
    if (IsInteger (t))
@@ -1758,7 +1758,7 @@ static ExprPtr StreamCall (bool err, ExprPtr t2)
    return NULL;
 }
 
-/* cout << a << b << endl;  =>  printf (...), printf (...), ...  (COMMA retezec volani) */
+/* cout << a << b << endl;  =>  printf (...), printf (...), ...  (COMMA chain of calls) */
 static ExprPtr StreamOut (ExprPtr t1)
 {
    ExprPtr out, t2, call;
@@ -1993,7 +1993,7 @@ ExprPtr initializer (void)
      while (sy==COMMA)
      {
         NextSymbol ();
-        if (sy==RBRACE) break;          /* carka za poslednim prvkem:  { a, b, } */
+        if (sy==RBRACE) break;          /* comma after the last element:  { a, b, } */
         t2 = initializer ();
         t1 = calc (t1, t2, COMMA);
      }
@@ -2079,7 +2079,7 @@ void PutExpr (ExprPtr t)
   switch (t->op)
   {
      case IDENT:
-        /* staticka polozka nebo metoda tridy:  T::x  (platne i uvnitr tridy) */
+        /* static member or method of a class:  T::x  (valid also inside the class) */
         if (t->obj != NULL && t->obj->owner != NULL && t->obj->owner->tag != NULL &&
             ((!t->obj->fce && t->obj->storage == Static) || (t->obj->fce && !t->obj->method &&
                                                               t->obj->owner->ctor != t->obj)))
@@ -2092,8 +2092,8 @@ void PutExpr (ExprPtr t)
 
      case NUM:
         PutStr (t->id);
-        if (t->type != NULL && t->type->sort == Int &&   /* pripona:  10U  10L  10UL */
-            strchr ("uUlL", t->id [strlen (t->id) - 1]) == NULL)   /* (lexer.c ji necha v textu) */
+        if (t->type != NULL && t->type->sort == Int &&   /* suffix:  10U  10L  10UL */
+            strchr ("uUlL", t->id [strlen (t->id) - 1]) == NULL)   /* (lexer.c leaves it in the text) */
         {
            if (t->type->sign == Unsigned) PutChr ('U');
            if (t->type->length == Long) PutChr ('L');
@@ -2208,7 +2208,7 @@ void PutExpr (ExprPtr t)
 
      case NEW_:
         PutStr ("new ");
-        PutTypeName (t->type->from);   /* typ:  new T *  [n] */
+        PutTypeName (t->type->from);   /* type:  new T *  [n] */
         if (t->e2 != NULL)
         {
            PutStr (" [");

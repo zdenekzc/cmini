@@ -1,6 +1,6 @@
 /* INST.CC */
 
-/* instrukce (prevedeno z inst.pas) */
+/* instructions (translated from inst.pas) */
 
 #include <stdio.h>
 #include <string.h>
@@ -32,21 +32,21 @@ static small    bbb;                   /* 0..7 */
 static card     DispSize;
 
 /* x86-64 */
-static bool     RexW;                  /* REX.W - operand 64 bitu */
-static bool     RexR;                  /* REX.R - rozsireni ModRM.reg */
-static bool     RexX;                  /* REX.X - rozsireni SIB.index */
-static bool     RexB;                  /* REX.B - rozsireni ModRM.rm, SIB.base, registru v opkodu */
-static bool     RexNeed;               /* SPL, BPL, SIL, DIL - REX nutny */
-static bool     RexHi;                 /* AH, CH, DH, BH - REX nelze pouzit */
-static bool     RipRel;                /* adresa relativni k RIP */
-static card     ImmAfter;              /* pocet bajtu prime hodnoty za adresou */
+static bool     RexW;                  /* REX.W - 64-bit operand */
+static bool     RexR;                  /* REX.R - extension of ModRM.reg */
+static bool     RexX;                  /* REX.X - extension of SIB.index */
+static bool     RexB;                  /* REX.B - extension of ModRM.rm, SIB.base, register in the opcode */
+static bool     RexNeed;               /* SPL, BPL, SIL, DIL - REX required */
+static bool     RexHi;                 /* AH, CH, DH, BH - REX cannot be used */
+static bool     RipRel;                /* address relative to RIP */
+static card     ImmAfter;              /* number of bytes of immediate value after the address */
 
 #define Esc 0xD8
 
 enum FloatOp { fld, fstp, fst };
 typedef enum FloatOp FloatOp;
 
-/* RegSet - mnoziny registru jako funkce */
+/* RegSet - register sets as functions */
 
 static bool InBpSet (Register r)
 {
@@ -81,7 +81,7 @@ static bool InReg32 (Register r)
           r == ESP || r == EBP || r == ESI || r == EDI;
 }
 
-/* registry pro adresu v 64bitovem rezimu */
+/* registers for an address in 64-bit mode */
 
 static bool InAddr64 (Register r)
 {
@@ -163,7 +163,7 @@ static void PutInst (void)
 /**************************** OPERAND ENCODING ****************************/
 
 static card seq (Register r)
-/* cislo registru 0..7 (bit 3 se nastavuje do REX funkcemi seqR, seqX, seqB) */
+/* register number 0..7 (bit 3 is set into REX by the functions seqR, seqX, seqB) */
 {
    if (RegNew (r) && ! x64) AsmError (Only64);
    if (r >= SPL && r <= DIL) RexNeed = true;
@@ -183,20 +183,20 @@ static card seqX (Register r)   /* SIB.index */
    return seq (r);
 }
 
-static card seqB (Register r)   /* ModRM.rm, SIB.base, registr v opkodu */
+static card seqB (Register r)   /* ModRM.rm, SIB.base, register in the opcode */
 {
    if (RegCode (r) >= 8) RexB = true;
    return seq (r);
 }
 
 static card AddrDef (void)
-/* implicitni velikost adresy */
+/* implicit address size */
 {
    return x64 ? qword : default_;
 }
 
 static bool Big64 (ExprRec * e)
-/* konstanta v segmentu USE64, ktera se nevejde do 32 bitu se znamenkem */
+/* constant in segment USE64 that does not fit into 32 bits with sign */
 {
    return x64 && e->sort == imm && ! e->para &&
           e->target == NULL && e->add == NULL && e->frame == NULL &&
@@ -204,8 +204,8 @@ static bool Big64 (ExprRec * e)
 }
 
 static card ImmQ (card t, ExprRec * e)
-/* velikost prime hodnoty - u operandu 64 bitu jen 32 bitu se znamenkovym
-   rozsirenim (vyjimka: MOV r64, imm64) */
+/* size of immediate value - for 64-bit operands only 32 bits with sign
+   extension (exception: MOV r64, imm64) */
 {
    if (t != qword) return t;
    if (Big64 (e)) AsmError (OutOfRange);
@@ -221,7 +221,7 @@ static void SelectSeg (ExprRec * e)
 
    if (x64)
    {
-      /* v 64bitovem rezimu maji vyznam jen FS a GS */
+      /* in 64-bit mode only FS and GS have a meaning */
       if (e->pref != FS && e->pref != GS) e->pref = None;
       SegmPref = e->pref;
       return;
@@ -420,8 +420,8 @@ static void Addr32 (ExprRec * e)
 }
 
 static void Addr64 (ExprRec * e)
-/* adresa v 64bitovem rezimu: registry RAX .. R15, nebo EAX .. R15D s prefixem 67h,
-   navesti bez registru - relativne k RIP, cislo bez registru - absolutne (SIB) */
+/* address in 64-bit mode: registers RAX .. R15, or EAX .. R15D with prefix 67h,
+   label without register - relative to RIP, number without register - absolute (SIB) */
 {
    Register tem;
    bool     a32;
@@ -438,7 +438,7 @@ static void Addr64 (ExprRec * e)
       }
       else
       {
-         mmm = 4;          /* SIB bez baze a indexu, disp32 */
+         mmm = 4;          /* SIB without base and index, disp32 */
          SIB = true;
          scl = 0;
          iii = 4;
@@ -494,12 +494,12 @@ static void Addr64 (ExprRec * e)
       default: AsmError (Bug);
    }
 
-   if (e->index == None) iii = 4; /* bez indexu */
+   if (e->index == None) iii = 4; /* without index */
    else iii = seqX (e->index);
 
    if (e->base == None)
    {
-      bbb = 5; /* bez baze */
+      bbb = 5; /* without base */
       mode = 0;
       DispSize = dword;
    }
@@ -513,7 +513,7 @@ static void Addr64 (ExprRec * e)
       }
    }
 
-   if (e->index == None && bbb != 4) /* RSP, R12 vyzaduji SIB */
+   if (e->index == None && bbb != 4) /* RSP, R12 require SIB */
    {
       SIB = false;
       mmm = bbb;
@@ -658,7 +658,7 @@ static void InsRM (Intel p, card d, card ic, Register r, ExprRec m)
 
 static void InsMI (Intel p, card d, card ic, card ap, ExprRec m, ExprRec i, card w)
 {
-   ImmAfter = w;   /* pro adresu relativni k RIP */
+   ImmAfter = w;   /* for address relative to RIP */
    InsM (p, d, ic, ap, m);
    PutData (&i, w);
 }
@@ -719,11 +719,11 @@ static bool RelTiny (ExprRec * e)
 {
    longint x;
 
-   /* kratky skok (EB, 7x) ma 2 bajty, posunuti se pocita od jeho konce;
-      puvodne ip + 1 => skok vzad o 129 bajtu hlasil "Jump too long" */
+   /* short jump (EB, 7x) has 2 bytes, the displacement is counted from its end;
+      originally ip + 1 => a backward jump of 129 bytes was reported as "Jump too long" */
    x = (longint) ((uint32_t) e->val - ((uint32_t) ip + 2));
-   /* navesti v aktualnim segmentu, ktere uz je definovane (add = nil);
-      puvodne jen (frame = nil) and (target = nil), tj. nikdy pro navesti */
+   /* label in the current segment that is already defined (add = nil);
+      originally only (frame = nil) and (target = nil), i.e. never for a label */
    return (e->target == NULL || e->target == ThisSeg) &&
           e->add == NULL && x >= -128 && x <= 127;
 }
@@ -817,7 +817,7 @@ static void Move (void)
 
             case imm:  if (a.typ == qword && Big64 (&b))   /* MOV r64, imm64 */
                           InsI  (i86, a.typ, RegImm + 8*w + seqB (a.rx), b, qword);
-                       else if (a.typ == qword)          /* MOV r64, imm32 se znamenkovym rozsirenim */
+                       else if (a.typ == qword)          /* MOV r64, imm32 with sign extension */
                           InsMI (i86, a.typ, MemImm + w, 0, a, b, dword);
                        else
                           InsI  (i86, a.typ, RegImm + 8*w + seqB (a.rx), b, a.typ);
@@ -884,7 +884,7 @@ static void Move (void)
 }
 
 static void Push64 (void)
-/* PUSH v 64bitovem rezimu: operand 64 bitu (implicitne, bez REX.W) nebo 16 bitu */
+/* PUSH in 64-bit mode: 64-bit operand (implicit, without REX.W) or 16 bits */
 {
    card d;
 
@@ -1171,10 +1171,10 @@ static void Incr (bool sel)
 
    switch (a.sort)
    {
-      case reg: if (w == 0 || x64) InsM (i86, a.typ, 0xFE + w, ap, a);  /* 40h..4Fh jsou v x86-64 REX */
+      case reg: if (w == 0 || x64) InsM (i86, a.typ, 0xFE + w, ap, a);  /* 40h..4Fh are REX in x86-64 */
                 else Ins (i86, a.typ, IncReg + seq (a.rx));
                 break;
-      case mem: InsM (i86, a.typ, 0xFE + w, ap, a); break;  /* puvodne neinicializovane IncMem */
+      case mem: InsM (i86, a.typ, 0xFE + w, ap, a); break;  /* originally uninitialized IncMem */
       default:  AsmError (BadSort);
    }
 }
@@ -1249,7 +1249,7 @@ static void Block (Intel pro, card ic, card des, card sou)
 {
    ExprRec e;
 
-   (void) sou;   /* v Pascalu se sou nepouziva (druhy case testuje des) */
+   (void) sou;   /* in Pascal sou is not used (the second case tests des) */
 
    a = zero;
    switch (des)
@@ -1392,7 +1392,7 @@ static void Jump (bool jmp)
          case word:
          case dword:
          case far_:   AsmError (Inv64);
-         case qword:  InsM (i86, any, 0xFF, apn, a); return;   /* neprimy skok, operand 64 bitu */
+         case qword:  InsM (i86, any, 0xFF, apn, a); return;   /* indirect jump, 64-bit operand */
          default:     break;
       }
 
@@ -1736,10 +1736,10 @@ static void Comp (card op)
    }
 }
 
-/* Pascal: Float (koliduje s Def.Float - symbol) */
+/* Pascal: Float (clashes with the Def.Float symbol) */
 static void Float_ (FloatOp mode)
 {
-   card icr = 0, ap = 0, apt = 0;   /* apt pro fst nepouzito */
+   card icr = 0, ap = 0, apt = 0;   /* apt for fst, not used */
 
    switch (mode)
    {
@@ -1772,7 +1772,7 @@ static void Float_ (FloatOp mode)
 
 static void Whole (FloatOp mode)
 {
-   card ap = 0, apq = 0;   /* apq pro fst nepouzito */
+   card ap = 0, apq = 0;   /* apq for fst, not used */
 
    switch (mode)
    {
@@ -1795,7 +1795,7 @@ static void Whole (FloatOp mode)
 }
 
 static void Fstsw (bool w)
-/* FSTSW / FNSTSW - pametovy operand (DD /7) nebo AX (DF E0, od 80287) */
+/* FSTSW / FNSTSW - memory operand (DD /7) or AX (DF E0, from 80287 on) */
 {
    if (w) Wait = true;
    Expression (&a);
@@ -1839,7 +1839,7 @@ static void Need64 (void)
 }
 
 static void SendQ (card ic)
-/* instrukce s operandem 64 bitu (REX.W) */
+/* instructions with 64-bit operand (REX.W) */
 {
    Need64 ();
    Ins (i64, qword, ic);
@@ -1859,12 +1859,12 @@ static void Movsxd (void)
 
 /******************************** SSE, SSE2 *********************************/
 
-/* Skalarni operace s plovouci carkou v registrech XMM:
-      prefix (F2 - double, F3 - float, 66 - pd / celociselne) pred REX,
-      0F xx, ModRM (reg = XMM nebo obecny registr, rm = XMM, registr, pamet) */
+/* Scalar floating-point operations in XMM registers:
+      prefix (F2 - double, F3 - float, 66 - pd / integer) before REX,
+      0F xx, ModRM (reg = XMM or general register, rm = XMM, register, memory) */
 
 static card xmmR (ExprRec * e)
-/* registr XMM v ModRM.reg */
+/* XMM register in ModRM.reg */
 {
    if (e->ceil >= 8)
    {
@@ -1882,7 +1882,7 @@ static void SsePrefix (small pref)
 }
 
 static void InsX (small pref, card ic, card cent, ExprRec m, bool w64)
-/* instrukce SSE: center = ModRM.reg (0..7, REX.R uz je nastaven), m = ModRM.rm */
+/* SSE instruction: center = ModRM.reg (0..7, REX.R is already set), m = ModRM.rm */
 {
    SsePrefix (pref);
    PrepAddr (&m);
@@ -1898,9 +1898,9 @@ static void XmmOnly (ExprRec * e)
 }
 
 static void CheckMemSize (ExprRec * e, card size)
-/* pamet: velikost podle instrukce (bez PTR je take spravne) */
+/* memory: size depends on the instruction (without PTR it is also correct) */
 {
-   /* size == any: 16 bajtu (ANDPD, MOVAPD, ...) - XMMWORD neni, velikost se nekontroluje */
+   /* size == any: 16 bytes (ANDPD, MOVAPD, ...) - no XMMWORD, the size is not checked */
    if (e->sort == mem && size != any && e->typ != any && e->typ != size) AsmError (BadSize);
 }
 
@@ -1912,7 +1912,7 @@ static void XmmOrMem (ExprRec * e, card size)
 }
 
 static void SseArith (small pref, small op, card size)
-/* ADDSD xmm, xmm/m64 ... (size = velikost pametoveho operandu, any = 16 bajtu) */
+/* ADDSD xmm, xmm/m64 ... (size = size of the memory operand, any = 16 bytes) */
 {
    XmmOnly (&a);
    Separator ();
@@ -1982,7 +1982,7 @@ static void MovdMovq (bool q)
 }
 
 static void CvtToXmm (small pref)
-/* CVTSI2SD / CVTSI2SS xmm, r/m32 nebo r/m64 */
+/* CVTSI2SD / CVTSI2SS xmm, r/m32 or r/m64 */
 {
    XmmOnly (&a);
    Separator ();
@@ -1993,7 +1993,7 @@ static void CvtToXmm (small pref)
 }
 
 static void CvtToReg (small pref, small op, card size)
-/* CVTTSD2SI / CVTSD2SI / CVTTSS2SI / CVTSS2SI  r32 nebo r64, xmm/m */
+/* CVTTSD2SI / CVTSD2SI / CVTTSS2SI / CVTSS2SI  r32 or r64, xmm/m */
 {
    RegOnly (&a);
    Separator ();
@@ -2003,7 +2003,7 @@ static void CvtToReg (small pref, small op, card size)
 }
 
 static bool Invalid64 (keyword i)
-/* instrukce, ktere v 64bitovem rezimu neexistuji */
+/* instructions that do not exist in 64-bit mode */
 {
    switch (i)
    {
@@ -2221,7 +2221,7 @@ static void Select (keyword i)
       case iLgs:      Load  (GS); break;
       case iLodsd:    SendD (0xAD); break;
       case iLss:      Load  (SS); break;
-      case iMovsd:                     /* bez operandu retezcova, jinak SSE2 */
+      case iMovsd:                     /* without string operand, otherwise SSE2 */
          if (CurSy == EOL) SendD (0xA5);
          else SseMove (0xF2, 0x10, 0x11, qword);
          break;
@@ -2465,15 +2465,15 @@ static void Select (keyword i)
 
 /******************************* FIRST PASS *******************************/
 
-/* DirSet = set of ip186 .. iStruc  (iStruc = 33, vejde se do 64 bitu) */
+/* DirSet = set of ip186 .. iStruc  (iStruc = 33, fits into 64 bits) */
 typedef uint64_t DirSet;
 
 #define DIR(k) ((DirSet) 1 << (k))
 
-/* PrefixSet = [iLock, iRep, iRepe, iRepne, iRepnz, iRepz] - viz CompileLineBody */
+/* PrefixSet = [iLock, iRep, iRepe, iRepne, iRepnz, iRepz] - see CompileLineBody */
 
-/* mnoziny jako funkce - konstantni vyraz s posuny v inicializaci promenne
-   nezna cparser ani cmm --llvm */
+/* sets as functions - a constant expression with shifts in the initialization of a variable
+   is not known to cparser nor cmm --llvm */
 static DirSet NoSegSet (void)
 {
    return
@@ -2493,8 +2493,8 @@ static DirSet NameSet (void)
 }
 
 static bool InDir (keyword k, DirSet s)
-/* k in s - ve Free Pascalu dava 'in' u male mnoziny chybne vysledky
-   pro hodnoty mimo rozsah mnoziny (index bitu se bere modulo 32) */
+/* k in s - in Free Pascal 'in' with a small set gives wrong results
+   for values outside the range of the set (the bit index is taken modulo 32) */
 {
    return k <= iStruc && ((s >> k) & 1) != 0;
 }
@@ -2506,11 +2506,11 @@ static bool InPrefixSet (keyword k)
 }
 
 static void CompileNode (const AsmNode * n)
-/* instrukce nebo navesti primo z uzlu (faze 2) - stejne jako text nize */
+/* instruction or label directly from a node (phase 2) - same as the text below */
 {
    lab = NULL;
 
-   if (n->kind == AN_LABEL)                   /* jmeno: */
+   if (n->kind == AN_LABEL)                   /* name: */
    {
       TreePtr t = NodeLabel (n->label);
       if (t->ope.sort == unknown) NewLabel (t, near_);
@@ -2542,7 +2542,7 @@ static void CompileLineBody (void)
          PutLine (false);
          return;
       }
-      NodeSourceText ();                       /* direktivy, data, text */
+      NodeSourceText ();                       /* directives, data, text */
    }
 
    Insymbol ();
@@ -2594,7 +2594,7 @@ static void CompileLineBody (void)
 }
 
 static void CompileLine (void)
-/* Pri chybe (AsmError) se pokracuje dalsi radkou, viz Def.Retry */
+/* On error (AsmError) processing continues with the next line, see Def.Retry */
 {
    if (setjmp (LineJump) == 0) CompileLineBody ();
 }

@@ -1,6 +1,6 @@
 /* EXPR.H */
 
-/* lexikalni analyza a vyrazy (prevedeno z expr.pas) */
+/* lexical analysis and expressions (translated from expr.pas) */
 
 #ifndef EXPR_H
 #define EXPR_H
@@ -10,21 +10,21 @@
 #include "asmlist.h"
 
 void OpenSource (void);
-void SetSourceText (const char * const * parts, int count);  /* text v pameti (NULL = soubor ModName) */
+void SetSourceText (const char * const * parts, int count);  /* text in memory (NULL = file ModName) */
 void CloseSource (void);
 
-/* program jako spojovy seznam uzlu (asmlist.h, faze 2) */
-void SetSourceNodes (const AsmNode * first, bool on);  /* on = false: text / soubor */
-const AsmNode * SourceNode (void);             /* uzel prave radky (NULL = text) */
-bool NodeDirect (const AsmNode * n);           /* instrukci / navesti lze prelozit primo */
-void NodeSourceText (void);                    /* radka z tisku uzlu do LineBuf (pro lexikalni analyzu) */
-void NodeOperands (const AsmNode * n);         /* CurSy = prvni operand nebo EOL */
-TreePtr NodeLabel (AsmLabel * l);              /* zaznam navesti (po NodeDirect) */
+/* program as a linked list of nodes (asmlist.h, phase 2) */
+void SetSourceNodes (const AsmNode * first, bool on);  /* on = false: text / file */
+const AsmNode * SourceNode (void);             /* node of the current line (NULL = text) */
+bool NodeDirect (const AsmNode * n);           /* instruction / label can be translated directly */
+void NodeSourceText (void);                    /* line from the printed node into LineBuf (for lexical analysis) */
+void NodeOperands (const AsmNode * n);         /* CurSy = first operand or EOL */
+TreePtr NodeLabel (AsmLabel * l);              /* label record (after NodeDirect) */
 
 void NextLine (void);
 void NextElement (void);
 void Insymbol (void);
-bool SourceEof (void);    /* eof (source) jako ve FPC */
+bool SourceEof (void);    /* eof (source) as in FPC */
 bool AbsExp (ExprRec * e);
 card TypeConv (ExprRec e);
 void Expression (ExprRec * e);

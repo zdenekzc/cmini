@@ -11,7 +11,7 @@ ExprPtr BoolExpr (void)
 {
   ExprPtr e;
   e = expression ();
-  CheckOperand (e->type);     /* cele cislo, float, double, ukazatel */
+  CheckOperand (e->type);     /* integer, float, double, pointer */
   return e;
 }
 
@@ -60,10 +60,10 @@ ExprPtr CallExpr (void)
 
 /* ---------------------------------------------------------------------- */
 
-/* deklarace v podmince:  if (T x = e), while (T x = e), switch (T x = e) - jedna
-   promenna s inicializaci; vytvori blok { T x = e; } s vlastnim rozsahem (otevreny -
-   zavre ho volajici po vnitrnim prikazu) a do *cond da vyraz x */
-/* podminka zacina deklaraci (ne funkcni pretypovani string (x), T::f ()) */
+/* declaration in a condition:  if (T x = e), while (T x = e), switch (T x = e) - one
+   variable with an initializer; creates a block { T x = e; } with its own scope (open -
+   the caller closes it after the inner statement) and puts the expression x into *cond */
+/* condition starts with a declaration (not a functional cast string (x), T::f ()) */
 static bool IsCondDecl (void)
 {
   return IsDecl () && ! IsQualifiedExpr () && PeekSymbol () != LPAR;
@@ -100,7 +100,7 @@ StatPtr statement (void)
      s = NEW (Stat);
      s->st = GOTO_;
      s->id = ReadIdentPtr ();
-     /* !! kontrola navesti */
+     /* !! label check */
      CheckSymbol (SEMICOLON);
   }
 
@@ -195,11 +195,11 @@ StatPtr statement (void)
      if (IsDecl ())
      {
         RangeForDecl = false;
-        declaration (&s->decl, Init | RangeFor); /* vcetne stredniku */
+        declaration (&s->decl, Init | RangeFor); /* including the semicolon */
         if (RangeForDecl)
         {
            /* for (T x : seq),  for (T & x : seq)  -  s->st = COLON,
-              decl = promenna cyklu, e1 = posloupnost, s1 = telo */
+              decl = loop variable, e1 = sequence, s1 = body */
            RangeForDecl = false;
            NextSymbol ();                     /* : */
            s->st = COLON;
@@ -316,7 +316,7 @@ StatPtr statement (void)
      {
         p = statement ();
 
-        /* pripojeni do fronty */
+        /* appending to the queue */
         if (first==NULL)
            first = p;
         else
@@ -348,21 +348,21 @@ StatPtr statement (void)
      CheckSymbol (COLON);
   }
 
-  else if (IsDecl () && ! IsQualifiedExpr ())  /* declaration (ne  Base::f ();) */
+  else if (IsDecl () && ! IsQualifiedExpr ())  /* declaration (not  Base::f ();) */
   {
      s = NEW (Stat);
      s->st = DECL;
      declaration (&s->decl, Init);
   }
 
-  else if (sy==IDENT && PeekSymbol () == COLON)  /* navesti:  again: ... */
+  else if (sy==IDENT && PeekSymbol () == COLON)  /* label:  again: ... */
   {
      s = NEW (Stat);
      s->st = LAB;
      s->id = ReadIdentPtr ();
      CheckSymbol (COLON);
      if (sy==RBRACE)
-        s->s1 = NULL;                          /* navesti na konci bloku */
+        s->s1 = NULL;                          /* label at the end of a block */
      else
         s->s1 = statement ();
   }
@@ -385,7 +385,7 @@ void SubStat (StatPtr s)
 {
   Check (s!=NULL);
 
-  if (s->st == LBRACE) /* graficka uprava */
+  if (s->st == LBRACE) /* formatting */
      PutStat (s);
   else
   {
@@ -487,7 +487,7 @@ void PutStat (StatPtr s)
            StatPtr t;
            t = s->s2;
 
-           if (t->st == IF_) /* graficka uprava */
+           if (t->st == IF_) /* formatting */
            {
               PutStr ("else ");
               PutStat (t);

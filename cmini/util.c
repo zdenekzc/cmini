@@ -1,5 +1,5 @@
-/* UTIL.C - pomocne funkce generatoru c-mini (util.h): retezce, Seq, Dict, soubory
-   (2026-11-16, CHANGELOG.txt kapitola 103: drive v instr.c, PMAP a ReadWholeFile v translate.c) */
+/* UTIL.C - helper functions of the c-mini generators (util.h): strings, Seq, Dict, files
+   (2026-11-16, CHANGELOG.txt chapter 103: previously in instr.c, PMAP and ReadWholeFile in translate.c) */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -63,7 +63,7 @@ char * CatChar (const char * a, long c)
     return r;
 }
 
-/* rovnost retezcu; NULL se nerovna nicemu (jako Eq v translate.c) */
+/* string equality; NULL is not equal to anything (like Eq in translate.c) */
 bool StrEq (const char * a, const char * b)
 {
     return a != NULL && b != NULL && strcmp (a, b) == 0;
@@ -74,7 +74,7 @@ bool StrEmpty (const char * a)
     return a [0] == 0;
 }
 
-/* s.substr (pos, n): n < 0 - do konce */
+/* s.substr (pos, n): n < 0 - to the end */
 char * SubStr (const char * s, long pos, long n)
 {
     long len = strlen (s);
@@ -83,7 +83,7 @@ char * SubStr (const char * s, long pos, long n)
     return StrN (s + pos, n);
 }
 
-/* s.find (x, pos): -1 = nenalezeno */
+/* s.find (x, pos): -1 = not found */
 long StrFind (const char * s, const char * x, long pos)
 {
     long len = strlen (s);
@@ -102,7 +102,7 @@ long StrFindChar (const char * s, long c, long pos)
     return -1;
 }
 
-/* s.rfind (x): -1 = nenalezeno */
+/* s.rfind (x): -1 = not found */
 long StrRFind (const char * s, const char * x)
 {
     long len = strlen (s);
@@ -180,7 +180,7 @@ void SeqInsertFirst (Seq * s, long x)
     s->items [0] = x;
 }
 
-/* vlozeni na pozici i (0 .. size) */
+/* insert at position i (0 .. size) */
 void SeqInsert (Seq * s, long pos, long x)
 {
     long i;
@@ -206,7 +206,7 @@ bool SeqContainsStr (Seq * s, const char * x)
     return false;
 }
 
-/* kopie (Sequence predana hodnotou) */
+/* copy (Sequence passed by value) */
 Seq * SeqCopy (Seq * s)
 {
     Seq * r = (Seq *) MemAlloc (sizeof (Seq));
@@ -247,7 +247,7 @@ static bool KeyEq (long a, long b, bool str)
     return a == b;
 }
 
-/* index klice, -1 = neni */
+/* key index, -1 = none */
 static long DictFind (Dict * d, long k, bool str)
 {
     if (d->cap == 0) return -1;
@@ -296,7 +296,7 @@ static void DictPut (Dict * d, long k, long v, bool str)
     while (d->used [i] != 0)
         i = (i + 1) % d->cap;
     d->used [i] = 1;
-    d->keys [i] = str ? (long) Str ((char *) k) : k;   /* klic retezec: kopie */
+    d->keys [i] = str ? (long) Str ((char *) k) : k;   /* string key: copy */
     d->vals [i] = v;
     d->size ++;
 }
@@ -311,7 +311,7 @@ void DictClear (Dict * d)
 
 long DictSize (Dict * d) { return d->size; }
 
-/* klic cislo / ukazatel */
+/* number / pointer key */
 void DictStore (Dict * d, long k, long v) { DictPut (d, k, v, false); }
 bool DictContains (Dict * d, long k) { return DictFind (d, k, false) >= 0; }
 long DictGet (Dict * d, long k)
@@ -325,7 +325,7 @@ char * DictGetStr (Dict * d, long k)
     return i >= 0 ? (char *) d->vals [i] : (char *) "";
 }
 
-/* klic retezec */
+/* string key */
 void SDictStore (Dict * d, const char * k, long v) { DictPut (d, (long) k, v, true); }
 bool SDictContains (Dict * d, const char * k) { return DictFind (d, (long) k, true) >= 0; }
 long SDictGet (Dict * d, const char * k)
@@ -340,10 +340,10 @@ char * SDictGetStr (Dict * d, const char * k)
 }
 
 
-/* ---- soubory ---- */
+/* ---- files ---- */
 
-/* cely soubor (NULL = nelze otevrit); skip_zero - vynechat nulove bajty (zdrojovy text);
-   len (neni-li NULL) = pocet bajtu vysledku */
+/* whole file (NULL = cannot open); skip_zero - skip zero bytes (source text);
+   len (if not NULL) = number of bytes of the result */
 char * ReadFile (const char * name, long * len, bool skip_zero)
 {
     FILE * f = fopen (name, "rb");
