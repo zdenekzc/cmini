@@ -12,7 +12,7 @@
 #      a s vystupem libc64 slinkovaneho na hostiteli (pasm -c, gcc)
 #   4. VM se zastavi; vystupy: _output/toaruos-tcc/{guest-*.out,guest.log}
 #
-# Vyzaduje qemu-system-x86_64, ISO ToaruOS (toaruos-tools/_build/download) a
+# Vyzaduje qemu-system-x86_64, ISO ToaruOS (_import/) a
 # toaru-vm.sh. Bez nich se test jen preskoci (vypise se proc). TOARU_PORT (8017).
 # POZOR: jeden NN-*.sh se nesmi spustit dvakrat soucasne (sdileji _output a _build/vystup).
 
@@ -22,9 +22,26 @@ HERE=$(cd "$(dirname "$0")" && pwd)   # common.sh changes the directory, so reme
 begin toaruos-tcc
 
 TOOLS=$TOP/toaruos-tools
-ISO=$TOOLS/_build/download/toaruos-2.3.2.iso
+ISO=$TOP/_import/toaruos-2.3.2.iso
 PORT=${TOARU_PORT:-8017}
 D=$V/toaruos-tcc; mkdir -p $D
+
+# ISO ToaruOS 2.3.2: kdyz chybi, stahne se z vydani na GitHubu (curl) a overi se md5
+ISO_URL=https://github.com/klange/toaruos/releases/download/v2.3.2/image.iso
+ISO_MD5=0043dba93a361b908814a03be2ba7ab2
+if [ ! -f "$ISO" ] && command -v curl > /dev/null
+then
+   mkdir -p "$(dirname "$ISO")"
+   echo "  toaruos-tcc: stahuji ISO ToaruOS 2.3.2 (~7.5 MB) z $ISO_URL" >&2
+   if curl -fL --retry 2 --progress-bar -o "$ISO.part" "$ISO_URL" && \
+      [ "$(md5sum "$ISO.part" | cut -d' ' -f1)" = "$ISO_MD5" ]
+   then
+      mv "$ISO.part" "$ISO"
+   else
+      rm -f "$ISO.part"
+      echo "  toaruos-tcc: stazeni $ISO_URL selhalo nebo md5 nesouhlasi" >&2
+   fi
+fi
 
 if ! { command -v qemu-system-x86_64 > /dev/null && [ -f "$ISO" ] && command -v python3 > /dev/null; }
 then
@@ -65,5 +82,4 @@ cecko_stop
 $VM stop > /dev/null
 
 report toaruos-tcc "cmini a pasm v ToaruOS: programy prelozene v ToaruOS, vystup = vzor"
-[ -n "$CECKO_WALL" ] && echo "$CECKO_WALL"
 finish

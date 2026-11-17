@@ -11,3 +11,5 @@ __pycache__/
 # verified prebuilt ToaruOS probe programs are kept
 !toaruos-tools/probe/*.elf
 !toaruos-tools/probe/counterexample/*.elf
+# downloaded files (ISO, sources) - outside _build, not backed up
+_import/

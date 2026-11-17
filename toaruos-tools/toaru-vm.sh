@@ -14,7 +14,7 @@
 set -u
 
 DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-ISO=${ISO:-${DIR}/_build/download/toaruos-2.3.2.iso}
+ISO=${ISO:-${DIR}/../_import/toaruos-2.3.2.iso}
 SHARE=${SHARE:-${DIR}/_build/share.img}
 WORK=${WORK:-${DIR}/_build/work}
 RAM=${RAM:-1024}
@@ -23,6 +23,13 @@ FIFO=${WORK}/in
 OUT=${WORK}/out.log
 PIDF=${WORK}/qemu.pid
 HOLDERF=${WORK}/holder.pid
+# Okno QEMU: jen pri grafickem displeji (DISPLAY / WAYLAND_DISPLAY) a kdyz TOARU_GUI neni 0
+# (tests/output.sh nastavi TOARU_GUI=0). Serial line (mon:stdio) zustava pro ovladani skripty.
+if [[ "${TOARU_GUI:-1}" != 0 && ( -n "${DISPLAY:-}" || -n "${WAYLAND_DISPLAY:-}" ) ]]; then
+    DISPLAY_OPT=(-display "${TOARU_DISPLAY:-gtk}")
+else
+    DISPLAY_OPT=(-nographic)
+fi
 
 die() { echo "error: $*" >&2; exit 1; }
 
@@ -75,7 +82,7 @@ do_start() {
         -netdev user,id=n0 -device e1000,netdev=n0 \
         -fw_cfg name=opt/org.toaruos.bootmode,string=headless \
         -fw_cfg name=opt/org.toaruos.gettyargs,string='-a root /dev/ttyS1 115200 linux' \
-        -no-reboot -nographic -serial null -serial mon:stdio \
+        -no-reboot "${DISPLAY_OPT[@]}" -serial null -serial mon:stdio \
         < "$FIFO" > "$OUT" 2>&1 &
     echo $! > "${PIDF}"
     # take cmdline only after qemu has exec'd (right after & it may still be a bash subprocess; stop would

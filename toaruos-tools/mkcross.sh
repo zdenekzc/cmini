@@ -4,7 +4,7 @@
 #                                tests/examples, README.txt
 #   _build/push/cecko-toaru.tar.gz   the same as an archive (tests/15, tests/16 send it to the host)
 #
-#   ./mkcross.sh          (tree built - make all; ISO in _build/download)
+#   ./mkcross.sh          (tree built - make all; ISO in _import/)
 #
 # On ToaruOS, gcc (package build-essential) and ld.so are NOT needed:
 #   - compilation: host gcc with ToaruOS headers (_build/toaru-include from ISO,
@@ -74,7 +74,6 @@ link "$OUT/cecko/bin/cmini.bin" $CMINI $PASMLIB
 cp -a "$TOP/cmini/ownheaders" "$OUT/cecko/include"
 cp "$TOP"/tests/examples/*.cc "$OUT/cecko/tests/examples/"
 cp "$TOP/asm/tests/libc64.asm" "$TOP/asm/tests/sse64.asm" "$OUT/cecko/tests/"
-cp "$DIR/guest-scripts/get-wallpapers.sh" "$OUT/cecko/"       # wallpapers from GitHub (fetch-tls)
 cat > "$OUT/cecko/README.txt" <<'EOF'
 cecko for ToaruOS - compilers built on the host (toaruos-tools/mkcross.sh),
 statically linked with ToaruOS libc: no gcc or ld.so needed. In ToaruOS:
@@ -86,10 +85,6 @@ statically linked with ToaruOS libc: no gcc or ld.so needed. In ToaruOS:
                                        c-mini, ToaruOS libc from /lib (pasm linker)
   export PASM_LIBDIR=/lib
   bin/pasm.bin -x tests/libc64.asm     assembler + linker => tests/libc64.bin
-
-Classic ToaruOS wallpapers from GitHub into /usr/share/wallpapers (network;
-first the fetch-tls package - the basic fetch cannot do HTTPS):
-  sh get-wallpapers.sh            (as root; in the window: sudo sh get-wallpapers.sh, password local)
 
 Source texts (gcc from "msk install build-essential" compiles them, network):
   cmini-src.tar.gz  - tar xzf ...; cd cmini-src; sh build.sh      => cmini.bin, pasm.bin

@@ -249,7 +249,7 @@ stale=$(find "$DIR/_build/work" -maxdepth 1 -name '*.pid' 2>/dev/null)
 if [[ ${QEMU:-0} == 1 ]]; then
     echo "== T6 QEMU (enabled by QEMU=1) =="
     [[ -r /dev/kvm && -w /dev/kvm ]] || skip "no /dev/kvm"
-    [[ -f $DIR/_build/download/toaruos-2.3.2.iso ]] || skip "missing ISO"
+    [[ -f $DIR/../_import/toaruos-2.3.2.iso ]] || skip "missing ISO"
     # deliberately we start nothing ourselves: starting the VM is left to a person (the VM holds a lock on _build/share.img)
     skip "starting the VM is left to a person (lock on _build/share.img)"
 else

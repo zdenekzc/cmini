@@ -12,11 +12,7 @@
 #                             guest-cmini-T    cmini -T dama.c (vlastni knihovna)
 #                             guest-cmini-L    cmini -L /lib classes.c (libc ToaruOS)
 #                             guest-pasm-x     pasm -x libc64.asm (assembler + linker)
-#                           vystupy <adresar>/guest-*.out, check proti vzorum;
-#                           pak /tmp/cecko/get-wallpapers.sh (je-li TOARU_WALLPAPERS
-#                           jine nez 0): msk install fetch-tls a klasicke tapety
-#                           z GitHubu (HTTPS) do /usr/share/wallpapers - vysledek
-#                           v CECKO_WALL (vypisuje test za report), <adresar>/wallpapers.txt
+#                           vystupy <adresar>/guest-*.out, check proti vzorum
 #   cecko_stop              zastavi HTTP server
 #
 # Zdroje cmini-src se v hostovi nepreklada (gcc z msk install
@@ -76,14 +72,6 @@ cecko_guest ()
          $T/cecko.log | sed '$ { /^$/ d }' > $G/$p.out
       check $G/$p.out $p
    done
-   if [ "${TOARU_WALLPAPERS:-1}" != 0 ]; then
-      # tapety z GitHubu: neni-li sit, test se nezhorsi - jen se vypise
-      cecko_run wallpapers "cd /tmp/cecko" "sh /tmp/cecko/get-wallpapers.sh"
-      $VM log 1000000 | awk -v b="==BEG-wallpapers-$RUN==" -v e="==END-wallpapers-$RUN==" \
-         '$0==b{f=1;next} $0==e{f=0} f && !/^root@/' > $G/wallpapers.txt
-      n=$(grep -cE ' [1-9][0-9]* .*(hanging|nagoya|flowers)\.jpg$' $G/wallpapers.txt)
-      CECKO_WALL=$(printf "  %-17s     tapety z GitHubu v /usr/share/wallpapers: %d / 3 (get-wallpapers.sh, fetch-tls)" "" $n)
-   fi
 }
 
 cecko_stop ()

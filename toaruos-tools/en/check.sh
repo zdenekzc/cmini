@@ -22,7 +22,7 @@
 #   T5  toaru-vm.sh is controllable even without a running VM (help, status, send refusal)
 #       and _build/work/ contains no stray *.pid (kill on a recycled PID!)
 #   T6  mktcc.sh => builds a cross tcc for ToaruOS and its images meet the loader
-#       requirements (README §5i); offline, only _build/download/tinycc must exist
+#       requirements (README §5i); offline, only _import/tinycc must exist
 #   T7  QEMU - normally SKIPPED, enabled with QEMU=1
 #
 # T4 deliberately does not touch _build/share.img — QEMU takes a write lock on it.
@@ -278,8 +278,8 @@ stale=$(find "$DIR/_build/work" -maxdepth 1 -name '*.pid' 2>/dev/null)
 echo "== T6 mktcc.sh: cross tcc for ToaruOS and its images (without VM) =="
 # it is built here every time, because there are more checks the image must pass than
 # "it compiled" - an image with PIE or without an __init_array array will fail in the host
-if [[ ! -d $DIR/_build/download/tinycc ]]; then
-    skip "missing clone _build/download/tinycc (./mktcc.sh -p)"
+if [[ ! -d $DIR/../../_import/tinycc ]]; then
+    skip "missing clone _import/tinycc (./mktcc.sh -p)"
 elif ! "$DIR/mktcc.sh" > "$TMP/mktcc.log" 2>&1; then
     bad "mktcc.sh failed"; tail -8 "$TMP/mktcc.log" | sed 's/^/    | /'
 else
@@ -297,7 +297,7 @@ fi
 if [[ ${QEMU:-0} == 1 ]]; then
     echo "== T7 QEMU (zapnuto QEMU=1) =="
     [[ -r /dev/kvm && -w /dev/kvm ]] || skip "no /dev/kvm"
-    [[ -f $DIR/_build/download/toaruos-2.3.2.iso ]] || skip "missing ISO"
+    [[ -f $DIR/../../_import/toaruos-2.3.2.iso ]] || skip "missing ISO"
     # deliberately we start nothing ourselves: start is up to the human, the VM holds a lock on _build/share.img
     skip "leaving VM start to the human (lock on _build/share.img)"
 else

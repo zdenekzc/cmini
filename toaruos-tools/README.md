@@ -37,10 +37,13 @@ probe/                  the smallest possible ELF64 with which we verify the Toa
                         for check.sh T1b and make test-toaru
   counterexample/       images at 0x400000 = CONTRAST, which will NOT run in the host
 
-_build/                 DOWNLOADED AND GENERATED files (not part of a backup, see §0a)
-  download/toaruos-2.3.2.iso   release ISO of ToaruOS v2.3.2 (7.5 MB, downloaded from the
+_import/                ../_import/ in the cecko tree: DOWNLOADED files, outside _build (not part
+                        of a backup, make clean does not delete them)
+  toaruos-2.3.2.iso     release ISO of ToaruOS v2.3.2 (7.5 MB, downloaded from the
                         v2.3.2 release of the klange/toaruos project on GitHub;
-                        md5 0043dba93a361b908814a03be2ba7ab2)
+                        md5 0043dba93a361b908814a03be2ba7ab2; tests/04 downloads it itself)
+
+_build/                 GENERATED files (not part of a backup, see §0a)
   share.img             ext2 disk, which the host offers to the guest (64 MB, mkshare.sh)
   push/                 what should get inside:
     cmini-src.tar.gz    mkpkg.sh
@@ -144,10 +147,9 @@ in ToaruOS (`-I include`) are not changed. `guest/regenerate/gen*.sh` read trees
 
 ## 0a. Layout of the directory (2026-11-11)
 
-Downloaded and generated files are in `_build/` (as well as `_build/` in the whole
-cecko tree - `cecko-files.py` does not back it up and it can be deleted at any time; the ISO then
-has to be downloaded again into `_build/download/`).  Moved:
-`img/toaruos-2.3.2.iso` => `_build/download/`, `img/share.img` => `_build/`,
+Downloaded files are in `_import/` (in the cecko tree; `cecko-files.py` does not back it up, and
+`make clean` does not delete it). Generated files are in `_build/` (it can be deleted at any time).
+Moved: `img/toaruos-2.3.2.iso` => `_import/`, `img/share.img` => `_build/`,
 `push/` => `_build/push/`, `work/` => `_build/work/`, `probe/probe1.elf`,
 `probe/probe2.elf` (output of probe/build.sh) => `_build/probe/`,
 `_preklad/asm/pasm.bin`, `libpasm.a` => `_build/guest-src-prebuilt/asm/`.
@@ -608,20 +610,6 @@ from `msk install build-essential`, §5e) and verify the 3 steps above directly
 in the host (`_output/toaruos*/cecko/guest-*.out`: dama, classes, libc64 -
 all identical to the pattern).  In the window (test 15) `run.sh` fetches them and prints the instructions;
 verified also by hand in the terminal (cmini -T jezdec.c => O.K.).
-
-### Wallpapers from GitHub (`guest-scripts/get-wallpapers.sh`, 2026-11-11)
-
-The script in the package `cecko-toaru.tar.gz` (=> `/tmp/cecko/get-wallpapers.sh`) downloads the
-classic wallpapers `hanging.jpg` (v2.2.0), `nagoya.jpg` and `flowers.jpg` (v2.1.0)
-from raw.githubusercontent.com into `/usr/share/wallpapers`.  The `fetch` of the base system
-only does HTTP (`fetch: no tls backend`) and GitHub redirects HTTP to HTTPS => the script first does
-`echo y | msk install fetch-tls` (msk goes over HTTP;
-with it also `libmbedtls`, `ca-certificates`), then `fetch -o ... https://...`.
-Sizes identical to GitHub (517 709, 659 598, 484 300 B).  tests/15 and 16 run it after the compilers
-(as root; `TOARU_WALLPAPERS=0` turns it off) and print
-`wallpapers ... 3 / 3`; in the window (user local) `sudo sh /tmp/cecko/get-wallpapers.sh`,
-password `local` - verified.  (In msk there is also the package `wallpapers` - "Classic ToaruOS
-wallpapers".)
 
 ## 6. Is C++→C converter `cmini.bin -C` sold through us?
 `prod.cc` **yes** (21 kB of C, `cmini.bin -C` converted it without a report),

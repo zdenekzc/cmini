@@ -3,7 +3,7 @@
 #   _build/toaru-lib/  crt0.o crti.o crtn.o libc.a   (from /lib of the ToaruOS base system)
 #   _build/toaru-include/   ToaruOS /usr/include headers (cross compilation, mkcross.sh)
 #
-#   ./mklibc.sh                 from _build/download/toaruos-2.3.2.iso
+#   ./mklibc.sh                 from _import/toaruos-2.3.2.iso
 #   ISO=/path ./mklibc.sh
 #
 # The files are directly in the ISO (no package from msk): ISO 9660 => fat.img (FAT12) =>
@@ -11,7 +11,7 @@
 set -euo pipefail
 
 DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-ISO=${ISO:-${DIR}/_build/download/toaruos-2.3.2.iso}
+ISO=${ISO:-${DIR}/../../_import/toaruos-2.3.2.iso}
 OUT=${OUT:-${DIR}/_build/toaru-lib}
 INC=${INC:-${DIR}/_build/toaru-include}
 
