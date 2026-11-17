@@ -1,4 +1,6 @@
 #include <stdio.h>
+#include <iostream>
+using namespace std;
 
 const int N = 8;
 const int limit = 100;
@@ -36,7 +38,7 @@ void search (int i, int k)
     if (i >= 0 && k >= 0)
     {
         search (zx[i][k], zy[i][k]);
-        printf ("%d,%d\n", i, k);
+        cout << i << "," << k << endl;
     }
 }
 
@@ -57,17 +59,17 @@ int main()
         for (int k = 0; k < N; k++)
         {
             if (p[i][k] == -1)
-                printf (".");
+                cout << ".";
             else
-                printf ("%d", p[i][k]);
-            printf (" ");
+                cout << p[i][k];
+            cout << " ";
         }
-        printf ("\n");
+        cout << endl;
     }
 
-    printf ("--------\n");
+    cout << "--------" << endl;
 
     search (N-1, N-1);
 
-    printf ("O.K.\n");
+    cout << "O.K." << endl;
 }

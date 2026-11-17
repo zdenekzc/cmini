@@ -1,4 +1,6 @@
 #include <stdio.h>
+#include <iostream>
+using namespace std;
 
 const int Max = 4;
 
@@ -108,7 +110,7 @@ void print (Item * p)
         for (int i = 0; i < p->cnt; i++)
         {
             print (p->ref[i]);
-            printf ("%d\n", p->key[i]);
+            cout << p->key[i] << endl;
         }
         print (p->ref[p->cnt]);
     }

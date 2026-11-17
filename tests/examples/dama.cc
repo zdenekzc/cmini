@@ -1,4 +1,6 @@
 #include <stdio.h>
+#include <iostream>
+using namespace std;
 
 const int N = 8;
 
@@ -23,8 +25,8 @@ void place (int s)
             else 
             {
                 cnt++;
-                for (int i = 0; i < N; i++) printf ("%d ", p[i]);
-                printf (" : %d\n", cnt);
+                for (int i = 0; i < N; i++) cout << p[i] << " ";
+                cout << " : " << cnt << endl;
             }
         }
     }
@@ -34,5 +36,5 @@ int main ()
 {
     for (int i = 0; i < N; i++) p[i] = -1;
     place(0);
-    printf ("O.K.\n"); 
+    cout << "O.K." << endl; 
 }

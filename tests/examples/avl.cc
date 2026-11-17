@@ -1,4 +1,6 @@
 #include <stdio.h>
+#include <iostream>
+using namespace std;
 
 struct Item
 {
@@ -129,9 +131,9 @@ void print (Item * branch, int level = 0)
     if (branch != nullptr) 
     {
         for (int i = 0; i < level; i++) 
-            printf ("-");
+            cout << "-";
 
-        printf ("%d (%d)\n", branch->key, branch->height);
+        cout << branch->key << " (" << branch->height << ")" << endl;
 
         print (branch->left, level+1);
         print (branch->right, level+1);
@@ -151,7 +153,7 @@ void checkBranch (Item * branch)
         if (! first)
            if (last_value >= branch->key)
            {
-               printf ("CHYBA\n");
+               cout << "CHYBA" << endl;
                ok = false;
            }
 
@@ -166,7 +168,7 @@ void check (Item * root)
    ok = true;
    first = true;
    checkBranch (root);
-   if (ok) printf ("O.K.\n");
+   if (ok) cout << "O.K." << endl;
 }
 
 int main()
@@ -182,6 +184,6 @@ int main()
     if (N <= 1000)
        print (root);
 
-    printf ("Vyska stromu %d\n", h(root));
+    cout << "Vyska stromu " << h(root) << endl;
     check (root);
 }

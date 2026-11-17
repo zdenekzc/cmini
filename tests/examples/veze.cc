@@ -1,4 +1,6 @@
 #include <stdio.h>
+#include <iostream>
+using namespace std;
 #include <assert.h>
 
 const int N = 5; // pocet disku
@@ -29,19 +31,19 @@ void init (Vez & X)
 void zobraz (Vez & X)
 {
     for (int i = 0; i < X.v; i++)
-        printf ("%d", X.p[i]);
+        cout << X.p[i];
     for (int i = X.v; i <= N; i++)
-        printf (" "); // dopln mezerami
+        cout << " "; // dopln mezerami
 }
 
 void tiskni (Vez & X, Vez & Y, Vez & Z)
 {
     zobraz (X);
-    printf (" : ");
+    cout << " : ";
     zobraz (Y);
-    printf (" : ");
+    cout << " : ";
     zobraz (Z);
-    printf ("\n");
+    cout << endl;
 }
 
 void krok (Vez & X, Vez & Y) // presun disku z veze X na nez Y
@@ -82,6 +84,6 @@ int main (int argc, char * argv [])
     tiskni (A, B, C); // pocatecni stav
     hraj (A, B, C, N); // A --> C, B je pomocna vez, preneseme N disku
 
-    printf ("O.K.\n");
+    cout << "O.K." << endl;
     return 0;
 }

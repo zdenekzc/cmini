@@ -1,4 +1,6 @@
 #include <stdio.h>
+#include <iostream>
+using namespace std;
 #include <stdlib.h> /* srand, rand */
 #include <time.h>   /* time */
 
@@ -49,9 +51,9 @@ int main()
     bool ok = true;
     for (int i = 0; i < N; i++)
     {
-        printf ("%d", a[i]);
-        if (i < N - 1 && a[i] > a[i + 1]) { ok = false; printf (" CHYBA"); }
-        printf ("\n");
+        cout << a[i];
+        if (i < N - 1 && a[i] > a[i + 1]) { ok = false; cout << " CHYBA"; }
+        cout << endl;
     }
-    if (ok)  printf ("O.K.\n");
+    if (ok)  cout << "O.K." << endl;
 }
