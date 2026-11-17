@@ -1,47 +1,47 @@
 /* TRANSLATE.CC */
 
 /*
-   Preklad z cmini do jazyka C.
+   Translation from cmini to C.
 
-   cmini = podmnozina C++, kterou zpracuje cparser (decl.c, expr.c,
-   stat.c, lexer.c): tridy s jednoduchou dedicnosti, konstruktory,
-   destruktory, virtualni metody, dynamic_cast, reference, implicitni
-   hodnoty parametru, new / delete a vestavene typy std::string,
-   Sequence <T>, Dictionary <K, V>.  Prekladac precte zdrojovy text
-   stejne jako generatory instr*.cc (strom v glist, printlist, classlist)
-   a vypise program v C (C99), ktery pouziva behovou knihovnu cminirt.h / cminirt.c.
+   cmini = subset of C++ processed by cparser (decl.c, expr.c,
+   stat.c, lexer.c): classes with single inheritance, constructors,
+   destructors, virtual methods, dynamic_cast, references, default
+   parameter values, new / delete and built-in types std::string,
+   Sequence <T>, Dictionary <K, V>.  The compiler reads the source text
+   the same way as the generators instr*.cc (tree in glist, printlist, classlist)
+   and prints a program in C (C99), which uses the runtime library cminirt.h / cminirt.c.
 
-   Pouziti:
-      cmini.bin -C [-I adresar] [-D jmeno[=hodnota]] [-o vystup.c] soubor.cc
+   Usage:
+      cmini.bin -C [-I directory] [-D name[=value]] [-o output.c] file.cc
 
-      -I  adresar nahradnich systemovych hlavicek (cmini/ownheaders/); deklarace
-          z techto souboru se do vystupu neprepisuji, misto nich se
-          vlozi #include <...> (cstdio => stdio.h, ...)
-      -iquote  adresar hlavicek programu (napr. ../gram pro zdroje cmm) -
-          hledaji se v nem #include "...", deklarace se prekladaji
+      -I  directory with replacement system headers (cmini/ownheaders/); declarations
+          from these files are not written to the output, instead
+          #include <...> is inserted (cstdio => stdio.h, ...)
+      -iquote  directory of program headers (e.g. ../gram for cmm sources) -
+          #include "..." is searched in it, declarations are translated
 
-   Preklad:
-      tridy        struct se vsemi polozkami (polozky baze na zacatku, takze
-                   B * lze pretypovat na A *), metoda  T::f  =>  T_f (T * this, ...),
-                   konstruktor T_ctor (T * this, ...) vraci this,
-                   destruktor T_dtor, new T (...) => T_new (...),
+   Translation:
+      classes      struct with all members (base members at the start, so
+                   B * can be cast to A *), method  T::f  =>  T_f (T * this, ...),
+                   constructor T_ctor (T * this, ...) returns this,
+                   destructor T_dtor, new T (...) => T_new (...),
                    delete p => T_delete (p)
-      virtualni    ukazatel vptr na tabulku T_vtbl (polozka info = jmeno tridy
-      metody       a baze pro dynamic_cast, potom ukazatele na metody),
-                   volani pres T_f_virtual (this, ...)
-      std::string  cm_string (char *, retezec se nemeni, NULL = "")
-      Sequence     cm_Seq, makra CM_SEQ_AT, CM_SEQ_ADD, ...
-      Dictionary   cm_Dict, makra CM_DICT_REF, CM_DICT_GET, ...
-      reference    ukazatel (T & x => T * x, pouziti (*x))
-      lokalni objekty s destruktorem - volani destruktoru na konci bloku,
-                   pred return, break a continue
-      globalni objekty s konstruktorem - funkce cm_global_init (pred main),
-                   destruktory pres atexit
+      virtual      vptr pointer to table T_vtbl (item info = class name
+      methods      and base for dynamic_cast, then pointers to methods),
+                   call via T_f_virtual (this, ...)
+      std::string  cm_string (char *, string is not changed, NULL = "")
+      Sequence     cm_Seq, macros CM_SEQ_AT, CM_SEQ_ADD, ...
+      Dictionary   cm_Dict, macros CM_DICT_REF, CM_DICT_GET, ...
+      reference    pointer (T & x => T * x, use (*x))
+      local objects with destructor - destructor called at end of block,
+                   before return, break and continue
+      global objects with constructor - function cm_global_init (before main),
+                   destructors via atexit
 */
 
 #include "decl.h"
 #include "lexer.h"
-#include "util.h"   /* Dict, StrEq, ReadFile (spolecne s instr.c) */
+#include "util.h"   /* Dict, StrEq, ReadFile (shared with instr.c) */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -50,11 +50,11 @@
 
 /******************************* UTILITIES ********************************/
 
-/* text podle formatu (printf): Fmt (...) v nove alokovane pameti, PutF (...) na vystup;
-   makra misto funkci s promennym poctem parametru (va_list) - ty cmini nezvlada
-   (translate.c se prelozi i sam sebou, test_instr_lexer.bin -0);
-   argumenty se vyhodnoti jen jednou, vnorene Fmt vraci kopii => FmtBuf lze sdilet */
-#define FMT_MAX 262144   /* pasm: segment dat < 512 kB */
+/* text by format (printf): Fmt (...) into newly allocated memory, PutF (...) to output;
+   macros instead of functions with variable number of parameters (va_list) - cmini does not handle those
+   (translate.c is also translated by itself, test_instr_lexer.bin -0);
+   arguments are evaluated only once, nested Fmt returns a copy => FmtBuf can be shared */
+#define FMT_MAX 262144   /* pasm: data segment < 512 kB */
 static char FmtBuf [FMT_MAX];
 
 static int FmtCheck (int n)
@@ -78,7 +78,7 @@ static char * FmtDup (int n)
 #define Fmt(...) FmtDup (snprintf (FmtBuf, FMT_MAX, __VA_ARGS__))
 
 static void TrError (const char * msg)
-/* chyba prekladu do C */
+/* translation error to C */
 {
   fprintf (stderr, "translate: error: %s\n", msg);
   exit (1);
@@ -86,7 +86,7 @@ static void TrError (const char * msg)
 
 /* ---------------------------------------------------------------------- */
 
-/* tabulka ukazatel => ukazatel (Dict z util.c; chybejici klic => NULL) */
+/* table pointer => pointer (Dict from util.c; missing key => NULL) */
 
 static void * PGet (Dict * m, void * k)
 {
@@ -105,7 +105,7 @@ typedef struct
   char * text;
   int    len;
   int    cap;
-  int    ind;     /* odsazeni (pri prepnuti casti) */
+  int    ind;     /* indent (when switching part) */
 }
   BUF;
 
@@ -125,17 +125,17 @@ static const char * BufText (BUF * b)
   return (b->text == NULL) ? "" : b->text;
 }
 
-/* vystup je rozdelen na casti, na konci se spoji v tomto poradi */
+/* output is split into parts, joined in this order at the end */
 static BUF SecTypedef;   /* typedef struct T T; */
-static BUF SecTypes;     /* definice typu, konstanty */
-static BUF SecProto;     /* prototypy funkci */
-static BUF SecVars;      /* globalni promenne, tabulky virtualnich metod */
-static BUF SecFuncs;     /* funkce ze zdrojoveho textu */
-static BUF SecGen;       /* vygenerovane funkce (konstruktory, new, delete, ...) */
+static BUF SecTypes;     /* type definitions, constants */
+static BUF SecProto;     /* function prototypes */
+static BUF SecVars;      /* global variables, virtual method tables */
+static BUF SecFuncs;     /* functions from the source text */
+static BUF SecGen;       /* generated functions (constructors, new, delete, ...) */
 
-static BUF * Out = NULL;   /* &SecFuncs - nastavi main (cmini: adresa v inicializatoru) */
-static int   Ind = 0;       /* odsazeni */
-static bool  Bol = true;    /* zacatek radky */
+static BUF * Out = NULL;   /* &SecFuncs - set by main (cmini: address in initializer) */
+static int   Ind = 0;       /* indent */
+static bool  Bol = true;    /* start of line */
 
 static void Put (const char * s)
 {
@@ -162,7 +162,7 @@ static void PutLn (const char * s)
   Put ("\n");
 }
 
-/* zachyceni vystupu do textu */
+/* capture output into text */
 
 typedef struct
 {
@@ -196,7 +196,7 @@ static char * EndCapture (CAPTURE * c)
   return c->buf.text;
 }
 
-/* prepnuti vystupu do jine casti */
+/* switch output to another part */
 static BUF * Section (BUF * sec)
 {
   BUF * old = Out;
@@ -209,17 +209,17 @@ static BUF * Section (BUF * sec)
 
 /***************************** SOURCE FILES *******************************/
 
-static char * IncDirs [32];      /* -I: adresare nahradnich systemovych hlavicek */
+static char * IncDirs [32];      /* -I: directories with replacement system headers */
 static int    IncCnt = 0;
 
-static Dict   Origin;            /* objekt z printlist => soubor (NULL = hlavni) */
-static Dict   SysTypes;          /* typy definovane v systemovych hlavickach */
+static Dict   Origin;            /* object from printlist => file (NULL = main) */
+static Dict   SysTypes;          /* types defined in system headers */
 
-static char * Headers [64];      /* #include <...> pro vystup */
+static char * Headers [64];      /* #include <...> for output */
 static int    HeaderCnt = 0;
 
 static char * InternFile (const char * name)
-/* stejna jmena souboru => stejny ukazatel (LexCurrentFile se uvolnuje) */
+/* same file names => same pointer (LexCurrentFile is freed) */
 {
   static char * names [256];
   static int cnt = 0;
@@ -232,7 +232,7 @@ static char * InternFile (const char * name)
 }
 
 static const char * SystemHeader (const char * file)
-/* soubor z adresare -I => jmeno hlavicky (cstdio), jinak NULL */
+/* file from -I directory => header name (cstdio), otherwise NULL */
 {
   if (file == NULL) return NULL;
   for (int i = 0; i < IncCnt; i++)
@@ -282,7 +282,7 @@ static bool IsSysType (TypePtr t)
 }
 
 static void MarkSysTypes (TypePtr t, TypePtr desc)
-/* typy definovane v deklaraci ze systemove hlavicky */
+/* types defined in declaration from a system header */
 {
   while (t != NULL || desc != NULL)
   {
@@ -312,7 +312,7 @@ static const char * ClsName (TypePtr cls)
 }
 
 static char * MethodName (ObjectPtr m)
-/* T::f => T_f, konstruktor T_ctor, destruktor T_dtor */
+/* T::f => T_f, constructor T_ctor, destructor T_dtor */
 {
   const char * cls = ClsName (m->owner);
   if (IsCtorDecl (m)) return Fmt ("%s_ctor", cls);
@@ -324,10 +324,10 @@ static char * MethodName (ObjectPtr m)
 
 typedef struct
 {
-  char *    name;      /* jmeno metody ("~" = destruktor) */
-  ObjectPtr decl;      /* metoda, ktera slot zavedla (typ slotu) */
-  TypePtr   intro;     /* trida, ktera slot zavedla */
-  ObjectPtr impl;      /* implementace (NULL = implicitni destruktor tridy impl_cls) */
+  char *    name;      /* method name ("~" = destructor) */
+  ObjectPtr decl;      /* method that introduced the slot (slot type) */
+  TypePtr   intro;     /* class that introduced the slot */
+  ObjectPtr impl;      /* implementation (NULL = implicit destructor of class impl_cls) */
   TypePtr   impl_cls;
 }
   SLOT;
@@ -335,23 +335,23 @@ typedef struct
 typedef struct
 {
   TypePtr  type;
-  bool     poly;           /* ma virtualni metody (i zdedene) */
-  bool     vptr_here;      /* zavadi ukazatel na tabulku virtualnich metod */
+  bool     poly;           /* has virtual methods (also inherited) */
+  bool     vptr_here;      /* introduces pointer to virtual method table */
   SLOT *   slots;
   int      nslots;
-  bool     emitted;        /* definice struktury je ve vystupu */
+  bool     emitted;        /* struct definition is in output */
 
-  /* pozadavky na vygenerovani (na konci prekladu) */
-  bool     want_ctor, done_ctor;      /* implicitni konstruktor */
-  bool     want_dtor, done_dtor;      /* implicitni destruktor */
+  /* requests for generation (at end of translation) */
+  bool     want_ctor, done_ctor;      /* implicit constructor */
+  bool     want_dtor, done_dtor;      /* implicit destructor */
   bool     want_new, done_new;
   bool     want_newarr, done_newarr;
   bool     want_delete, done_delete;
   bool     want_vtable, done_vtable;
   bool     want_info, done_info;
-  bool     want_copy, done_copy;      /* kopie objektu s kontejnery */
-  int      has_cont;                  /* -1 = neurceno */
-  bool *   want_disp;                 /* dispatcher slotu */
+  bool     want_copy, done_copy;      /* object copy with containers */
+  int      has_cont;                  /* -1 = undetermined */
+  bool *   want_disp;                 /* slot dispatcher */
   bool *   done_disp;
 }
   CLS;
@@ -361,7 +361,7 @@ static Dict Classes;
 static CLS * GetCls (TypePtr t);
 
 static void ComputeSlots (CLS * c)
-/* sloty ze spolecne tabulky (sem.c - VtGet) */
+/* slots from shared table (sem.c - VtGet) */
 {
   TypePtr t = c->type;
   c->nslots = VtCount (t);
@@ -376,7 +376,7 @@ static void ComputeSlots (CLS * c)
      c->slots [i].impl_cls = v->impl_cls;
   }
 
-  /* zdedeny virtualni destruktor => implicitni destruktor teto tridy */
+  /* inherited virtual destructor => implicit destructor of this class */
   for (int i = 0; i < c->nslots; i++)
      if (StrEq (c->slots [i].name, "~") && c->slots [i].impl_cls != t)
      {
@@ -411,7 +411,7 @@ static CLS * GetCls (TypePtr t)
 }
 
 static bool HasContainers (TypePtr t)
-/* trida obsahuje Sequence / Dictionary (kopie objektu musi kopirovat i je) */
+/* class contains Sequence / Dictionary (object copy must copy them too) */
 {
   CLS * c = GetCls (t);
   if (c->has_cont >= 0) return c->has_cont;
@@ -436,16 +436,16 @@ static char * EnumBody (TypePtr t);
 static char * StructBody (TypePtr t);
 static void EmitTypeDef (TypePtr t);
 
-static ObjectPtr CurFce = NULL;      /* prekladana funkce */
+static ObjectPtr CurFce = NULL;      /* function being translated */
 
 static Dict TypedefDone;
 
 static bool TypedefName (TypePtr t)
-/* trida nebo vycet ze zdrojoveho textu => typedef (jmeno bez struct / enum);
-   tridy i jen deklarovane (class X;) - typedef struct X X; na zacatku */
+/* class or enum from source text => typedef (name without struct / enum);
+   both classes and only declared ones (class X;) - typedef struct X X; at the start */
 {
   if (t->tag == NULL) return false;
-  if (IsSysType (t)) return t->typedef_tag;   /* typedef struct { ... } ffi_cif; ze systemove hlavicky */
+  if (IsSysType (t)) return t->typedef_tag;   /* typedef struct { ... } ffi_cif; from system header */
   if (IsClsSort (t->sort))
   {
      if (PGet (&TypedefDone, t) == NULL)
@@ -463,7 +463,7 @@ static bool TypedefName (TypePtr t)
 static const char * AliasName (TypePtr n);
 
 static char * BaseSpec (TypePtr n)
-/* zakladni typ deklarace */
+/* base type of declaration */
 {
   const char * cnst = n->Const ? "const " : "";
 
@@ -538,8 +538,8 @@ static char * BaseSpec (TypePtr n)
 static char * ParamsText (TypePtr ft, TypePtr this_cls, bool defn);
 
 static char * Declarator (TypePtr t, TypePtr desc, const char * inner, char * * spec)
-/* deklarator k objektu typu t (desc = typ s aliasy), inner = jmeno;
-   *spec = zakladni typ */
+/* declarator for object of type t (desc = type with aliases), inner = name;
+   *spec = base type */
 {
   char * d = Fmt ("%s", inner);
   bool ptr = false;
@@ -584,7 +584,7 @@ static char * Declarator (TypePtr t, TypePtr desc, const char * inner, char * * 
 }
 
 static char * TypeDecl (TypePtr t, TypePtr desc, const char * name)
-/* deklarace:  typ jmeno */
+/* declaration:  type name */
 {
   char * spec;
   char * d = Declarator (t, desc, name, &spec);
@@ -593,7 +593,7 @@ static char * TypeDecl (TypePtr t, TypePtr desc, const char * name)
 }
 
 static char * TypeName (TypePtr t)
-/* typ bez jmena (pretypovani, sizeof, makra CM_SEQ_...) */
+/* type without name (cast, sizeof, macros CM_SEQ_...) */
 {
   return TypeDecl (t, NULL, "");
 }
@@ -604,8 +604,8 @@ static char * ObjDecl (ObjectPtr obj, const char * name)
 }
 
 static char * ParamsText (TypePtr ft, TypePtr this_cls, bool defn)
-/* parametry funkce;  this_cls != NULL => prvni parametr  T * this;
-   defn = definice (parametry bez jmena dostanou jmeno) */
+/* function parameters;  this_cls != NULL => first parameter  T * this;
+   defn = definition (parameters without name get a name) */
 {
   char * s = Fmt ("%s", "");
   int cnt = 0;
@@ -637,7 +637,7 @@ static char * ParamsText (TypePtr ft, TypePtr this_cls, bool defn)
 }
 
 static char * FuncHead (ObjectPtr f, const char * name, TypePtr this_cls, bool defn)
-/* hlavicka funkce bez storage:  int f (int a, char * b) */
+/* function header without storage:  int f (int a, char * b) */
 {
   TypePtr ft = f->type;
   char * d = Fmt ("%s (%s)", name, ParamsText (ft, this_cls, defn));
@@ -665,7 +665,7 @@ static char * EnumBody (TypePtr t)
 }
 
 static void EnsureTypes (TypePtr t, TypePtr desc)
-/* definice trid a vyctu, ktere jsou soucasti typu (struct X { ... } x;) */
+/* definitions of classes and enums that are part of a type (struct X { ... } x;) */
 {
   while (t != NULL || desc != NULL)
   {
@@ -690,11 +690,11 @@ static void EnsureTypes (TypePtr t, TypePtr desc)
   }
 }
 
-/* polozka odvozene tridy se stejnym jmenem jako polozka baze (skryva ji, C++) - ve
-   strukture C jsou polozky baze i tridy vedle sebe => jmeno_Trida (jako c2c.cc) */
+/* member of derived class with the same name as a member of base (hides it, C++) - in
+   a C struct base and class members are side by side => name_Class (like c2c.cc) */
 static Dict FieldNames;
 
-/* typedef ve tride (typedef ToCpp super; ve vice tridach) => Trida_jmeno (jako c2c.cc) */
+/* typedef in class (typedef ToCpp super; in several classes) => Class_name (like c2c.cc) */
 static Dict NestedTypedefs;
 
 static const char * AliasName (TypePtr n)
@@ -731,7 +731,7 @@ static const char * FName (ObjectPtr f)
 }
 
 static void FieldsText (TypePtr t, char * * s)
-/* polozky struktury vcetne bazovych trid */
+/* struct members including base classes */
 {
   CLS * c = GetCls (t);
   if (t->base != NULL) FieldsText (t->base, s);
@@ -748,7 +748,7 @@ static void FieldsText (TypePtr t, char * * s)
 }
 
 static char * StructBody (TypePtr t)
-/* struct T { polozky } */
+/* struct T { members } */
 {
   char * fields = Fmt ("%s", "");
   FieldsText (t, &fields);
@@ -764,7 +764,7 @@ static void EmitStaticMembers (TypePtr t);
 static Dict TypeDone;
 
 static void EmitTypeDef (TypePtr t)
-/* definice tridy nebo vyctu do SecTypes (jednou) */
+/* class or enum definition into SecTypes (once) */
 {
   if (PGet (&TypeDone, t) != NULL) return;
   if (!t->defined) return;
@@ -773,7 +773,7 @@ static void EmitTypeDef (TypePtr t)
 
   if (t->sort == Enum && CurFce != NULL)
   {
-     /* vycet uvnitr funkce - zustane lokalni (jmena konstant) */
+     /* enum inside function - stays local (constant names) */
      PutF ("%s;\n", EnumBody (t));
      PutF ("typedef enum %s %s;\n", t->tag, t->tag);
      return;
@@ -788,7 +788,7 @@ static void EmitTypeDef (TypePtr t)
      return;
   }
 
-  /* vnorene typy a typy polozek, typedef ve tride => globalni typedef */
+  /* nested types and member types, typedef in class => global typedef */
   if (t->base != NULL) EmitTypeDef (t->base);
   for (NodePtr p = t->list.first; p != NULL; p = p->next)
   {
@@ -812,7 +812,7 @@ static void EmitTypeDef (TypePtr t)
 
   if (c->poly)
   {
-     /* tabulka virtualnich metod:  info, potom sloty (baze nejdrive) */
+     /* virtual method table:  info, then slots (base first) */
      PutF ("struct %s_vtbl\n{\n", ClsName (t));
      PutLn ("    const cm_ClassInfo * info;");
      for (int i = 0; i < c->nslots; i++)
@@ -842,7 +842,7 @@ static void EmitTypeDef (TypePtr t)
 
 /****************************** REQUESTS *********************************/
 
-/* funkce a data generovane na konci prekladu (SecGen), prototypy hned */
+/* functions and data generated at the end of translation (SecGen), prototypes right away */
 
 static void Proto (const char * text)
 {
@@ -858,7 +858,7 @@ static char * CtorParams (TypePtr t, bool defn)
 }
 
 static char * CtorRef (TypePtr t)
-/* konstruktor tridy (implicitni => vygenerovat) */
+/* class constructor (implicit => generate) */
 {
   CLS * c = GetCls (t);
   if (t->ctor == NULL && !c->want_ctor)
@@ -942,7 +942,7 @@ static char * InfoRef (TypePtr t)
 }
 
 static char * DispatchRef (TypePtr cls, ObjectPtr m)
-/* virtualni volani metody m (objekt tridy cls):  Intro_f_virtual */
+/* virtual call of method m (object of class cls):  Intro_f_virtual */
 {
   int i = VtIndex (cls, m->name);
   if (i < 0) TrError (Fmt ("Virtual method %s not found", m->name));
@@ -965,11 +965,11 @@ static char * DispatchRef (TypePtr cls, ObjectPtr m)
 
 /****************************** EXPRESSIONS *******************************/
 
-static TypePtr   CurClass = NULL;    /* trida prekladane metody (this) */
-static TypePtr   CurRet = NULL;      /* typ vysledku */
-static int       CurKind = 0;        /* 0 = funkce, 1 = konstruktor, 2 = destruktor */
+static TypePtr   CurClass = NULL;    /* class of translated method (this) */
+static TypePtr   CurRet = NULL;      /* result type */
+static int       CurKind = 0;        /* 0 = function, 1 = constructor, 2 = destructor */
 static bool      DtorEndUsed = false;
-static int       TmpCount = 0;       /* pomocne promenne (for (T x : seq)) */
+static int       TmpCount = 0;       /* helper variables (for (T x : seq)) */
 
 static void Ex (ExprPtr e);
 static void ExTo (ExprPtr e, TypePtr target);
@@ -1045,7 +1045,7 @@ static void PutQuoted (const char * txt, char quote)
            default:
               snprintf (buf, sizeof (buf), "\\%03o", c);
               Put (buf);
-              buf [1] = 0;   /* dale opet jeden znak */
+              buf [1] = 0;   /* again one character */
               break;
         }
      else
@@ -1060,7 +1060,7 @@ static void PutQuoted (const char * txt, char quote)
 }
 
 static bool IsPrimary (ExprPtr e)
-/* vyraz neni treba zavorkovat pred postfixovym operatorem */
+/* expression does not need parentheses before postfix operator */
 {
   switch (e->op)
   {
@@ -1109,7 +1109,7 @@ static bool IsLValue (ExprPtr e)
   }
 }
 
-static Dict Renamed;                 /* staticke lokalni objekty => globalni jmeno */
+static Dict Renamed;                 /* static local objects => global name */
 
 static const char * VarName (ObjectPtr obj)
 {
@@ -1118,7 +1118,7 @@ static const char * VarName (ObjectPtr obj)
 }
 
 static void ThisExpr (TypePtr owner)
-/* this pretypovany na tridu owner */
+/* this cast to class owner */
 {
   if (CurClass != NULL && owner != NULL && owner != CurClass)
      PutF ("(%s *) this", ClsName (owner));
@@ -1127,7 +1127,7 @@ static void ThisExpr (TypePtr owner)
 }
 
 static void IdentExpr (ExprPtr e, bool addr)
-/* identifikator;  addr = adresa (jen reference: bez dereference) */
+/* identifier;  addr = address (only for reference: without dereference) */
 {
   ObjectPtr obj = e->obj;
   if (obj == NULL)
@@ -1149,9 +1149,9 @@ static void IdentExpr (ExprPtr e, bool addr)
 
   char * text;
   if (obj->owner != NULL && obj->storage == Static)
-     text = Fmt ("%s_%s", ClsName (obj->owner), obj->name);       /* staticka polozka */
+     text = Fmt ("%s_%s", ClsName (obj->owner), obj->name);       /* static member */
   else if (CurClass != NULL && IsField (obj) && IsMemberOf (obj, CurClass))
-     text = Fmt ("this->%s", FName (obj));                        /* polozka this */
+     text = Fmt ("this->%s", FName (obj));                        /* member this */
   else
      text = Fmt ("%s", VarName (obj));
 
@@ -1164,7 +1164,7 @@ static void IdentExpr (ExprPtr e, bool addr)
 /* ---------------------------------------------------------------------- */
 
 static void Addr (ExprPtr e)
-/* adresa l-hodnoty (docasne hodnoty kontejneru a retezce: kopie v pameti) */
+/* address of lvalue (temporary values of containers and strings: copy in memory) */
 {
   ExprPtr x = SkipParens (e);
   if (x->op == IDENT && x->obj != NULL && IsRefT (x->obj->type))
@@ -1184,11 +1184,11 @@ static void Addr (ExprPtr e)
   }
   if (x->op == FCE && CallReturnsRef (x))
   {
-     /* volani bez dereference */
+     /* call without dereference */
      ExprPtr save = x;
      ExprPtr tmp = NEW (Expr);
      *tmp = *save;
-     tmp->type = NULL;          /* priznak: nedereferencovat */
+     tmp->type = NULL;          /* flag: do not dereference */
      Ex (tmp);
      return;
   }
@@ -1209,7 +1209,7 @@ static void Addr (ExprPtr e)
 static void ArgList (TypePtr ft, ExprPtr args, bool first);
 
 static void StrOperand (ExprPtr e)
-/* operand retezcove operace:  std::string, char *, znak */
+/* operand of string operation:  std::string, char *, char */
 {
   TypePtr t = ET (e);
   if (t != NULL && t->sort != StdString && t->sort != Pointer && t->sort != Array && IsIntegerSort (t->sort))
@@ -1223,7 +1223,7 @@ static void StrOperand (ExprPtr e)
 }
 
 static void ExTo (ExprPtr e, TypePtr target)
-/* vyraz e prevedeny na typ target (prirazeni, parametr, return, inicializace) */
+/* expression e converted to type target (assignment, parameter, return, initialization) */
 {
   TypePtr tt = Resolve (target);
   if (tt == NULL)
@@ -1298,7 +1298,7 @@ static void ExTo (ExprPtr e, TypePtr target)
 #define MAX_ARGS 64
 
 static int SplitArgs (ExprPtr args, ExprPtr * list)
-/* argumenty volani (a, b, c) => pole */
+/* call arguments (a, b, c) => array */
 {
   int n = 0;
   while (args != NULL)
@@ -1319,8 +1319,8 @@ static int SplitArgs (ExprPtr args, ExprPtr * list)
 }
 
 static void ArgList (TypePtr ft, ExprPtr args, bool first)
-/* argumenty podle parametru funkce ft (implicitni hodnoty);
-   first = pred argumenty uz neco je (this) => carka */
+/* arguments according to parameter of function ft (default values);
+   first = something already precedes the arguments (this) => comma */
 {
   ExprPtr list [MAX_ARGS];
   int n = SplitArgs (args, list);
@@ -1332,7 +1332,7 @@ static void ArgList (TypePtr ft, ExprPtr args, bool first)
      while (p != NULL && p->item->type != NULL && p->item->type->sort == Void) p = p->next;
      if (p == NULL)
      {
-        /* bez prototypu */
+        /* without prototype */
         for (; i < n; i++)
         {
            if (first) Put (", ");
@@ -1410,7 +1410,7 @@ static void StringMethod (ExprPtr f, ExprPtr args)
 }
 
 static void ContAddr (ExprPtr f)
-/* adresa kontejneru v s.f () / p->f () */
+/* container address in s.f () / p->f () */
 {
   if (f->op == ARROW) Ex (f->e1);
   else Addr (f->e1);
@@ -1508,7 +1508,7 @@ static void DictMethod (ExprPtr f, ExprPtr args, TypePtr dict)
 }
 
 static void MethodCall (ObjectPtr m, TypePtr recv_cls, const char * recv, bool virt, ExprPtr args)
-/* volani metody m, recv = ukazatel na objekt tridy recv_cls */
+/* call of method m, recv = pointer to object of class recv_cls */
 {
   TypePtr owner = m->owner;
   if (virt && m->Virtual)
@@ -1528,7 +1528,7 @@ static void MethodCall (ObjectPtr m, TypePtr recv_cls, const char * recv, bool v
 }
 
 static void Call (ExprPtr e)
-/* volani funkce nebo metody */
+/* call of function or method */
 {
   ExprPtr f = SkipParens (e->e1);
   ExprPtr args = e->e2;
@@ -1538,11 +1538,11 @@ static void Call (ExprPtr e)
      ObjectPtr m = f->obj;
      if (m->owner != NULL && m->method)
      {
-        MethodCall (m, CurClass, "this", true, args);       /* f () v metode */
+        MethodCall (m, CurClass, "this", true, args);       /* f () in method */
         return;
      }
      if (m->owner != NULL)
-        Put (MethodName (m));                                /* staticka metoda */
+        Put (MethodName (m));                                /* static method */
      else if ((StrEq (m->name, "cparser_stderr") || StrEq (m->name, "cparser_stdout")) && IsSystemObj (m))
      {
         Put (m->name + 8);                                   /* cmini/ownheaders/cstdio: stderr, stdout */
@@ -1556,7 +1556,7 @@ static void Call (ExprPtr e)
      return;
   }
 
-  if (f->op == DCOLON)                                       /* T::f () - bez virtualniho volani */
+  if (f->op == DCOLON)                                       /* T::f () - without virtual call */
   {
      ObjectPtr m = f->obj;
      CAPTURE c;
@@ -1581,7 +1581,7 @@ static void Call (ExprPtr e)
      ObjectPtr m = f->obj;
      if (m != NULL && m->fce)
      {
-        if (!m->method)                                      /* staticka metoda pres objekt */
+        if (!m->method)                                      /* static method via object */
         {
            PutF ("%s (", MethodName (m));
            ArgList (m->type, args, false);
@@ -1598,7 +1598,7 @@ static void Call (ExprPtr e)
      }
   }
 
-  /* ukazatel na funkci */
+  /* pointer to function */
   ExP (f);
   Put (" (");
   ArgList (CalleeType (f), args, false);
@@ -1733,7 +1733,7 @@ static void AssignExpr (ExprPtr e)
   TypePtr t1 = ET (e->e1);
   ExprPtr l = SkipParens (e->e1);
 
-  /* reference v konstruktoru:  : r (x) */
+  /* reference in constructor:  : r (x) */
   if (e->op == ASSIGN && l->op == IDENT && l->obj != NULL && IsRefT (l->obj->type) && IsRefT (l->type))
   {
      IdentExpr (l, true);
@@ -1742,7 +1742,7 @@ static void AssignExpr (ExprPtr e)
      return;
   }
 
-  /* s [i] = c  =>  cm_str_set (&s, i, c)  (kopie retezce) */
+  /* s [i] = c  =>  cm_str_set (&s, i, c)  (copy of string) */
   if (e->op == ASSIGN && l->op == LBRACK && IsStrT (ET (l->e1)))
   {
      Put ("cm_str_set (");
@@ -1765,8 +1765,8 @@ static void AssignExpr (ExprPtr e)
      return;
   }
 
-  /* rez:  base = derived  =>  (x = * (Base *) & (d), x.vptr = &Base_vtable, x)
-     - kopie polozek baze, cil si ponecha tabulku virtualnich metod sveho typu */
+  /* cast:  base = derived  =>  (x = * (Base *) & (d), x.vptr = &Base_vtable, x)
+     - copy of base members, the target keeps the virtual method table of its own type */
   TypePtr c1 = t1 != NULL ? Resolve (t1) : NULL;
   TypePtr c2 = ET (e->e2) != NULL ? Resolve (ET (e->e2)) : NULL;
   if (e->op == ASSIGN && c1 != NULL && c2 != NULL && IsClsSort (c1->sort) && IsClsSort (c2->sort) && c1 != c2)
@@ -2009,7 +2009,7 @@ static void Ex (ExprPtr e)
 
      default:
      {
-        /* binarni operatory */
+        /* binary operators */
         bool str = IsStrT (ET (e->e1)) || IsStrT (ET (e->e2));
         if (str && e->op == PLUS)
         {
@@ -2029,7 +2029,7 @@ static void Ex (ExprPtr e)
            PutF (") %s 0)", OpText (e->op));
            break;
         }
-        /* ukazatele na ruzne tridy (baze a odvozena):  p == q */
+        /* pointers to different classes (base and derived):  p == q */
         TypePtr c1 = PtrClass (ET (e->e1));
         TypePtr c2 = PtrClass (ET (e->e2));
         if (c1 != NULL && c2 != NULL && c1 != c2)
@@ -2048,7 +2048,7 @@ static void Ex (ExprPtr e)
 }
 
 static void InitList (ExprPtr e, TypePtr t)
-/* { a, b, c } - prvky prevedene na typ prvku pole t */
+/* { a, b, c } - elements converted to element type of array t */
 {
   TypePtr elem = NULL;
   t = Resolve (t);
@@ -2058,7 +2058,7 @@ static void InitList (ExprPtr e, TypePtr t)
   ExprPtr list [4096];
   int n = 0;
   ExprPtr x = e->e1;
-  /* calc (t1, t2, COMMA) vytvari levou rekurzi:  ((a, b), c) */
+  /* calc (t1, t2, COMMA) creates left recursion:  ((a, b), c) */
   while (x != NULL && x->op == COMMA && n < 4096)
   {
      list [n ++] = x->e2;
@@ -2077,11 +2077,11 @@ static void InitList (ExprPtr e, TypePtr t)
 
 /******************************* STATEMENTS *******************************/
 
-/* lokalni objekty s destruktorem v otevrenych blocich */
+/* local objects with destructor in open blocks */
 
 enum { SC_BLOCK, SC_LOOP, SC_SWITCH };
 
-typedef struct SCOPE_REC SCOPE;   /* predem - ukazatel na sebe (cmm nezna struct X * v polozce) */
+typedef struct SCOPE_REC SCOPE;   /* forward - pointer to itself (cmm does not know struct X * in a member) */
 struct SCOPE_REC
 {
   int                kind;
@@ -2118,7 +2118,7 @@ static void AddDtorObj (ObjectPtr obj)
 }
 
 static void DtorCall (TypePtr cls, const char * addr)
-/* destruktor objektu na adrese addr (virtualni neni treba - presny typ) */
+/* destructor of object at address addr (virtual not needed - exact type) */
 {
   PutF ("%s (%s);\n", DtorRef (cls), addr);
 }
@@ -2143,7 +2143,7 @@ static void DestroyScope (SCOPE * s)
 }
 
 static bool PendingDtors (SCOPE * upto, bool through)
-/* jsou objekty k zruseni v blocich nad upto (through = vcetne upto) */
+/* are there objects to destroy in blocks above upto (through = including upto) */
 {
   for (SCOPE * s = Scopes; s != NULL; s = s->up)
   {
@@ -2174,7 +2174,7 @@ static void LocalDecl (ObjectPtr obj);
 static char * FuncName (ObjectPtr f);
 
 static void SubStat (StatPtr s)
-/* telo if, while, for */
+/* body of if, while, for */
 {
   if (s->st == LBRACE)
      St (s);
@@ -2199,14 +2199,14 @@ static bool IsJump (StatPtr s)
 }
 
 static void Block (StatPtr first, StatPtr prefix_decl)
-/* prikazy bloku (bez { }) - destruktory na konci */
+/* statements of block (without { }) - destructors at the end */
 {
   (void) prefix_decl;
   StatPtr last = NULL;
   for (StatPtr p = first; p != NULL; p = p->next)
   {
      St (p);
-     /* navesti pred deklaraci (C pred C23 nedovoluje) */
+     /* label before declaration (C before C23 does not allow it) */
      if ((p->st == CASE_ || p->st == DEFAULT_) && p->next != NULL && p->next->st == DECL)
         PutLn (";");
      last = p;
@@ -2216,7 +2216,7 @@ static void Block (StatPtr first, StatPtr prefix_decl)
 
 static void ReturnStat (StatPtr s)
 {
-  if (CurKind == 2)                       /* destruktor: zbytek destruktoru */
+  if (CurKind == 2)                       /* destructor: rest of destructor */
   {
      DtorEndUsed = true;
      PutLn ("goto cm_dtor_end;");
@@ -2238,7 +2238,7 @@ static void ReturnStat (StatPtr s)
      return;
   }
 
-  /* return e;  =>  { T cm_ret = e; destruktory; return cm_ret; } */
+  /* return e;  =>  { T cm_ret = e; destructors; return cm_ret; } */
   PutLn ("{");
   Ind ++;
   if (s->e1 != NULL && value == NULL)
@@ -2261,7 +2261,7 @@ static void ReturnStat (StatPtr s)
 }
 
 static void JumpStat (StatPtr s)
-/* break, continue - destruktory objektu z bloku uvnitr cyklu */
+/* break, continue - destructors of objects from blocks inside the loop */
 {
   const char * text = (s->st == BREAK_) ? "break;" : "continue;";
   SCOPE * loop = FindLoop (s->st == BREAK_);
@@ -2294,7 +2294,7 @@ static void RangeForStat (StatPtr s)
   bool tmp = !IsLValue (s->e1);
   if (tmp)
   {
-     /* posloupnost je vysledek volani - pomocna promenna */
+     /* sequence is the result of a call - helper variable */
      PutLn ("{");
      Ind ++;
      PutF ("cm_Seq * cm_r%d = %s;\n", k, a);
@@ -2484,7 +2484,7 @@ static void St (StatPtr s)
 /****************************** DECLARATIONS ******************************/
 
 static void ConstructObj (TypePtr cls, const char * addr)
-/* volani konstruktoru (bez argumentu) */
+/* call of constructor (without arguments) */
 {
   PutF ("%s (%s", CtorRef (cls), addr);
   if (cls->ctor != NULL) ArgList (cls->ctor->type, NULL, true);
@@ -2492,7 +2492,7 @@ static void ConstructObj (TypePtr cls, const char * addr)
 }
 
 static void ConstructVar (ObjectPtr obj, const char * name)
-/* konstruktory objektu (i pole objektu) */
+/* constructors of objects (also arrays of objects) */
 {
   TypePtr t = Resolve (obj->type);
   if (t->sort == Array)
@@ -2515,7 +2515,7 @@ static bool HasDtor (ObjectPtr obj)
 
 static void LocalDecl (ObjectPtr obj)
 {
-  if (obj->fce) return;                       /* prototyp - prototypy jsou na zacatku */
+  if (obj->fce) return;                       /* prototype - prototypes are at the start */
 
   if (obj->storage == Typedef)
   {
@@ -2540,8 +2540,8 @@ static void LocalDecl (ObjectPtr obj)
   TypePtr sc = ElemClass (t);
   if (obj->storage == Static && sc != NULL && (NeedsCtor (sc, false) || NeedsDtor (sc, false)))
   {
-     /* staticky lokalni objekt: globalni promenna, konstruktor pri prvnim
-        pruchodu, destruktor na konci programu (atexit) */
+     /* static local object: global variable, constructor at first
+        pass, destructor at end of program (atexit) */
      static int cnt = 0;
      int k = ++ cnt;
      char * name = Fmt ("cm_%s_%s", CurFce != NULL ? FuncName (CurFce) : "", obj->name);
@@ -2636,7 +2636,7 @@ static void FuncProto (ObjectPtr f)
 }
 
 static void CtorPrologue (TypePtr cls, ObjectPtr ctor)
-/* zacatek konstruktoru: baze, tabulka virtualnich metod, vnorene objekty */
+/* start of constructor: base, virtual method table, nested objects */
 {
   CLS * c = GetCls (cls);
   if (cls->base != NULL && NeedsCtor (cls->base, false))
@@ -2659,7 +2659,7 @@ static void CtorPrologue (TypePtr cls, ObjectPtr ctor)
 }
 
 static void DtorEpilogue (TypePtr cls)
-/* konec destruktoru: vnorene objekty (pozpatku), baze */
+/* end of destructor: nested objects (in reverse order), base */
 {
   int n = 0;
   ObjectPtr fields [1024];
@@ -2682,7 +2682,7 @@ static void DtorEpilogue (TypePtr cls)
 }
 
 static void FuncBody (ObjectPtr f)
-/* definice funkce, metody, konstruktoru nebo destruktoru */
+/* definition of function, method, constructor or destructor */
 {
   FuncProto (f);
 
@@ -2702,10 +2702,10 @@ static void FuncBody (ObjectPtr f)
   if (CurKind == 2 && GetCls (f->owner)->poly)
      PutF ("this->vptr = (const %s_vtbl *) &%s;\n", ClsName (VptrRoot (f->owner)), VtableRef (f->owner));
 
-  /* telo:  { ... } */
+  /* body:  { ... } */
   StatPtr body = f->body;
   PushScope (SC_BLOCK);
-  /* parametry - objekty s destruktorem hodnotou: kopii zrusi volany (na konci tela, i return) */
+  /* parameters - objects with destructor passed by value: the callee destroys the copy (at end of body, and at return) */
   for (NodePtr p = f->type->list.first; p != NULL; p = p->next)
   {
      ObjectPtr par = p->item;
@@ -2749,7 +2749,7 @@ static void FuncBody (ObjectPtr f)
 /* ---------------------------------------------------------------------- */
 
 static void EmitStaticMembers (TypePtr t)
-/* staticke polozky:  celociselne konstanty => enum, ostatni => promenne */
+/* static members:  integer constants => enum, others => variables */
 {
   for (NodePtr p = t->list.first; p != NULL; p = p->next)
   {
@@ -2764,8 +2764,8 @@ static void EmitStaticMembers (TypePtr t)
      }
      else
      {
-        /* definice mimo tridu (T::x) => definice, jinak extern (definice
-           v jinem souboru);  inicializace ve tride => static v kazdem souboru */
+        /* definition outside class (T::x) => definition, otherwise extern (definition
+           in another file);  initialization inside class => static in every file */
         EnsureTypes (m->type, m->desc);
         BUF * old = Section (&SecVars);
         const char * storage = m->outdef ? "" : (m->init != NULL) ? "CM_UNUSED static " : "extern ";
@@ -2782,7 +2782,7 @@ static void EmitStaticMembers (TypePtr t)
 }
 
 static void EmitMethods (TypePtr t)
-/* prototypy metod, definice metod uvnitr tridy */
+/* method prototypes, method definitions inside class */
 {
   for (NodePtr p = t->list.first; p != NULL; p = p->next)
   {
@@ -2805,15 +2805,15 @@ static void EmitInClassBodies (TypePtr t)
 
 /* ---------------------------------------------------------------------- */
 
-/* globalni objekty s konstruktorem / destruktorem */
+/* global objects with constructor / destructor */
 static ObjectPtr GlobalObjs [4096];
 static int       GlobalObjCnt = 0;
-static BUF       GlobalInit = { NULL, 0, 0, 1 };   /* prikazy pred main */
+static BUF       GlobalInit = { NULL, 0, 0, 1 };   /* commands before main */
 
 static bool IsIntConstObj (ObjectPtr obj);
 
 static bool IsConstExpr (ExprPtr e)
-/* konstantni vyraz (inicializace globalni promenne v C) */
+/* constant expression (initialization of global variable in C) */
 {
   if (e == NULL) return true;
   switch (e->op)
@@ -2843,12 +2843,12 @@ static bool IsConstExpr (ExprPtr e)
 }
 
 static bool IsIntConstObj (ObjectPtr obj)
-/* const int X = 10;  => enum (v C lze pouzit jako velikost pole) */
+/* const int X = 10;  => enum (in C can be used as array size) */
 {
   if (!IsConstInit (obj)) return false;
   TypePtr t = Resolve (obj->type);
   if (!(t->sort == Int || t->sort == Char || t->sort == Enum || t->sort == NoSort)) return false;
-  if (t->long_long) return false;    /* const long long - hodnota mimo int (enum by zmenil typ) */
+  if (t->long_long) return false;    /* const long long - value outside int (enum would change type) */
   return IsConstExpr (obj->init) && obj->init->op != STR;
 }
 
@@ -2870,7 +2870,7 @@ static void GlobalVar (ObjectPtr obj)
   const char * storage = "";
   if (obj->storage == Static) storage = "static ";
   else if (obj->storage == Extern) storage = "extern ";
-  else if (t->Const) storage = "CM_UNUSED static ";     /* const v C++: jen v tomto souboru */
+  else if (t->Const) storage = "CM_UNUSED static ";     /* const in C++: only in this file */
 
   PutF ("%s%s", storage, ObjDecl (obj, obj->name));
   if (obj->init != NULL && obj->storage != Extern)
@@ -2883,7 +2883,7 @@ static void GlobalVar (ObjectPtr obj)
      }
      else
      {
-        /* inicializace az pred main */
+        /* initialization only before main */
         BUF * o = Section (&GlobalInit);
         PutF ("%s = ", obj->name);
         ExTo (obj->init, target);
@@ -2904,7 +2904,7 @@ static void GlobalVar (ObjectPtr obj)
 
 static void GlobalItem (ObjectPtr obj)
 {
-  if (obj->pkind == PK_PROTO) return;               /* prototyp - prototypy jsou na zacatku */
+  if (obj->pkind == PK_PROTO) return;               /* prototype - prototypes are at the start */
   if (obj->pkind == PK_OUTDEF)
   {
      ObjectPtr m = obj->pref;
@@ -2917,7 +2917,7 @@ static void GlobalItem (ObjectPtr obj)
   {
      EnsureTypes (obj->type, obj->desc);
      TypePtr t = Resolve (obj->type);
-     /* typedef struct { ... } X;  - struktura uz ma jmeno X */
+     /* typedef struct { ... } X;  - struct already has name X */
      if (t != NULL && (IsClsSort (t->sort) || t->sort == Enum) && StrEq (t->tag, obj->name))
         return;
      BUF * old = Section (&SecTypes);
@@ -2931,7 +2931,7 @@ static void GlobalItem (ObjectPtr obj)
      TypePtr t = Resolve (obj->type);
      if (t != NULL && t->sort == Enum && t->tag == NULL && PGet (&TypeDone, t) == NULL)
      {
-        PSet (&TypeDone, t, t);                       /* enum { A, B };  (bez jmena) */
+        PSet (&TypeDone, t, t);                       /* enum { A, B };  (without name) */
         BUF * old = Section (&SecTypes);
         PutF ("%s;\n\n", EnumBody (t));
         Section (old);
@@ -3178,7 +3178,7 @@ static void GenGlobalInit (void)
 }
 
 static void Generate (void)
-/* pozadovane funkce a tabulky (mohou vyvolat dalsi pozadavky) */
+/* required functions and tables (may trigger further requests) */
 {
   bool more = true;
   while (more)
@@ -3195,7 +3195,7 @@ static void Translate (FILE * f, const char * src_name)
 {
   RenameHiddenFields ();
 
-  /* systemove hlavicky => #include */
+  /* system headers => #include */
   for (NodePtr p = printlist.first; p != NULL; p = p->next)
   {
      const char * h = SystemHeader ((const char *) PGet (&Origin, p->item));
@@ -3206,13 +3206,13 @@ static void Translate (FILE * f, const char * src_name)
      }
   }
 
-  /* typy a funkce ze zdrojoveho textu (poradi jako v textu) */
+  /* types and functions from source text (in order of the text) */
   for (NodePtr p = printlist.first; p != NULL; p = p->next)
   {
      ObjectPtr obj = p->item;
      if (IsSystemObj (obj))
      {
-        /* jen funkce s telem a staticke promenne (napr. cmini/ownheaders/cstdio) */
+        /* only functions with body and static variables (e.g. cmini/ownheaders/cstdio) */
         if (strncmp (obj->name, "cparser_std", 11) == 0) continue;
         if (!(obj->fce && obj->body != NULL) && !(obj->storage == Static && !obj->fce)) continue;
      }
@@ -3221,7 +3221,7 @@ static void Translate (FILE * f, const char * src_name)
      GlobalItem (obj);
   }
 
-  /* tridy: definice (i nepouzite) a metody definovane uvnitr tridy */
+  /* classes: definitions (even unused) and methods defined inside class */
   for (NodePtr p = classlist.first; p != NULL; p = p->next)
   {
      TypePtr t = Resolve (p->item->type);
@@ -3239,10 +3239,10 @@ static void Translate (FILE * f, const char * src_name)
   GenGlobalInit ();
   Generate ();
 
-  /* vystup */
+  /* output */
   fprintf (f, "/* %s - prelozeno z %s (translate.c) */\n\n", "C", src_name);
-  /* program pouziva POSIX (unistd.h: fork, mkdtemp, fileno, setenv, ...) -
-     i pri prekladu s -std=c99 (tcc, gcc -std=c99) */
+  /* the program uses POSIX (unistd.h: fork, mkdtemp, fileno, setenv, ...) -
+     even when translated with -std=c99 (tcc, gcc -std=c99) */
   bool posix = false;
   for (int i = 0; i < HeaderCnt; i++)
      if (StrEq (Headers [i], "unistd.h")) posix = true;
@@ -3274,8 +3274,8 @@ static void Translate (FILE * f, const char * src_name)
 
 /*************************** INPUT AND OUTPUT *****************************/
 
-/* vstup a chybova hlaseni pro cparser (inp.h, out.h) - samostatny program;
-   (soucast cmini.bin; vstup a vystup pro -C i pro generator pasm) */
+/* input and error reporting for cparser (inp.h, out.h) - separate program;
+   (part of cmini.bin; input and output for -C and for the pasm generator) */
 
 
 char ch;
@@ -3344,7 +3344,7 @@ void PutEol (void)    { }
 extern "C" {
 #endif
 
-/* volano z cmini.bin (instr_drv.c): -I, -iquote, -D a -C (preklad do C) */
+/* called from cmini.bin (instr_drv.c): -I, -iquote, -D and -C (translation to C) */
 
 void TrIncludeDir (char * dir)
 {
@@ -3360,11 +3360,11 @@ void TrDefine (char * arg)
   LexDefine (def, eq != NULL ? eq + 1 : "1");
 }
 
-/* nacte zdroj src a pripravi lexer a deklarace; 0 = ok */
+/* loads source src and prepares lexer and declarations; 0 = ok */
 int TrStart (const char * src)
 {
   long len = 0;
-  InpText = ReadFile (src, &len, true);   /* bez nulovych bajtu */
+  InpText = ReadFile (src, &len, true);   /* without null bytes */
   InpLen = (int) len;
   if (InpText == NULL)
   {
@@ -3382,7 +3382,7 @@ int TrStart (const char * src)
   return 0;
 }
 
-/* -C: cely zdroj src => C na out_name (NULL = stdout); 0 = ok */
+/* -C: whole source src => C to out_name (NULL = stdout); 0 = ok */
 int TrTranslate (const char * src, const char * out_name)
 {
   if (TrStart (src) != 0) return 2;

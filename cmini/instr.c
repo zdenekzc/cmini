@@ -1,121 +1,121 @@
 /* INSTR.C */
 
-/* Generator kodu x86-64 prekladace c-mini - jediny generator bez asmjit
-   (CHANGELOG.txt, kapitola 30; drive tri varianty instr.cc, instr0.cc,
-   instr-list.cc - text pro assembler byl ve vsech bajtove shodny).
+/* Code generator for x86-64 for the c-mini compiler - the only generator without asmjit
+   (CHANGELOG.txt, chapter 30; previously there were three variants instr.cc, instr0.cc,
+   instr-list.cc - the text for the assembler was byte-identical in all of them).
 
-   - Ciste C (2026-11-16, CHANGELOG.txt kapitola 103; drive instr.cc v podmnozine
-     c-mini a z nej cmini.bin -C vygenerovany instr.c): prelozi ho gcc, tcc
-     (bootstrap) i sam cmini.bin (samopreklad) - proto jen konstrukce, ktere
-     c-mini zna: struktury s polozkami long / ukazatel (polozka = 8 bajtu),
-     bez ukazatelu na funkce v datech generatoru, bez struktur hodnotou.
-   - Retezce char * (nikdy NULL, "" = prazdny; Cat, Str, IntStr ... alokuji
-     a neuvolnuji - generator bezi jednou na preklad), Seq (dynamicke pole
-     hodnot long) misto Sequence, Dict / SDict (hashovaci tabulka, klic cislo
-     nebo ukazatel / retezec) misto Dictionary - pomocne funkce nize.
-   - Bez trid: stav generatoru jsou globalni (static) promenne, funkce
-     generatoru obycejne funkce (generator ma vzdy jen jeden stav -
-     initState pred prekladem, freeState po nem).
-   - Program se sklada jako spojovy seznam instrukci (asm/asmlist.h) -
-     obdoba x86::Builder z AsmJit:
+   - Pure C (2026-11-16, CHANGELOG.txt chapter 103; previously instr.cc in the subset of
+     c-mini, and instr.c generated from it by cmini.bin -C): it is compiled by gcc, tcc
+     (bootstrap) and by cmini.bin itself (self-compilation) - therefore only constructs
+     that c-mini knows: structs with members long / pointer (a member = 8 bytes),
+     no function pointers in generator data, no structs passed by value.
+   - Strings char * (never NULL, "" = empty; Cat, Str, IntStr ... allocate
+     and never free - the generator runs once per compilation), Seq (dynamic array
+     of long values) instead of Sequence, Dict / SDict (hash table, key number
+     or pointer / string) instead of Dictionary - helper functions below.
+   - No classes: the generator state is global (static) variables, the generator
+     functions are ordinary functions (the generator always has only one state -
+     initState before compiling, freeState after it).
+   - The program is built as a linked list of instructions (asm/asmlist.h) -
+     analogous to x86::Builder from AsmJit:
         ins2 (iMov, gp (RAX), qword_ptr (RBP, -16))
-        note (ins2 (iAdd, gp (RAX), imm (8)), "x")     poznamka za ;
-     instrukce = konstanty keyword z asm/key.h (iMov, iPush, iCall, ...),
-     registry = vycet Register z asm/reg.h (RAX, RCX, R11, ...),
-     operandy: gp (registr), xreg (XMM), imm (cislo), imm_hex (0...h),
-     qword_ptr / byte_ptr / any_ptr (adresa [baze+posun]), any_ptr_idx
-     ([baze+index*m]), qword_lab ([navesti]), alab (adresa navesti - lea),
-     jlab (cil skoku / volani).  Operandy jsou ukazatele AsmOp * (rozhrani
-     asmlist.h s ukazateli: c-mini ma vlastni model pameti struktur,
-     struktury hodnotou nepredava).
-   - jeden AsmProgram, tri kurzory (jako sekce v AsmJit): extrn / public
-     (doplni se na konci), data a kod; behova knihovna RTL_... zustava
-     textem (uzly AN_TEXT),
-   - na konci AsmAssemble (knihovna pasm cte uzly primo - faze 2;
-     CPARSER_ASMLIST=text: AsmAssembleText, text po radcich - faze 1);
-     -o x: text pro assembler x.asm (AsmPrint) a vypis x.lst.
+        note (ins2 (iAdd, gp (RAX), imm (8)), "x")     comment after ;
+     instruction = keyword constants from asm/key.h (iMov, iPush, iCall, ...),
+     registers = enumeration Register from asm/reg.h (RAX, RCX, R11, ...),
+     operands: gp (register), xreg (XMM), imm (number), imm_hex (0...h),
+     qword_ptr / byte_ptr / any_ptr (address [base+offset]), any_ptr_idx
+     ([base+index*m]), qword_lab ([label]), alab (address of label - lea),
+     jlab (jump / call target).  Operands are pointers AsmOp * (the asmlist.h
+     interface uses pointers: c-mini has its own memory model for structs,
+     it does not pass structs by value).
+   - one AsmProgram, three cursors (like sections in AsmJit): extrn / public
+     (added at the end), data and code; the runtime library RTL_... remains
+     as text (nodes AN_TEXT),
+   - at the end AsmAssemble (the pasm library reads the nodes directly - phase 2;
+     CPARSER_ASMLIST=text: AsmAssembleText, text line by line - phase 1);
+     -o x: text for the assembler x.asm (AsmPrint) and listing x.lst.
 
-   Rozhrani instr.h: runInstructions, InstrLink, instructions,
-   InstrOutputFile, InstrObjectFile.  Puvodni popis generatoru nasleduje.
+   Interface instr.h: runInstructions, InstrLink, instructions,
+   InstrOutputFile, InstrObjectFile.  The original description of the generator follows.
 */
 
 
 /*
-   Generator kodu pro x86-64 v podobe textu v assembleru (syntaxe MASM)
-   pro assembler pasm z adresare asm/ - obdoba instr1.cc, misto knihovny
-   asmjit se vytvori zdrojovy text, ze ktereho pasm -e sestavi spustitelny
-   soubor ELF64 (bez linkeru a bez knihovny C), a ten se spusti.
+   Code generator for x86-64 in the form of assembler text (MASM syntax)
+   for the pasm assembler from the asm/ directory - analogous to instr1.cc; instead of
+   the asmjit library a source text is created, from which pasm -e builds an
+   executable ELF64 file (without a linker and without the C library), and it is run.
 
-   Postup (run):
-     1. vygeneruje se text programu (datovy a kodovy segment USE64),
-     2. ulozi se do docasneho adresare jako prog.asm,
-     3. vychozi (glibc): pasm -c -l prog.asm => prog.o, gcc -no-pie prog.o
-        => prog.bin;  CPARSER_RTL=own (vlastni behova knihovna, bez glibc):
-        pasm -e -l prog.asm  =>  prog.bin (ELF64);  vypis prog.lst,
-     4. prog.bin se spusti jako samostatny proces; vystup programu jde
-        primo na standardni vystup, vysledek funkce main (64 bitu) program
-        zapise do deskriptoru 3 (roura z rodicovskeho procesu) - navratovy
-        kod procesu ma jen 8 bitu.
+   Procedure (run):
+     1. the program text (data and code segment USE64) is generated,
+     2. it is saved in a temporary directory as prog.asm,
+     3. default (glibc): pasm -c -l prog.asm => prog.o, gcc -no-pie prog.o
+        => prog.bin;  CPARSER_RTL=own (own runtime library, without glibc):
+        pasm -e -l prog.asm  =>  prog.bin (ELF64);  listing prog.lst,
+     4. prog.bin is run as a separate process; the program output goes
+        directly to standard output, the result of function main (64 bits) the program
+        writes to descriptor 3 (pipe from the parent process) - the exit code
+        of the process has only 8 bits.
 
-   Zasobnikovy model (stejny jako instr1.cc):
-     - vysledek kazdeho (pod)vyrazu je v registru rax,
-     - mezivysledky se docasne ukladaji na zasobnik (push / pop),
-     - rcx, rdx a r11 jsou pomocne registry.
+   Stack model (same as instr1.cc):
+     - the result of every (sub)expression is in register rax,
+     - intermediate results are temporarily stored on the stack (push / pop),
+     - rcx, rdx and r11 are auxiliary registers.
 
-   Pamet:
-     - kazda promenna (int, bool, char, ukazatel, ...) zabira 8 bajtu,
-       pole N prvku zabira N * 8 bajtu,
-     - globalni promenne jsou v datovem segmentu: navesti G<n>
-       (adresa: lea rax, G<n> - relativne k RIP),
-     - parametry a lokalni promenne lezi v ramci funkce: [rbp - offset],
-     - reference (int & x) je ulozena jako adresa.
+   Memory:
+     - every variable (int, bool, char, pointer, ...) takes 8 bytes,
+       an array of N elements takes N * 8 bytes,
+     - global variables are in the data segment: label G<n>
+       (address: lea rax, G<n> - relative to RIP),
+     - parameters and local variables lie in the frame of the function: [rbp - offset],
+     - a reference (int & x) is stored as an address.
 
-   Volani funkci - registry jako System V AMD64:
-     - parametry v rdi, rsi, rdx, rcx, r8, r9 (nejvyse 6), vysledek v rax,
-     - funkce s telem maji navesti F<n>, ramec
+   Function calls - registers as System V AMD64:
+     - parameters in rdi, rsi, rdx, rcx, r8, r9 (at most 6), result in rax,
+     - functions with a body have label F<n>, frame
           push rbp / mov rbp, rsp / sub rsp, N  ...  mov rsp, rbp / pop rbp / ret
-     - funkce bez tela (printf, abs, ...) jsou v behove knihovne napsane
-       v assembleru (RTL_DATA, RTL_CODE nize): printf, putchar, puts,
+     - functions without a body (printf, abs, ...) are in the runtime library
+       written in assembler (RTL_DATA, RTL_CODE below): printf, putchar, puts,
        abs, labs, rand, srand, time, exit.
 
-   Navesti: L<n> skoky, S<n> retezcove konstanty.
+   Labels: L<n> jumps, S<n> string constants.
 
-   Struktury a ukazatele (jako instr5.cc):
-     - kazda polozka zabira 8 bajtu, p->x, s.x, *p, &x, p [i],
-     - new T  =>  calloc (1, velikost) z behove knihovny, potom konstruktor.
+   Structs and pointers (as instr5.cc):
+     - every member takes 8 bytes, p->x, s.x, *p, &x, p [i],
+     - new T  =>  calloc (1, size) from the runtime library, then the constructor.
 
-   Tridy:
-     - class, public / private / protected (pristup se nekontroluje),
-       jednoducha dedicnost  class B : public A,
-     - rozlozeni objektu: polozky baze, ukazatel na tabulku virtualnich metod
-       (zavede ho prvni polymorfni trida v hierarchii), vlastni polozky;
-       baze je na zacatku objektu => B * lze pouzit jako A * bez posunu,
-     - metody: skryty parametr this (rdi), dalsi parametry rsi .. r9,
-       definice uvnitr tridy i mimo ni (int A::f () { ... }), staticke metody,
-     - virtualni metody: tabulka VT<n> v datech (sloty baze, prekryte metody
-       na stejnem miste, nove na konci), volani  call [[this + vptr] + 8 * slot],
-       ciste virtualni metoda => RT_PURE, A::f () vola bez virtualniho mechanismu,
-     - konstruktor (uzivatelsky nebo implicitni C<n>): konstruktor baze,
-       ukazatel na tabulku virtualnich metod, konstruktory vnorenych objektu,
-       potom inicializace polozek a telo; vraci this,
-     - objekty se konstruuji pri new, pri deklaraci lokalni promenne
-       a pred main (globalni objekty, funkce CINIT); i pole objektu,
-     - destruktory se jen prelozi (delete zatim neni).
+   Classes:
+     - class, public / private / protected (access is not checked),
+       single inheritance  class B : public A,
+     - object layout: base members, pointer to the virtual method table
+       (introduced by the first polymorphic class in the hierarchy), own members;
+       the base is at the start of the object => B * can be used as A * without offset,
+     - methods: hidden parameter this (rdi), further parameters rsi .. r9,
+       definition inside the class and outside it (int A::f () { ... }), static methods,
+     - virtual methods: table VT<n> in data (base slots, overridden methods
+       in the same place, new ones at the end), call  call [[this + vptr] + 8 * slot],
+       pure virtual method => RT_PURE, A::f () calls without the virtual mechanism,
+     - constructor (user-defined or implicit C<n>): base constructor,
+       pointer to the virtual method table, constructors of nested objects,
+       then initialization of members and the body; returns this,
+     - objects are constructed at new, at declaration of a local variable,
+       and before main (global objects, function CINIT); also arrays of objects,
+     - destructors are only compiled (delete is not there yet).
 
-   Dalsi prostredky jazyka (ukazatele, float / double, switch, goto,
-   std::string, Sequence, Dictionary, ...) - CHANGELOG.txt, kapitoly 15 - 24.
+   Other language facilities (pointers, float / double, switch, goto,
+   std::string, Sequence, Dictionary, ...) - CHANGELOG.txt, chapters 15 - 24.
 
-   Assembler pasm se vola jako knihovna (asm/libpasm.a: asmlist.h, pasmlib.h).
+   The pasm assembler is called as a library (asm/libpasm.a: asmlist.h, pasmlib.h).
 */
 
 #ifndef _POSIX_C_SOURCE
 #define _POSIX_C_SOURCE 200809L   /* gcc -std=c99: mkdtemp, fileno, setenv */
 #endif
 
-#include "../asm/asmlist.h"  /* program jako seznam instrukci (pred decl.h) */
+#include "../asm/asmlist.h"  /* program as a list of instructions (before decl.h) */
 #include "instr.h"
 #include "decl.h"
-#include "../asm/pasmlib.h"   /* assembler pasm jako knihovna */
+#include "../asm/pasmlib.h"   /* pasm assembler as a library */
 
 #include <stdlib.h>
 #include <string.h>
@@ -126,11 +126,11 @@
 #include <stdio.h>
 #include <stdint.h>
 
-#include "util.h"   /* retezce, Seq, Dict (spolecne s translate.c) */
+#include "util.h"   /* strings, Seq, Dict (shared with translate.c) */
 
 /* ---------------------------------------------------------------------- */
 
-/* NewObject (decl.h) ma parametr IDENT_TYP (char [IDENT_SIZE]) - jmeno pres buffer */
+/* NewObject (decl.h) has parameter IDENT_TYP (char [IDENT_SIZE]) - name passed via buffer */
 static ObjectPtr newObj (const char * name, TypePtr desc)
 {
     IDENT_TYP id;
@@ -139,7 +139,7 @@ static ObjectPtr newObj (const char * name, TypePtr desc)
     return NewObject (id, desc);
 }
 
-static char * InstrContext = "";   /* prave prekladana funkce (chybova hlaseni) */
+static char * InstrContext = "";   /* currently compiled function (error messages) */
 
 static void InstrError (const char * msg)
 {
@@ -149,9 +149,9 @@ static void InstrError (const char * msg)
 }
 
 
-/* Behova knihovna v assembleru (pasm, x86-64, volani jadra pres syscall).
-   Volaci konvence jako generovany kod: parametry rdi, rsi, rdx, rcx, r8, r9,
-   vysledek rax; zachovavaji se rbx, rbp, r12 .. r15. */
+/* Runtime library in assembler (pasm, x86-64, kernel calls via syscall).
+   Calling convention as the generated code: parameters rdi, rsi, rdx, rcx, r8, r9,
+   result rax; rbx, rbp, r12 .. r15 are preserved. */
 
 static const char * RTL_DATA [] =
 {
@@ -171,7 +171,7 @@ static const char * RTL_DATA [] =
     NULL
 };
 
-/* std::string - spolecne pro vlastni knihovnu i glibc (alokace RT_CALLOC) */
+/* std::string - shared for own library and glibc (allocation RT_CALLOC) */
 static const char * RTL_STR_DATA [] =
 {
     "",
@@ -1466,8 +1466,8 @@ static const char * RTL_STR_CODE [] =
     NULL
 };
 
-/* Behova knihovna nad glibc (vychozi): main je obal, ktery zavola konstruktory
-   globalnich objektu a funkci main programu; program se slinkuje gcc. */
+/* Runtime library on top of glibc (default): main is a wrapper that calls the constructors
+   of global objects and the main function of the program; the program is linked by gcc. */
 static const char * RTL_LIBC_DATA [] =
 {
     "",
@@ -1533,7 +1533,7 @@ static const char * RTL_LIBC_CODE [] =
     NULL
 };
 
-/* obal main (jen v souboru, ktery main definuje) */
+/* wrapper main (only in the file that defines main) */
 static const char * RTL_LIBC_MAIN [] =
 {
     "",
@@ -1570,7 +1570,7 @@ static const char * RTL_LIBC_MAIN [] =
     NULL
 };
 
-/* funkce glibc pouzite behovou knihovnou: jmeno -> navesti */
+/* glibc functions used by the runtime library: name -> label */
 static const char * RTL_LIBC_EXTERNS [] =
 {
     "getenv", "write", "calloc", "free", "fflush", "strlen", "stdout", "abort", "atexit", NULL
@@ -2050,14 +2050,14 @@ static const char * RTL_CODE [] =
     NULL
 };
 
-/* funkce behove knihovny: jmeno v C -> navesti */
-/* funkce behove knihovny: jmeno v C -> navesti (dvojice, konec NULL) */
-/* ToaruOS 2.3.2 (InstrToaru, PASM_TARGET=toaru): zmeny RTL_CODE - jine cisla
-   syscallu (/usr/include/syscall_nums.h v hostovi: EXT 0, WRITE 4,
-   GETTIMEOFDAY 6, GETPID 9, SBRK 10, KILL 37) a halda pres sbrk (prirustek
-   po strankach, vraci STARY konec; Linux brk vraci novy; nove stranky
-   nejsou vynulovane - zmereno v hostovi, kernel/sys/syscall.c je nenuluje).  Skupiny:
-   radek RTL_CODE, pocet nahrazenych radku (od nej), nove radky, "@" */
+/* runtime library functions: name in C -> label */
+/* runtime library functions: name in C -> label (pairs, ending with NULL) */
+/* ToaruOS 2.3.2 (InstrToaru, PASM_TARGET=toaru): changes to RTL_CODE - different
+   syscall numbers (/usr/include/syscall_nums.h on the host: EXT 0, WRITE 4,
+   GETTIMEOFDAY 6, GETPID 9, SBRK 10, KILL 37) and the heap via sbrk (increment
+   by pages, returns the OLD end; Linux brk returns the new one; new pages
+   are not zeroed - measured on the host, kernel/sys/syscall.c does not zero them).  Groups:
+   line of RTL_CODE, number of replaced lines (from it), new lines, "@" */
 static const char * RTL_TOARU [] =
 {
     "        mov     eax, 1                  ; write (3, [rsp], 8)", "1",
@@ -2147,7 +2147,7 @@ static const char * RTL_FUNCTIONS [] =
 };
 
 
-/* navesti funkce behove knihovny, "" = neni */
+/* label of a runtime library function, "" = none */
 static char * rtlFunction (const char * name)
 {
     int i;
@@ -2159,21 +2159,21 @@ static char * rtlFunction (const char * name)
 
 /* ---------------------------------------------------------------------- */
 
-const char * InstrOutputFile = NULL; /* instr.h - ulozit program misto spusteni */
-const char * InstrObjectFile = NULL; /* instr.h - jen objekt ELF64 (prekladat po souborech) */
-const char * InstrAsmFile = NULL;    /* instr.h - ulozit vygenerovany .asm (-S) */
-int InstrToaru = 0;                  /* instr.h - program pro ToaruOS (RTL_TOARU, pasm -T) */
-const char * InstrToaruLib = NULL;   /* instr.h - libc ToaruOS, staticky linker pasm (cmini -L) */
+const char * InstrOutputFile = NULL; /* instr.h - save the program instead of running it */
+const char * InstrObjectFile = NULL; /* instr.h - only ELF64 object (compile file by file) */
+const char * InstrAsmFile = NULL;    /* instr.h - save the generated .asm (-S) */
+int InstrToaru = 0;                  /* instr.h - program for ToaruOS (RTL_TOARU, pasm -T) */
+const char * InstrToaruLib = NULL;   /* instr.h - ToaruOS libc, static linker pasm (cmini -L) */
 
 /* ---------------------------------------------------------------------- */
 
-/* umisteni promenne (Variable_new: global false, offset 0, ref false) */
+/* variable location (Variable_new: global false, offset 0, ref false) */
 typedef struct Variable
 {
     bool   global;
-    char * label;              /* globalni promenna: navesti v datech */
-    long   offset;             /* lokalni promenna: [rbp + offset] */
-    bool   ref;                /* reference - v pameti je adresa */
+    char * label;              /* global variable: label in data */
+    long   offset;             /* local variable: [rbp + offset] */
+    bool   ref;                /* reference - the address is in memory */
 }
     Variable;
 
@@ -2191,8 +2191,8 @@ typedef struct LoopLabels
 {
     char * break_label;
     char * continue_label;
-    long   break_depth;                /* uroven ruseni lokalnich objektu pro break */
-    long   continue_depth;             /* ... pro continue */
+    long   break_depth;                /* level of releasing local objects for break */
+    long   continue_depth;             /* ... for continue */
 }
     LoopLabels;
 
@@ -2206,8 +2206,8 @@ static LoopLabels * LoopLabels_new (const char * b, const char * c, long bd, lon
     return l;
 }
 
-/* umisteni argumentu podle System V (jednotne pro volajiciho i volany): kind 0 = registry INTEGER
-   (nq qwordu od regno), 1 = XMM (regno), 2 = zasobnik (od qwordu stack; nq qwordu) */
+/* argument location according to System V (uniform for caller and callee): kind 0 = INTEGER registers
+   (nq qwords from regno), 1 = XMM (regno), 2 = stack (from qword stack; nq qwords) */
 typedef struct ArgSlot
 {
     long kind;
@@ -2217,11 +2217,11 @@ typedef struct ArgSlot
 }
     ArgSlot;
 
-/* jak vyhodnotit this pri volani metody / konstruktoru (misto lambda funkce) */
+/* how to evaluate this when calling a method / constructor (instead of a lambda function) */
 enum ThisKind
 {
-    THIS_STACK,    /* konstruktor: this je na zasobniku, [rsp + 8 * (depth - this_depth)] */
-    THIS_LOAD,     /* f () v metode: this teto metody */
+    THIS_STACK,    /* constructor: this is on the stack, [rsp + 8 * (depth - this_depth)] */
+    THIS_LOAD,     /* f () in a method: this of this method */
     THIS_ADDR,     /* obj.f ():  &obj */
     THIS_EXPR      /* p->f ():  p */
 };
@@ -2234,7 +2234,7 @@ typedef struct ThisCode
 }
     ThisCode;
 
-/* polozka typu kontejner v objektu: posun a typ */
+/* container-type member in object: offset and type */
 typedef struct OwnedMember
 {
     long    offset;
@@ -2242,15 +2242,15 @@ typedef struct OwnedMember
 }
     OwnedMember;
 
-/* seznam objektu (lokalni objekty s destruktorem jednoho bloku) */
+/* list of objects (local objects with destructor of one block) */
 typedef struct ObjectList
 {
     Seq items;             /* ObjectPtr */
 }
     ObjectList;
 
-/* docasne objekty struktur hodnotou (vysledky volani s vlastnenymi polozkami) cekajici na
-   uvolneni - v konci vyrazu / prikazu, po vyhodnoceni podminky (viz releaseTemps) */
+/* temporary struct objects passed by value (call results with owned members) waiting to be
+   released - at the end of the expression / statement, after evaluating the condition (see releaseTemps) */
 typedef struct PendingTemp
 {
     long    off;
@@ -2258,11 +2258,11 @@ typedef struct PendingTemp
 }
     PendingTemp;
 
-#define VAR_SIZE 8 /* velikost jedne promenne v bajtech */
+#define VAR_SIZE 8 /* size of one variable in bytes */
 
 /* ---------------------------------------------------------------------- */
 
-/* docasny adresar, na konci (TempDir_free) se smaze i se soubory */
+/* temporary directory; at the end (TempDir_free) it is removed together with its files */
 typedef struct TempDir
 {
     char * path;
@@ -2321,7 +2321,7 @@ static void copyFile (const char * from, const char * to, bool executable)
         chmod (to, 0755);
 }
 
-/* cely soubor jako retezec (chybejici soubor => "") */
+/* whole file as a string (missing file => "") */
 static char * readFile (const char * name)
 {
     char * text = ReadFile (name, NULL, false);
@@ -2330,13 +2330,13 @@ static char * readFile (const char * name)
 
 /* ---------------------------------------------------------------------- */
 
-/* stav generatoru (drive polozky tridy AsmText - generator ma vzdy jen
-   jednu instanci; nastavi initState, uvolni freeState); u Seq a Dict typ
-   prvku / klice => hodnoty v poznamce */
+/* generator state (formerly fields of class AsmText - the generator always has only one instance;
+   initState sets it up, freeState releases it); for Seq and Dict the element / key type
+   => values in the comment */
 
-static AsmProgram * prog = NULL;       /* cely program - seznam uzlu (asm/asmlist.h) */
+static AsmProgram * prog = NULL;       /* whole program - list of nodes (asm/asmlist.h) */
 
-/* ulozi vygenerovany text pro assembler (AsmPrint) do souboru path */
+/* saves the generated text for the assembler (AsmPrint) into file path */
 static void saveAsm (const char * path)
 {
     FILE * f = fopen (path, "w");
@@ -2346,70 +2346,69 @@ static void saveAsm (const char * path)
     if (fclose (f) != 0)
         InstrError (Cat ("Cannot write ", path));
 }
-static AsmNode *    ext_cur;              /* misto pro extrn / public (doplni se na konci) */
-static AsmNode *    data_cur;             /* konec generovanych dat (kod: kurzor programu) */
-static AsmNode *    code_tail;            /* misto pro RTL_LIBC_MAIN na konci kodu (odebere se) */
-static Dict label_objs;                   /* SDict: jmeno => AsmLabel * */
+static AsmNode *    ext_cur;              /* place for extrn / public (added at the end) */
+static AsmNode *    data_cur;             /* end of generated data (code: program cursor) */
+static AsmNode *    code_tail;            /* place for RTL_LIBC_MAIN at the end of code (removed) */
+static Dict label_objs;                   /* SDict: name => AsmLabel * */
 
 static Dict vars;                         /* ObjectPtr => Variable * */
 static Dict fce_labels;                   /* ObjectPtr => char * */
-static Seq  fce_keys;                     /* ObjectPtr - klice fce_labels serazene (jako std::map) */
-static Dict string_labels;                /* SDict: retezcove konstanty => char * */
-static Dict sconst_labels;                /* SDict: konstanty std::string (s delkou) => char * */
+static Seq  fce_keys;                     /* ObjectPtr - keys of fce_labels sorted (like std::map) */
+static Dict string_labels;                /* SDict: string constants => char * */
+static Dict sconst_labels;                /* SDict: std::string constants (with length) => char * */
 
-static bool use_libc;                     /* glibc (vychozi), jinak vlastni knihovna */
-static Dict extern_labels;                /* SDict: funkce glibc: jmeno => navesti LC_... (char *) */
-static Seq  extern_keys;                  /* char * - klice extern_labels serazene */
-static Dict extern_lower;                 /* SDict: navesti LC_... malymi pismeny (pasm nerozlisuje) => bool */
+static bool use_libc;                     /* glibc (default), otherwise own library */
+static Dict extern_labels;                /* SDict: glibc functions: name => label LC_... (char *) */
+static Seq  extern_keys;                  /* char * - keys of extern_labels sorted */
+static Dict extern_lower;                 /* SDict: labels LC_... in lower case (pasm does not distinguish case) => bool */
 
 static long label_count;
 
 static ObjectPtr current_fce;
 static char *    epilogue_label = "";
-static long      frame_size;              /* velikost lokalnich promennych */
-static long      depth;                   /* pocet 8-bajtovych polozek na zasobniku (push) */
-static Seq  loops;                        /* LoopLabels * - pro break a continue (i switch - jen break) */
-static Dict user_labels;                  /* SDict: navesti goto v aktualni funkci => char * */
-static Dict case_labels;                  /* StatPtr => char * (case / default => navesti) */
-static Dict range_slots;                  /* StatPtr => long (for (T x : seq) - skryte promenne [rbp + n]) */
-static bool fn_temps;                     /* funkce ma docasne retezce / kontejnery */
-static long temp_mark;                    /* [rbp + temp_mark] = znacka zasobniku docasnych hodnot */
-static bool objmode;                      /* preklad do objektu (-c, vice souboru) */
+static long      frame_size;              /* size of local variables */
+static long      depth;                   /* number of 8-byte items on the stack (push) */
+static Seq  loops;                        /* LoopLabels * - for break and continue (switch too - only break) */
+static Dict user_labels;                  /* SDict: goto labels in the current function => char * */
+static Dict case_labels;                  /* StatPtr => char * (case / default => label) */
+static Dict range_slots;                  /* StatPtr => long (for (T x : seq) - hidden variables [rbp + n]) */
+static bool fn_temps;                     /* function has temporary strings / containers */
+static long temp_mark;                    /* [rbp + temp_mark] = stack mark of temporary values */
+static bool objmode;                      /* compilation to an object (-c, several files) */
 static bool has_main;
-static Seq  public_labels;                /* char * - navesti pro linker (PUBLIC) */
-static Seq  public_names;                 /* char * - ... a jejich jmena */
-static Dict extern_data;                  /* SDict: externi promenne: jmeno => navesti (char *) */
-static Seq  extern_data_keys;             /* char * - klice extern_data serazene */
+static Seq  public_labels;                /* char * - labels for the linker (PUBLIC) */
+static Seq  public_names;                 /* char * - ... and their names */
+static Dict extern_data;                  /* SDict: external variables: name => label (char *) */
+static Seq  extern_data_keys;             /* char * - keys of extern_data sorted */
 
-/* struktury a tridy */
-static Dict struct_sizes;                 /* TypePtr => long: velikost v bajtech (jako v C, zaokrouhlena na zarovnani) */
-static Dict struct_ends;                  /* TypePtr => long: konec posledni polozky (odvozena trida pokracuje za ni - jako c2c, translate.c) */
-static Dict struct_aligns;                /* TypePtr => long: zarovnani */
-static Dict member_offsets;               /* ObjectPtr => long: posun polozky v bajtech */
-static Dict vptr_offsets;                 /* TypePtr => long: posun ukazatele na tabulku virtualnich metod */
-static Dict vtable_labels;                /* TypePtr => char *: pouzite tabulky VT<n> */
-static Seq  vtable_keys;                  /* TypePtr - klice vtable_labels serazene */
-static Dict ctor_labels;                  /* TypePtr => char *: konstruktory bez argumentu */
-static Seq  implicit_ctors;               /* TypePtr - implicitni konstruktory k vygenerovani */
-static Seq  implicit_dtors;               /* TypePtr - implicitni destruktory k vygenerovani */
+/* structs and classes */
+static Dict struct_sizes;                 /* TypePtr => long: size in bytes (as in C, rounded up to alignment) */
+static Dict struct_ends;                  /* TypePtr => long: end of the last member (a derived class continues after it - as in c2c, translate.c) */
+static Dict struct_aligns;                /* TypePtr => long: alignment */
+static Dict member_offsets;               /* ObjectPtr => long: offset of the member in bytes */
+static Dict vptr_offsets;                 /* TypePtr => long: offset of the pointer to the virtual method table */
+static Dict vtable_labels;                /* TypePtr => char *: used tables VT<n> */
+static Seq  vtable_keys;                  /* TypePtr - keys of vtable_labels sorted */
+static Dict ctor_labels;                  /* TypePtr => char *: constructors without arguments */
+static Seq  implicit_ctors;               /* TypePtr - implicit constructors to generate */
+static Seq  implicit_dtors;               /* TypePtr - implicit destructors to generate */
 static Dict dtor_labels;                  /* TypePtr => char * */
-static Seq  global_dtor_objects;          /* ObjectPtr - globalni objekty s destruktorem (CFINI) */
-static Seq  cleanup;                      /* ObjectList * - lokalni objekty s destruktorem po blocich */
-static Seq  global_objects;               /* ObjectPtr - globalni objekty s konstruktorem */
+static Seq  global_dtor_objects;          /* ObjectPtr - global objects with destructor (CFINI) */
+static Seq  cleanup;                      /* ObjectList * - local objects with destructor, per block */
+static Seq  global_objects;               /* ObjectPtr - global objects with constructor */
 
-static TypePtr   current_class;           /* metoda nebo konstruktor: trida objektu this */
-static ObjectPtr this_obj;                /* skryty parametr this */
-static ObjectPtr ret_obj;                 /* skryty parametr: adresa pro vysledek - struktura hodnotou */
-static Dict inptr_offsets;                /* ObjectPtr => long: parametr - struktura hodnotou: [rbp + n] = adresa argumentu */
+static TypePtr   current_class;           /* method or constructor: class of object this */
+static ObjectPtr this_obj;                /* hidden parameter this */
+static ObjectPtr ret_obj;                 /* hidden parameter: address for the result - struct passed by value */
+static Dict inptr_offsets;                /* ObjectPtr => long: parameter - struct passed by value: [rbp + n] = address of the argument */
 
 static Seq pending_temps;                 /* PendingTemp * */
 
 /* ------------------------------------------------------------------ */
 
-/* funkce generatoru (drive metody AsmText) - prototypy: funkce se volaji
-   v libovolnem poradi.  Prevod z C++: string => char *, Sequence & =>
-   Seq *, reference long & / bool & => long * / bool *, implicitni hodnoty
-   parametru se predavaji vzdy (ins0 .. ins3 misto ins s nullptr) */
+/* generator functions (formerly methods of AsmText) - prototypes: the functions are called in any
+   order.  Conversion from C++: string => char *, Sequence & => Seq *, reference long & / bool & =>
+   long * / bool *, default parameter values are always passed (ins0 .. ins3 instead of ins with nullptr) */
 
 static void insertSortedStr (Seq * keys, const char * k);
 static void insertSortedType (Seq * keys, TypePtr k);
@@ -2424,7 +2423,7 @@ static void linkProg (const char * dir);
 static void linkFiles (const char * dir, Seq * inputs);
 static long linkAndRun (Seq * inputs, const char * out);
 static long execute (const char * bin_name);
-static char * newLabel (const char * prefix);                  /* drive implicitne "L" */
+static char * newLabel (const char * prefix);                  /* defaults to "L" */
 static AsmLabel * labelObj (const char * name);
 static AsmOp * gp (Register r);
 static AsmOp * xreg (int n);
@@ -2454,12 +2453,12 @@ static void textLinesToaru (const char * * text);
 static AsmNode * dataBegin (void);
 static void dataEnd (AsmNode * code_cursor);
 static void dataComment (const char * text);
-static void dataQ (const char * label, AsmOp * item, const char * c);   /* c drive implicitne "" */
+static void dataQ (const char * label, AsmOp * item, const char * c);   /* c defaults to "" */
 static AsmOp * slotOp (const char * v);
 static void startProgram (void);
 static void finishProgram (void);
 static bool isByteType (TypePtr type);
-static void callRt (const char * label, const char * text);            /* text drive implicitne "" */
+static void callRt (const char * label, const char * text);            /* text defaults to "" */
 static void push (Register r);
 static void pop (Register r);
 static void emitBytes (const char * label, const char * value);
@@ -2498,11 +2497,11 @@ static char * methodTarget (ObjectPtr m, const char * what);
 static char * fnLabel (ObjectPtr fce);
 static void codeIndirectCall (ExprPtr expr, ExprPtr f);
 static void callCtor0 (TypePtr cls);
-static void callCtor (TypePtr cls, Seq * args);                        /* drive Sequence hodnotou - args se nemeni */
+static void callCtor (TypePtr cls, Seq * args);                        /* Sequence passed by value - args are not changed */
 static void constructVar (TypePtr type);
 static void codeStringValue (ExprPtr e);
 static void zeroVar (TypePtr type);
-static void codeCtorPrologue (TypePtr cls, ObjectPtr ctor);            /* ctor drive implicitne nullptr */
+static void codeCtorPrologue (TypePtr cls, ObjectPtr ctor);            /* ctor defaults to nullptr */
 static void codeImplicitCtor (TypePtr cls);
 static char * dtorLabel (TypePtr cls);
 static void destructVar (TypePtr type);
@@ -2530,7 +2529,7 @@ static void codeAddress (ExprPtr expr);
 static void checkPointee (TypePtr ptr);
 static void codeLoad (ExprPtr expr);
 static bool isUnsignedOp (TypePtr t1, TypePtr t2);
-static void codeOperation (SYMBOL kind, bool uns);                    /* uns drive implicitne false */
+static void codeOperation (SYMBOL kind, bool uns);                    /* uns defaults to false */
 static void codeBinary (ExprPtr expr);
 static bool isPtrValue (TypePtr t);
 static unsigned long fpBits (double v, int kind);
@@ -2558,8 +2557,8 @@ static void codeNew (ExprPtr expr);
 static void codeArg (ExprPtr arg, TypePtr ptype);
 static bool isFpArg (TypePtr ptype, ExprPtr arg);
 static void codeThis (ThisCode * t);
-static long passArgs (ThisCode * code_this, Seq * args, Seq * ptypes, int * nxmm, long sret_off);   /* sret_off drive implicitne 0 */
-static Seq * classifyArgs (Seq * types, Seq * fp);                    /* vysledek: ArgSlot * */
+static long passArgs (ThisCode * code_this, Seq * args, Seq * ptypes, int * nxmm, long sret_off);   /* sret_off defaults to 0 */
+static Seq * classifyArgs (Seq * types, Seq * fp);                    /* result: ArgSlot * */
 static bool isStructParam (ObjectPtr par);
 static void checkStructVal (TypePtr t);
 static void incOwned (TypePtr type);
@@ -2608,8 +2607,8 @@ static void codeStat (StatPtr stat);
 
 /* ------------------------------------------------------------------ */
 
-/* pocatecni stav (drive konstruktor AsmText) - pred kazdym prekladem;
-   program z predchoziho behu (i po chybe) se uvolni */
+/* initial state (formerly constructor of AsmText) - before each compilation;
+   the program from the previous run (even after an error) is released */
 static void initState (void)
 {
     if (prog != NULL) AsmDestroy (prog);
@@ -2663,14 +2662,14 @@ static void initState (void)
     SeqClear (&global_objects);
 }
 
-/* uvolneni (drive destruktor AsmText) */
+/* release (formerly destructor of AsmText) */
 static void freeState (void)
 {
     AsmDestroy (prog);
     prog = NULL;
 }
 
-/* vlozeni do serazeneho seznamu klicu (poradi jako iterace std::map) */
+/* insertion into the sorted list of keys (order as in iteration of std::map) */
 static void insertSortedStr (Seq * keys, const char * k)
 {
     long i = SeqSize (keys);
@@ -2683,7 +2682,7 @@ static void insertSortedStr (Seq * keys, const char * k)
     SeqSet (keys, i, (long) k);
 }
 
-/* ukazatele se porovnavaji jako adresy (jako std::map <T *, ...>) */
+/* pointers are compared as addresses (like std::map <T *, ...>) */
 static void insertSortedType (Seq * keys, TypePtr k)
 {
     long i = SeqSize (keys);
@@ -2721,17 +2720,17 @@ static AsmNode * ins3 (keyword k, AsmOp * a, AsmOp * b, AsmOp * c) { return ins 
 
 static long run (bool verbose)
 {
-    /* CPARSER_RTL=own => vlastni behova knihovna (bez glibc, mensi systemy) */
+    /* CPARSER_RTL=own => own runtime library (without glibc, smaller systems) */
     const char * rtl = getenv ("CPARSER_RTL");
     long i;
     NodePtr p;
     objmode = InstrObjectFile != NULL;
-    /* ToaruOS (-T): samostatny program s vlastni knihovnou a syscally ToaruOS
-       (objekt -c dal pro tamni gcc a libc) */
+    /* ToaruOS (-T): standalone program with its own library and ToaruOS syscalls
+       (object -c is for the later gcc and libc) >>> */
     use_libc = ! ((rtl != NULL && strcmp (rtl, "own") == 0) || (toaruTarget () && ! objmode));
     if (InstrToaruLib != NULL)
     {
-        /* libc ToaruOS: rezim libc, slinkuje staticky linker pasm (linkToaru) */
+        /* ToaruOS libc: libc mode, linked by the static linker pasm (linkToaru) */
         if (toaruTarget ())
             InstrError ("Options -T (own runtime) and -L (ToaruOS libc) cannot be combined");
         if (InstrOutputFile == NULL && ! objmode)
@@ -2740,7 +2739,7 @@ static long run (bool verbose)
     }
     if (objmode && !use_libc)
         InstrError ("Object files (-c) require glibc (not CPARSER_RTL=own)");
-    startProgram ();                   /* kostra programu (seznam uzlu), kurzor na kod */
+    startProgram ();                   /* program skeleton (list of nodes), cursor at the code */
     if (use_libc)
         for (i = 0; RTL_LIBC_EXTERNS [i] != NULL; i++)
             externLabel (RTL_LIBC_EXTERNS [i]);
@@ -2754,7 +2753,7 @@ static long run (bool verbose)
             if (StrEq (obj->name, "main"))
             {
                 main_fce = obj;
-                setFceLabel (obj, "FMAIN");     /* vola start v RTL_CODE */
+                setFceLabel (obj, "FMAIN");     /* calls start in RTL_CODE */
             }
             else
                 setFceLabel (obj, newLabel ("F"));
@@ -2762,11 +2761,11 @@ static long run (bool verbose)
     }
 
     for (p = ctorlist.first; p != NULL; p = p->next)
-        setFceLabel (p->item, newLabel ("F"));     /* konstruktory */
+        setFceLabel (p->item, newLabel ("F"));     /* constructors */
     for (p = methodlist.first; p != NULL; p = p->next)
-        setFceLabel (p->item, newLabel ("F"));     /* metody */
+        setFceLabel (p->item, newLabel ("F"));     /* methods */
 
-    /* objekt: verejne funkce, metody a konstruktory definovane mimo tridu */
+    /* object: public functions, methods and constructors defined outside the class */
     if (objmode)
         for (i = 0; i < SeqSize (&fce_keys); i++)
         {
@@ -2775,7 +2774,7 @@ static long run (bool verbose)
                 addPublic (DictGetStr (&fce_labels, (long) f), symName (f));
         }
 
-    allocGlobals ();             /* po navestich funkci (ukazatele na funkce v datech) */
+    allocGlobals ();             /* after function labels (function pointers in data) */
 
     has_main = main_fce != NULL;
     if (main_fce == NULL && !objmode)
@@ -2791,21 +2790,21 @@ static long run (bool verbose)
     codeGlobalInit ();                             /* CINIT */
     codeGlobalFini ();                             /* CFINI */
     for (i = 0; i < SeqSize (&implicit_ctors); i++)
-        codeImplicitCtor ((TypePtr) SeqGet (&implicit_ctors, i));     /* seznam muze behem generovani rust */
+        codeImplicitCtor ((TypePtr) SeqGet (&implicit_ctors, i));     /* the list may grow during generation */
     codeVtables ();
     for (i = 0; i < SeqSize (&implicit_dtors); i++)
-        codeImplicitDtor ((TypePtr) SeqGet (&implicit_dtors, i));     /* i z tabulek virtualnich metod */
+        codeImplicitDtor ((TypePtr) SeqGet (&implicit_dtors, i));     /* also from virtual method tables */
 
     finishProgram ();
 
-    /* preklad assemblerem pasm (text z pameti) a spusteni */
+    /* compilation by the pasm assembler (text from memory) and run */
     TempDir * dir = TempDir_new ();
     char * bin_name = TempDir_file (dir, "prog.bin");
     char * lst_name = TempDir_file (dir, "prog.lst");
     TempDir_file (dir, "prog.o");
     TempDir_file (dir, "tool.out");
 
-    /* text pro assembler i pri chybe: -S soubor.asm a -o x => x.asm */
+    /* text for the assembler also on error: -S file.asm and -o x => x.asm */
     if (InstrAsmFile != NULL)
         saveAsm (InstrAsmFile);
     if (InstrOutputFile != NULL)
@@ -2813,7 +2812,7 @@ static long run (bool verbose)
 
     if (objmode)
     {
-        /* jen objekt ELF64 (dalsi soubory a knihovny se slinkuji pozdeji) */
+        /* only ELF64 object (other files and libraries are linked later) */
         assemble (dir->path, "-c");
         copyFile (Cat (dir->path, "/prog.o"), InstrObjectFile, false);
         TempDir_free (dir);
@@ -2822,13 +2821,13 @@ static long run (bool verbose)
 
     if (use_libc)
     {
-        /* objekt ELF64 + gcc (glibc) */
+        /* ELF64 object + gcc (glibc) */
         assemble (dir->path, "-c");
         if (InstrToaruLib != NULL) linkToaru (dir->path);   /* libc ToaruOS, PasmLink */
         else linkProg (dir->path);
     }
     else
-        assemble (dir->path, "-e");   /* samostatny ELF64, vlastni knihovna */
+        assemble (dir->path, "-e");   /* standalone ELF64, own library */
 
     if (verbose)
     {
@@ -2838,7 +2837,7 @@ static long run (bool verbose)
 
     if (InstrOutputFile != NULL)
     {
-        /* ulozit program (a text pro assembler a vypis), nespoustet */
+        /* save the program (and assembler text and listing), do not run it */
         const char * out = InstrOutputFile;
         copyFile (bin_name, out, true);
         copyFile (lst_name, Cat (out, ".lst"), false);
@@ -2853,12 +2852,11 @@ static long run (bool verbose)
 
 /* ------------------------------------------------------------------ */
 
-/* spusteni nastroje v docasnem adresari, vystup do tool.out;
-   vraci true pri uspechu, msg = vystup nastroje */
+/* run a tool in the temporary directory, output to tool.out; returns true on success, msg = tool output */
 static bool runTool (const char * dir, Seq * args, char * * msg)
 {
-    fflush (stdout);       /* ne fflush (NULL): */
-    fflush (stderr);       /* v libc ToaruOS 2.3.2 pada (Segmentation fault) */
+    fflush (stdout);       /* not fflush (NULL): */
+    fflush (stderr);       /* in ToaruOS 2.3.2 libc it crashes (Segmentation fault) */
 
     pid_t pid = fork ();
     if (pid < 0)
@@ -2897,17 +2895,16 @@ static bool runTool (const char * dir, Seq * args, char * * msg)
     return WIFEXITED (status) && WEXITSTATUS (status) == 0;
 }
 
-/* jako  pasm -e -l prog.asm  /  pasm -c -l prog.asm:  vystupy prog.o /
-   prog.bin a prog.lst v docasnem adresari (knihovna asm/pasmlib.h - bez
-   spousteni programu pasm a bez prog.asm);  pasm cte seznam uzlu primo
-   (faze 2), CPARSER_ASMLIST=text - pres text (faze 1, pro porovnani) */
+/* like  pasm -e -l prog.asm  /  pasm -c -l prog.asm: outputs prog.o / prog.bin and prog.lst in the
+   temporary directory (library asm/pasmlib.h - without running the pasm program and without prog.asm);
+   pasm reads the list of nodes directly (phase 2), CPARSER_ASMLIST=text - via text (phase 1, for comparison) */
 static void assemble (const char * dir, const char * mode)
 {
     char msg [512];
     int flags = PASM_LST;
     if (StrEq (mode, "-e")) flags = flags | PASM_EXE;
     else flags = flags | PASM_ELFOBJ;
-    if (StrEq (mode, "-e") && toaruTarget ()) flags = flags | PASM_TOARU;   /* od 0x3F000000 */
+    if (StrEq (mode, "-e") && toaruTarget ()) flags = flags | PASM_TOARU;   /* from 0x3F000000 */
     const char * how = getenv ("CPARSER_ASMLIST");
     bool text = how != NULL && strcmp (how, "text") == 0;
     char * base = Cat (dir, "/prog");
@@ -2918,8 +2915,8 @@ static void assemble (const char * dir, const char * mode)
         InstrError (Cat ("pasm: ", msg));
 }
 
-/* staticky linker pasm (PasmLink):  crt0.o crti.o prog.o libc.a crtn.o  => prog.bin
-   (ELF64 pro ToaruOS od 0x3F000000, libc ToaruOS z InstrToaruLib - /lib ToaruOS) */
+/* static linker pasm (PasmLink):  crt0.o crti.o prog.o libc.a crtn.o  => prog.bin
+   (ELF64 for ToaruOS from 0x3F000000, ToaruOS libc from InstrToaruLib - /lib ToaruOS) */
 static void linkToaru (const char * dir)
 {
     const char * lib = InstrToaruLib;
@@ -2948,7 +2945,7 @@ static void linkProg (const char * dir)
     linkFiles (dir, inputs);
 }
 
-/* gcc -no-pie objekty ... -o prog.bin -lm  (v adresari dir) */
+/* gcc -no-pie objects ... -o prog.bin -lm  (in directory dir) */
 static void linkFiles (const char * dir, Seq * inputs)
 {
     const char * cc = getenv ("CPARSER_CC");
@@ -2976,8 +2973,8 @@ static void linkFiles (const char * dir, Seq * inputs)
     }
 }
 
-/* slinkovani objektu (i knihoven, -l...); out != NULL => ulozit program,
-   jinak spustit a vratit vysledek main */
+/* linking of objects (also libraries, -l...); out != NULL => save the program,
+   otherwise run it and return the result of main */
 static long linkAndRun (Seq * inputs, const char * out)
 {
     TempDir * dir = TempDir_new ();
@@ -2995,15 +2992,15 @@ static long linkAndRun (Seq * inputs, const char * out)
     return result;
 }
 
-/* spusteni prog.bin, vysledek main se precte z roury (deskriptor 3) */
+/* running prog.bin, the result of main is read from the pipe (descriptor 3) */
 static long execute (const char * bin_name)
 {
     int fd [2];
     if (pipe (fd) != 0)
         InstrError ("pipe failed");
 
-    fflush (stdout);       /* ne fflush (NULL): */
-    fflush (stderr);       /* v libc ToaruOS 2.3.2 pada (Segmentation fault) */
+    fflush (stdout);       /* not fflush (NULL): */
+    fflush (stderr);       /* in ToaruOS 2.3.2 libc it crashes (Segmentation fault) */
 
     pid_t pid = fork ();
     if (pid < 0)
@@ -3011,7 +3008,7 @@ static long execute (const char * bin_name)
 
     if (pid == 0)
     {
-        setenv ("CPARSER_RESULT", "3", 1);     /* main zapise vysledek do deskriptoru 3 */
+        setenv ("CPARSER_RESULT", "3", 1);     /* main writes the result to descriptor 3 */
         close (fd [0]);
         if (fd [1] != 3)
         {
@@ -3041,7 +3038,7 @@ static long execute (const char * bin_name)
     if (got != (long) sizeof (result))
     {
         if (WIFEXITED (status))
-            return WEXITSTATUS (status);    /* exit () z programu */
+            return WEXITSTATUS (status);    /* exit () from the program */
         InstrError ("Program failed");
     }
     return result;
@@ -3049,16 +3046,16 @@ static long execute (const char * bin_name)
 
 /* ------------------------------------------------------------------ */
 
-/* vystup kodu */
+/* exit code */
 
 static char * newLabel (const char * prefix)
 {
     return Cat (prefix, IntStr (++ label_count));
 }
 
-/* ---- program jako seznam uzlu (asm/asmlist.h) ---- */
+/* ---- program as a list of nodes (asm/asmlist.h) ---- */
 
-/* navesti podle jmena (generator pracuje se jmeny: L5, F3, S12, LC_printf) */
+/* label by name (the generator works with names: L5, F3, S12, LC_printf) */
 static AsmLabel * labelObj (const char * name)
 {
     if (SDictContains (&label_objs, name))
@@ -3068,7 +3065,7 @@ static AsmLabel * labelObj (const char * name)
     return l;
 }
 
-/* operandy (jmena jako v AsmJit); patri programu prog */
+/* operands (names as in AsmJit); belong to program prog */
 static AsmOp * gp (Register r) { return AsmPReg (prog, r); }
 static AsmOp * xreg (int n) { return AsmPXmm (prog, n); }
 static AsmOp * imm (long v) { return AsmPImm (prog, v); }
@@ -3083,14 +3080,14 @@ static AsmOp * qword_lab (const char * l) { return AsmPMemLab (prog, 8, labelObj
 static AsmOp * alab (const char * l) { return AsmPMemLab (prog, 0, labelObj (l), 0); }  /* lea rax, S5 */
 static AsmOp * jlab (const char * l) { return AsmPLab (prog, labelObj (l)); }          /* jmp L5, call F3 */
 
-/* poznamka za ; k uzlu:  note (note (ins1 (iMov, gp (RAX)), ...), "x") */
+/* comment after ; to the node:  note (note (ins1 (iMov, gp (RAX)), ...), "x") */
 static AsmNode * note (AsmNode * n, const char * text)
 {
     if (! StrEmpty (text)) AsmComment (n, text);
     return n;
 }
 
-/* instrukce s 0 .. 3 operandy na konec kodu (kurzor programu) */
+/* instruction with 0 .. 3 operands at the end of code (program cursor) */
 static AsmNode * ins (keyword k, AsmOp * a, AsmOp * b, AsmOp * c)
 {
     return AsmInsP (prog, k, a, b, c);
@@ -3116,7 +3113,7 @@ static void blank (void)
     AsmTextLine (prog, "");
 }
 
-/* pole radek ukoncene NULL (behova knihovna RTL_...) */
+/* array of lines ended by NULL (runtime library RTL_...) */
 static void textLines (const char * * text)
 {
     long i;
@@ -3124,14 +3121,14 @@ static void textLines (const char * * text)
         AsmTextLine (prog, text [i]);
 }
 
-/* program pro ToaruOS (instr.h InstrToaru nebo prostredi PASM_TARGET=toaru) */
+/* program for ToaruOS (instr.h InstrToaru or environment PASM_TARGET=toaru) */
 static bool toaruTarget (void)
 {
     const char * t = getenv ("PASM_TARGET");
     return InstrToaru != 0 || (t != NULL && strcmp (t, "toaru") == 0);
 }
 
-/* jako textLines, radky ze skupin RTL_TOARU nahradi */
+/* as textLines; lines from RTL_TOARU groups replace */
 static void textLinesToaru (const char * * text)
 {
     long used = 0;
@@ -3163,11 +3160,11 @@ static void textLinesToaru (const char * * text)
         i += n;
         used ++;
     }
-    if (used != 11)                                /* vsechny skupiny prave jednou */
+    if (used != 11)                                /* all groups exactly once */
         InstrError ("RTL_TOARU does not match RTL_CODE");
 }
 
-/* data: uzly za data_cur (konec generovanych dat), potom zpet na konec kodu */
+/* data: nodes after data_cur (end of generated data), then back to the end of code */
 static AsmNode * dataBegin (void)
 {
     return AsmSetCursor (prog, data_cur);
@@ -3196,7 +3193,7 @@ static void dataQ (const char * label, AsmOp * item, const char * c)
     dataEnd (save);
 }
 
-/* hodnota v datech z textu:  "offset S5", "-3", "4607182418800017408" */
+/* value in data from text:  "offset S5", "-3", "4607182418800017408" */
 static AsmOp * slotOp (const char * v)
 {
     if (strlen (v) > 7 && strncmp (v, "offset ", 7) == 0)
@@ -3206,9 +3203,8 @@ static AsmOp * slotOp (const char * v)
     return AsmPImmU (prog, strtoul (v, NULL, 10));
 }
 
-/* kostra programu: hlavicka, extrn / public (ext_cur), datovy segment
-   (data_cur), behova knihovna, kodovy segment - kurzor zustane na
-   zacatku kodu; volat v run () (use_libc je znamo) */
+/* program skeleton: header, extrn / public (ext_cur), data segment (data_cur), runtime library,
+   code segment - the cursor stays at the start of code; call in run () (use_libc is known) */
 static void startProgram (void)
 {
     if (use_libc)
@@ -3233,7 +3229,7 @@ static void startProgram (void)
         AsmTextLine (prog, "");
     }
     AsmNode * code_start = AsmDir (prog, iSegment, labelObj ("code"), "use64 para");
-    code_tail = AsmTextLine (prog, "");     /* misto pro RTL_LIBC_MAIN (main) - odebere se */
+    code_tail = AsmTextLine (prog, "");     /* place for RTL_LIBC_MAIN (main) - removed */
     if (use_libc) textLines (RTL_LIBC_CODE);
     else if (toaruTarget ()) textLinesToaru (RTL_CODE);
     else textLines (RTL_CODE);
@@ -3244,7 +3240,7 @@ static void startProgram (void)
     AsmSetCursor (prog, code_start);
 }
 
-/* konec programu: extrn / public (az ted jsou zname), behova knihovna main */
+/* end of program: extrn / public (only now they are known), runtime library main */
 static void finishProgram (void)
 {
     long i;
@@ -3264,8 +3260,8 @@ static void finishProgram (void)
         for (i = 0; i < SeqSize (&extern_data_keys); i++)
         {
             char * e = (char *) SeqGet (&extern_data_keys, i);
-            if (SDictContains (&label_objs, SDictGetStr (&extern_data, e)))   /* jen pouzite: nepouzity nedefinovany
-                                                                               symbol odmitne linker tcc */
+            if (SDictContains (&label_objs, SDictGetStr (&extern_data, e)))   /* only used: an unused undefined
+                                                                               symbol is rejected by the tcc linker */
                 AsmDir (prog, iExtrn, labelObj (SDictGetStr (&extern_data, e)), Cat3 ("qword '", e, "'"));
         }
         if (has_main)
@@ -3277,17 +3273,17 @@ static void finishProgram (void)
     AsmSetCursor (prog, code);
 }
 
-/* znaky v polich a za ukazateli zabiraji 1 bajt (char buf [N], char * p),
-   skalarni promenne a polozky typu char zustavaji v 8-bajtovych slotech */
+/* characters in arrays and after pointers take 1 byte (char buf [N], char * p),
+   scalar variables and items of type char stay in 8-byte slots */
 static bool isByteType (TypePtr type)
 {
     return type != NULL && type->sort == Char;
 }
 
-/* l-hodnota typu char v bajtovem poli nebo za ukazatelem: a [i], *p */
-/* ---- nacitani a ukladani podle typu ------------------------------------ */
+/* l-value of type char in a byte array or after a pointer: a [i], *p */
+/* ---- loading and storing by type ------------------------------------ */
 
-/* l-hodnota v pameti: velikost v bajtech (prvek kontejneru - 8bajtovy slot) */
+/* l-value in memory: size in bytes (container element - 8-byte slot) */
 static long lvalueSize (ExprPtr e)
 {
     e = SkipParens (e);
@@ -3296,7 +3292,7 @@ static long lvalueSize (ExprPtr e)
     return scalarSize (e->type);
 }
 
-/* cast registru dane velikosti (rax => eax, ax, al) */
+/* part of register of the given size (rax => eax, ax, al) */
 static Register subReg (Register r, long size)
 {
     if (size >= 8) return r;
@@ -3315,7 +3311,7 @@ static Register subReg (Register r, long size)
 
 static AsmOp * sized_ptr (long size, Register b, long off) { return AsmPMem (prog, (int) size, b, off); }
 
-/* rax := hodnota velikosti size na adrese rax (uns - rozsireni nulami, jinak znamenkem) */
+/* rax := value of size size at address rax (uns - extended with zeros, otherwise with sign) */
 static void loadSized (long size, bool uns)
 {
     if (size == 1)
@@ -3337,20 +3333,20 @@ static void loadSized (long size, bool uns)
         ins2 (iMov, gp (RAX), qword_ptr (RAX, 0));
 }
 
-/* rax = adresa l-hodnoty lv => jeji hodnota (float: 32bitovy obraz, horni bity 0) */
+/* rax = address of l-value lv => its value (float: 32-bit image, upper bits 0) */
 static void loadValue (ExprPtr lv)
 {
     long size = lvalueSize (lv);
     loadSized (size, isUnsignedType (lv->type) || fpKind (lv->type) == 1);
 }
 
-/* [addr] := val (velikost size) */
+/* [addr] := val (size size) */
 static void storeSized (Register addr, Register val, long size)
 {
     ins2 (iMov, sized_ptr (size, addr, 0), gp (subReg (val, size)));
 }
 
-/* rax := hodnota orezana na velikost size a rozsirena (uns - nulami, jinak znamenkem) */
+/* rax := value truncated to size size and extended (uns - with zeros, otherwise with sign) */
 static void normalizeSize (long size, bool uns)
 {
     if (size == 1)
@@ -3367,7 +3363,7 @@ static void normalizeSize (long size, bool uns)
     }
 }
 
-/* rax := cele cislo prevedene na typ t (preteceni jako v C, bool 0 / 1) */
+/* rax := integer converted to type t (overflow as in C, bool 0 / 1) */
 static void normalizeTo (TypePtr t)
 {
     if (!isIntegralType (t)) return;
@@ -3379,8 +3375,8 @@ static void normalizeTo (TypePtr t)
     normalizeSize (scalarSize (t), isUnsignedType (t));
 }
 
-/* obvykly aritmeticky prevod (C): velikost (4, 8) a znamenko spolecneho typu;
-   char, short, bool => int; ukazatel - 8 bajtu bez znamenka (porovnani) */
+/* usual arithmetic conversion (C): size (4, 8) and sign of the common type;
+   char, short, bool => int; pointer - 8 bytes unsigned (comparison) */
 static void promoted (TypePtr t, long * size, bool * uns)
 {
     TypePtr r = Resolve (t);
@@ -3408,14 +3404,14 @@ static void arithType (TypePtr t1, TypePtr t2, long * size, bool * uns)
     else { * size = s2; * uns = u2; }
 }
 
-/* kopie n bajtu z [rsi] do [rdi] */
+/* copy n bytes from [rsi] to [rdi] */
 static void copyBytes (long n)
 {
     ins2 (iMov, gp (RCX), imm (n));
     insPrefix (iRep, iMovsb);
 }
 
-/* volani behove rutiny, rsp zarovnany na 16 (vyzaduje glibc) */
+/* call of runtime routine, rsp aligned to 16 (requires glibc) */
 static void callRt (const char * label, const char * text)
 {
     bool pad = (depth % 2) != 0;
@@ -3424,7 +3420,7 @@ static void callRt (const char * label, const char * text)
     if (pad) ins2 (iAdd, gp (RSP), imm (8));
 }
 
-/* push / pop s pocitanim hloubky zasobniku */
+/* push / pop with counting of the stack depth */
 
 static void push (Register r)
 {
@@ -3440,12 +3436,12 @@ static void pop (Register r)
 
 /* ------------------------------------------------------------------ */
 
-/* bajty retezce s koncovou nulou: label db 'text', 10, 0 */
+/* bytes of string with terminating zero: label db 'text', 10, 0 */
 static void emitBytes (const char * label, const char * value)
 {
-    Seq * items = SeqNew ();           /* AsmOp * - polozky DB */
-    Seq * widths = SeqNew ();          /* delka polozky v textu pro pasm */
-    char text [64];                    /* nejvyse 40 znaku */
+    Seq * items = SeqNew ();           /* AsmOp * - DB items */
+    Seq * widths = SeqNew ();          /* length of item in text for pasm */
+    char text [64];                    /* at most 40 characters */
     long tlen = 0;
     long vlen = strlen (value);
     long i;
@@ -3485,8 +3481,8 @@ static void emitBytes (const char * label, const char * value)
     SeqAdd (items, (long) imm (0));
     SeqAdd (widths, 1);
 
-    /* nejvyse 8 polozek na radku a radek kratsi nez LineLen = 160 znaku
-       (pasm delsi radek orizne - retezec by prisel o konec a nulu) */
+    /* at most 8 items per line and a line shorter than LineLen = 160 characters
+       (pasm cuts a longer line - the string would lose its end and the zero) */
     AsmNode * save = dataBegin ();
     i = 0;
     while (i < SeqSize (items))
@@ -3494,7 +3490,7 @@ static void emitBytes (const char * label, const char * value)
         AsmLabel * l = NULL;
         if (i == 0) l = labelObj (label);
         AsmNode * n = AsmDataP (prog, l, iDb, (AsmOp *) SeqGet (items, i));
-        long len = 16 + SeqGet (widths, i);            /* navesti, db, prvni polozka */
+        long len = 16 + SeqGet (widths, i);            /* label, db, first item */
         long k = i + 1;
         while (k < SeqSize (items) && k < i + 8 && len + 2 + SeqGet (widths, k) < 140)
         {
@@ -3507,7 +3503,7 @@ static void emitBytes (const char * label, const char * value)
     dataEnd (save);
 }
 
-/* retezcova konstanta do datoveho segmentu: db 'text', 10, 0 */
+/* string constant into the data segment: db 'text', 10, 0 */
 static char * stringLabel (const char * value)
 {
     if (SDictContains (&string_labels, value))
@@ -3521,7 +3517,7 @@ static char * stringLabel (const char * value)
 
 /* ------------------------------------------------------------------ */
 
-/* externi funkce (glibc): navesti pro EXTRN */
+/* external function (glibc): label for EXTRN */
 static char * externLabel (const char * name)
 {
     long i;
@@ -3534,7 +3530,7 @@ static char * externLabel (const char * name)
         char c = name [i];
         if (! (isalnum ((unsigned char) c) || c == '_')) ok = false;
     }
-    /* pasm nerozlisuje velka a mala pismena: Abort (asm) a abort (glibc) */
+    /* pasm does not distinguish upper and lower case: Abort (asm) and abort (glibc) */
     long llen = strlen (label);
     char * lower = (char *) MemAlloc (llen + 1);
     for (i = 0; i < llen; i++)
@@ -3552,8 +3548,8 @@ static char * externLabel (const char * name)
     return label;
 }
 
-/* konstanta std::string do datoveho segmentu: delka, znaky, 0
-   (navesti ukazuje na znaky, delka je 8 bajtu pred nimi) */
+/* std::string constant in the data segment: length, characters, 0
+   (the label points to the characters, the length is 8 bytes before them) */
 static char * stringConstLabel (const char * value)
 {
     if (SDictContains (&sconst_labels, value))
@@ -3570,22 +3566,22 @@ static char * stringConstLabel (const char * value)
     return label;
 }
 
-/* promenna / polozka se pri vytvoreni nuluje (prazdny retezec, kontejner) */
-/* const string & - predava se jako hodnota (retezce se nemeni) */
+/* variable / member is zeroed when created (empty string, container) */
+/* const string & - passed by value (strings are not changed) */
 static bool isValueRef (TypePtr t)
 {
     return t != NULL && t->sort == Reference && IsStdString (t->from) && t->from->Const;
 }
 
-/* sizeof: znak 1 bajt, pole znaku n bajtu, ostatni promenne 8 bajtu
-   (std::string, int, ukazatel, ...), struktury a pole podle typeCount */
+/* sizeof: char 1 byte, array of n chars n bytes, other variables 8 bytes
+   (std::string, int, pointer, ...), structs and arrays according to typeCount */
 static long byteSize (TypePtr type)
 {
     if (type == NULL) return VAR_SIZE;
     return typeBytes (type);
 }
 
-/* vyctova konstanta:  enum K { a, b = 5, c };  =>  hodnota (c = 6) */
+/* enum constant:  enum K { a, b = 5, c };  =>  value (c = 6) */
 static bool enumValue (ObjectPtr obj, long * value)
 {
     NodePtr p;
@@ -3605,7 +3601,7 @@ static bool enumValue (ObjectPtr obj, long * value)
         }
         v ++;
     }
-    return false;   /* promenna vyctoveho typu */
+    return false;   /* variable of enum type */
 }
 
 static bool constValue (ExprPtr expr, long * value)
@@ -3616,7 +3612,7 @@ static bool constValue (ExprPtr expr, long * value)
     switch (expr->op)
     {
         case NUM:
-            * value = (long) strtoul (expr->id, NULL, 0);   /* i 18446744073709551615UL; strtoul (ne strtoull) - ma prototyp v cmini/ownheaders/ (cmini) */
+            * value = (long) strtoul (expr->id, NULL, 0);   /* i 18446744073709551615UL; strtoul (not strtoull) - has its prototype in cmini/ownheaders/ (cmini) */
             return true;
 
         case CHR:
@@ -3627,17 +3623,17 @@ static bool constValue (ExprPtr expr, long * value)
         case FALSE_:   * value = 0; return true;
         case NULLPTR_: * value = 0; return true;
 
-        case SIZEOF_:  /* velikost v bajtech podle modelu pameti instr.c */
+        case SIZEOF_:  /* size in bytes according to the memory model of instr.c */
             * value = byteSize (expr->e2 != NULL ? SkipParens (expr->e2)->type : expr->obj->type);
             return true;
 
         case LPAR:
             return constValue (expr->e1, value);
 
-        case IDENT:   /* const int N = 100;  vyctova konstanta */
+        case IDENT:   /* const int N = 100;  enum constant */
             if (enumValue (expr->obj, value))
                 return true;
-            if (IsConstInit (expr->obj) ||       /* const size_t N = 10;  (const u aliasu) */
+            if (IsConstInit (expr->obj) ||       /* const size_t N = 10;  (const of an alias) */
                 (expr->obj != NULL && expr->obj->init != NULL && IsStaticMember (expr->obj)))
                 return constValue (expr->obj->init, value);
             return false;
@@ -3650,7 +3646,7 @@ static bool constValue (ExprPtr expr, long * value)
             * value = - * value;
             return true;
 
-        case NOT:       /* ~x (bitovy doplnek) */
+        case NOT:       /* ~x (bitwise complement) */
             if (!constValue (expr->e2, value)) return false;
             * value = ~ * value;
             return true;
@@ -3684,20 +3680,20 @@ static bool constValue (ExprPtr expr, long * value)
     }
 }
 
-/* velikost prvku pole nebo cile ukazatele v bajtech (char => 1) */
+/* size of array element or pointer target in bytes (char => 1) */
 static long elemSize (TypePtr type)
 {
-    if (type == NULL || type->sort == Void) return 1;   /* void * (jako gcc) */
+    if (type == NULL || type->sort == Void) return 1;   /* void * (as in gcc) */
     return typeBytes (type);
 }
 
-/* ---- velikosti jako v C (x86-64) ---------------------------------------
-   char, bool 1 bajt, short 2, int, unsigned, vycet, float 4, long, ukazatel,
-   double, std::string, Sequence, Dictionary (ukazatel na hlavicku) 8; struktury
-   s prirozenym zarovnanim polozek. Hodnota v registru je 64bitova, rozsirena podle
-   typu (int znamenkem, unsigned nulami - normalizeTo), float = 32bitovy obraz. */
+/* ---- sizes as in C (x86-64) ---------------------------------------
+   char, bool 1 byte, short 2, int, unsigned, enum, float 4, long, pointer,
+   double, std::string, Sequence, Dictionary (pointer to the header) 8; structs
+   with natural alignment of members. The value in a register is 64-bit, extended
+   according to the type (int with sign, unsigned with zeros - normalizeTo), float = 32-bit image. */
 
-/* velikost typu v bajtech */
+/* size of the type in bytes */
 static long typeBytes (TypePtr type)
 {
     if (type == NULL) return VAR_SIZE;
@@ -3729,7 +3725,7 @@ static long typeAlign (TypePtr type)
     return scalarSize (type);
 }
 
-/* pocet 8-bajtovych mist, ktere typ zabira v ramci funkce a v datech */
+/* number of 8-byte places the type takes in a function and in data */
 static long typeCount (TypePtr type)
 {
     return (typeBytes (type) + VAR_SIZE - 1) / VAR_SIZE;
@@ -3742,9 +3738,9 @@ static char * className (TypePtr cls)
     return (cls != NULL && cls->tag != NULL) ? cls->tag : (char *) "?";
 }
 
-/* rozlozeni struktury jako v C: polozky baze, ukazatel na tabulku virtualnich metod
-   (zavede ho prvni polymorfni trida v hierarchii), vlastni polozky - kazda zarovnana
-   na svou velikost; vysledek v bajtech */
+/* layout of a struct as in C: base members, pointer to the virtual method table
+   (introduced by the first polymorphic class in the hierarchy), own members - each aligned
+   to its size; result in bytes */
 static long structBytes (TypePtr type)
 {
     if (DictContains (&struct_sizes, (long) type))
@@ -3756,14 +3752,14 @@ static long structBytes (TypePtr type)
     }
     if (!type->defined)
         InstrError (Cat ("Structure is not defined: ", className (type)));
-    DictStore (&struct_sizes, (long) type, -1);      /* rozpracovano */
+    DictStore (&struct_sizes, (long) type, -1);      /* work in progress */
 
     long n = 0;
     long align = 1;
     if (type->base != NULL)
     {
         structBytes (type->base);
-        n = DictGet (&struct_ends, (long) type->base);      /* baze na zacatku - stejne adresy */
+        n = DictGet (&struct_ends, (long) type->base);      /* base at the start - same addresses */
         align = DictGet (&struct_aligns, (long) type->base);
     }
 
@@ -3771,8 +3767,8 @@ static long structBytes (TypePtr type)
     {
         if (BaseIsPolymorphic (type))
         {
-            /* nejdriv hodnota z baze: zapis vptr_offsets [type] = vptr_offsets [type->base]
-               by ukazal do pole, ktere vlozeni klice type->base prehashovanim uvolni */
+            /* first the value from base: the assignment vptr_offsets [type] = vptr_offsets [type->base]
+               would point into an array which inserting the key type->base frees by rehashing */
             long base_off = DictGet (&vptr_offsets, (long) type->base);
             DictStore (&vptr_offsets, (long) type, base_off);
         }
@@ -3821,7 +3817,7 @@ static long structBytes (TypePtr type)
     return n;
 }
 
-/* pocet 8-bajtovych mist struktury (ramec, docasne misto) */
+/* number of 8-byte places of the struct (frame, temporary place) */
 static long structCount (TypePtr type)
 {
     return (structBytes (type) + VAR_SIZE - 1) / VAR_SIZE;
@@ -3835,8 +3831,8 @@ static long memberOffset (ObjectPtr member, TypePtr cls)
     return DictGet (&member_offsets, (long) member);
 }
 
-/* tabulka virtualnich metod: sloty baze, prekryte metody na stejnem miste,
-   nove virtualni metody na konci */
+/* virtual method table: base slots, overridden methods in the same place,
+   new virtual methods at the end */
 static int vtableSlot (TypePtr cls, ObjectPtr m)
 {
     int i = VtIndex (cls, m->name);   /* sem.c */
@@ -3854,10 +3850,10 @@ static char * vtableLabel (TypePtr cls)
     return label;
 }
 
-/* tabulky virtualnich metod do datoveho segmentu */
+/* method tables into the data segment */
 static void codeVtables (void)
 {
-    /* tabulky vsech polymorfnich bazi (retez pro dynamic_cast) */
+    /* tables of all polymorphic bases (chain for dynamic_cast) */
     bool added;
     long k;
     for (added = true; added; )
@@ -3879,12 +3875,11 @@ static void codeVtables (void)
     for (k = 0; k < SeqSize (&vtable_keys); k++)
     {
         TypePtr vt = (TypePtr) SeqGet (&vtable_keys, k);
-        stringLabel (className (vt));               /* jmeno tridy pred tabulkou */
+        stringLabel (className (vt));               /* class name before the table */
         dataComment (Cat ("vtable ", className (vt)));
-        /* [VT - 16] = jmeno tridy, [VT - 8] = tabulka nadrazene polymorfni
-           tridy nebo 0 (dynamic_cast - i mezi soubory, tabulky jsou v kazdem
-           objektu zvlast) */
-        char * name_label = stringLabel (className (vt));   /* emituje retezec */
+        /* [VT - 16] = class name, [VT - 8] = table of the parent polymorphic class or 0
+           (dynamic_cast - also across files, the tables are separate in each object) */
+        char * name_label = stringLabel (className (vt));   /* emits a string */
         dataQ ("", AsmPOffset (prog, labelObj (name_label)), "jmeno tridy");
         TypePtr b = vt->base;
         if (BaseIsPolymorphic (vt))
@@ -3898,7 +3893,7 @@ static void codeVtables (void)
             char * target;
             if (strcmp (m->name, "~") == 0)
             {
-                /* destruktor: vzdy destruktor teto tridy (i implicitni) */
+                /* destructor: always the destructor of this class (even an implicit one) */
                 TypePtr c = vt;
                 if (c->dtor != NULL && c->dtor->pure && c->dtor->body == NULL)
                     target = (char *) "RT_PURE";
@@ -3917,9 +3912,9 @@ static void codeVtables (void)
 
 /* ------------------------------------------------------------------ */
 
-/* trida potrebuje konstruktor: uzivatelsky, tabulka virtualnich metod,
-   konstruktor baze nebo vnorenych objektu */
-/* navesti konstruktoru bez argumentu (implicitni se vygeneruje pozdeji) */
+/* class needs a constructor: user-defined, virtual method table,
+   constructor of base or of nested objects */
+/* label of constructor without arguments (the implicit one is generated later) */
 static char * ctorLabel (TypePtr cls)
 {
     if (DictContains (&ctor_labels, (long) cls))
@@ -3959,7 +3954,7 @@ static void addDefaultArgsT (TypePtr ftype, Seq * args, const char * name)
     }
 }
 
-/* jmeno pro linker: funkce jako v C, metody  T::f,  T::T,  T::~T */
+/* name for the linker: functions as in C, methods  T::f,  T::T,  T::~T */
 static char * symName (ObjectPtr f)
 {
     if (f->owner == NULL) return f->name;
@@ -3969,8 +3964,8 @@ static char * symName (ObjectPtr f)
     return Cat3 (cls, "::", f->name);
 }
 
-/* verejna funkce objektu: ne static, ne inline, metoda jen definovana mimo
-   tridu (tela uvnitr tridy jsou v hlavicce - v kazdem souboru) */
+/* public function of an object: not static, not inline, method only defined outside
+   the class (bodies inside the class are in the header - in each file) */
 static bool exported (ObjectPtr f)
 {
     if (f->body == NULL || f->storage == Static || f->Inline) return false;
@@ -3979,8 +3974,8 @@ static bool exported (ObjectPtr f)
     return true;
 }
 
-/* navesti metody, konstruktoru, destruktoru: telo v tomto souboru, jinak
-   (objekt) externi symbol T::f */
+/* labels of methods, constructors, destructors: body in this file, otherwise
+   (object) external symbol T::f */
 static char * methodTarget (ObjectPtr m, const char * what)
 {
     if (m->body != NULL && DictContains (&fce_labels, (long) m))
@@ -3991,14 +3986,14 @@ static char * methodTarget (ObjectPtr m, const char * what)
     return (char *) "";
 }
 
-/* adresa funkce (ukazatel na funkci):  f = add;  &add;  dq offset ... */
+/* address of function (pointer to function):  f = add;  &add;  dq offset ... */
 static char * fnLabel (ObjectPtr fce)
 {
     if (fce->method)
         InstrError (Cat ("Pointers to methods are not supported: ", fce->name));
     if (fce->body != NULL)
     {
-        /* fce_labels [fce] - chybejici klic vlozi "" (jako std::map) */
+        /* fce_labels [fce] - a missing key inserts "" (as std::map) */
         if (! DictContains (&fce_labels, (long) fce))
             DictStore (&fce_labels, (long) fce, (long) "");
         return DictGetStr (&fce_labels, (long) fce);
@@ -4006,16 +4001,16 @@ static char * fnLabel (ObjectPtr fce)
     if (fce->owner != NULL)
         return methodTarget (fce, "Method");
     if (use_libc)
-        return externLabel (fce->name);                /* funkce z glibc */
+        return externLabel (fce->name);                /* function from glibc */
     char * rt = rtlFunction (fce->name);
     if (StrEmpty (rt))
         InstrError (Cat ("Undefined function: ", fce->name));
     return rt;
 }
 
-/* volani pres ukazatel na funkci:  f (a),  (*f) (a),  ops [i] (a),  p->op (a),
-   g (x) (y) - adresa funkce se schova na zasobnik, argumenty jako u
-   primeho volani (System V), call r11 */
+/* call through pointer to function:  f (a),  (*f) (a),  ops [i] (a),  p->op (a),
+   g (x) (y) - the function address is saved on the stack, arguments as in a direct
+   call (System V), call r11 */
 static void codeIndirectCall (ExprPtr expr, ExprPtr f)
 {
     ExprPtr callee = (f->op == DEREF) ? f->e2 : f;
@@ -4026,7 +4021,7 @@ static void codeIndirectCall (ExprPtr expr, ExprPtr f)
     if (isStructVal (ftype->from))
         InstrError ("Structure returned by value through function pointer is not supported");
 
-    codeExpr (callee);                          /* adresa funkce */
+    codeExpr (callee);                          /* function address */
     push (RAX);
     long fdepth = depth;
 
@@ -4056,7 +4051,7 @@ static void codeIndirectCall (ExprPtr expr, ExprPtr f)
         ins2 (iAdd, gp (RSP), imm (drop * VAR_SIZE));
         depth -= drop;
     }
-    ins2 (iAdd, gp (RSP), imm (8));                     /* adresa funkce */
+    ins2 (iAdd, gp (RSP), imm (8));                     /* function address */
     depth --;
 
     TypePtr res = ftype->from;
@@ -4065,11 +4060,11 @@ static void codeIndirectCall (ExprPtr expr, ExprPtr f)
     else if (ownedTemp (res))
         ;
     else if (res != NULL && isIntegralType (res))
-        normalizeTo (res);      /* cil muze byt i funkce z glibc - vysledek jen v dolni casti rax */
+        normalizeTo (res);      /* the target may also be a glibc function - result only in the lower part of rax */
 }
 
-/* rax = adresa objektu => konstruktor s argumenty, vysledek rax = this */
-/* konstruktor bez argumentu */
+/* rax = address of object => constructor with arguments, result rax = this */
+/* constructor without arguments */
 static void callCtor0 (TypePtr cls)
 {
     Seq * none = SeqNew ();
@@ -4078,7 +4073,7 @@ static void callCtor0 (TypePtr cls)
 
 static void callCtor (TypePtr cls, Seq * args_in)
 {
-    /* drive Sequence hodnotou: addDefaultArgs meni jen kopii */
+    /* Sequence passed by value: addDefaultArgs changes only the copy */
     Seq * args = SeqCopy (args_in);
 
     ObjectPtr ctor = cls->ctor;
@@ -4103,7 +4098,7 @@ static void callCtor (TypePtr cls, Seq * args_in)
         if (par != NULL) par = par->next;
     }
 
-    push (RAX);                                  /* this - schovany na zasobniku */
+    push (RAX);                                  /* this - saved on the stack */
     long this_depth = depth;
     ThisCode * code_this = (ThisCode *) MemAlloc (sizeof (ThisCode));
     code_this->kind = THIS_STACK;
@@ -4113,7 +4108,7 @@ static void callCtor (TypePtr cls, Seq * args_in)
 
     bool pad = (depth % 2) != 0;
     if (pad) ins2 (iSub, gp (RSP), imm (8));
-    note (ins1 (iCall, jlab (ctor_label)), Cat (className (cls), " (...)"));   /* vraci this */
+    note (ins1 (iCall, jlab (ctor_label)), Cat (className (cls), " (...)"));   /* returns this */
     if (pad) ins2 (iAdd, gp (RSP), imm (8));
     if (drop > 0)
     {
@@ -4124,7 +4119,7 @@ static void callCtor (TypePtr cls, Seq * args_in)
     depth --;
 }
 
-/* rax = adresa promenne => konstruktory (objekt nebo pole objektu) */
+/* rax = address of variable => constructors (object or array of objects) */
 static void constructVar (TypePtr type)
 {
     TypePtr elem = ArrayElem (type);
@@ -4137,7 +4132,7 @@ static void constructVar (TypePtr type)
         return;
     }
 
-    /* pole objektu: cyklus pres prvky, [rsp+8] = adresa, [rsp] = pocet */
+    /* array of objects: loop over the elements, [rsp+8] = address, [rsp] = count */
     long size = structBytes (elem);
     long count = typeBytes (type) / size;
     char * loop_label = newLabel ("L");
@@ -4155,16 +4150,16 @@ static void constructVar (TypePtr type)
     depth -= 2;
 }
 
-/* rax := hodnota std::string z vyrazu typu std::string, retezcove konstanty,
-   char * nebo char */
+/* rax := value of std::string from an expression of type std::string, string constant,
+   char * or char */
 static void codeStringValue (ExprPtr e)
 {
     ExprPtr x = SkipParens (e);
     if (IsStdString (e->type))
         codeExpr (e);
     else if (x->op == STR)
-        ins2 (iLea, gp (RAX), alab (stringConstLabel (x->id)));   /* konstanta - bez alokace */
-    else if (e->type != NULL && IsIntegerSort (e->type->sort))   /* znak */
+        ins2 (iLea, gp (RAX), alab (stringConstLabel (x->id)));   /* constant - no allocation */
+    else if (e->type != NULL && IsIntegerSort (e->type->sort))   /* character */
     {
         codeExpr (e);
         ins2 (iMov, gp (RDI), gp (RAX));
@@ -4180,7 +4175,7 @@ static void codeStringValue (ExprPtr e)
     }
 }
 
-/* rax = adresa => vynulovani promenne (prazdne retezce) */
+/* rax = address => zeroing of variable (empty strings) */
 static void zeroVar (TypePtr type)
 {
     long count = typeCount (type);
@@ -4198,8 +4193,8 @@ static void zeroVar (TypePtr type)
     ins1 (iJnz, jlab (loop_label));
 }
 
-/* zacatek konstruktoru: konstruktor baze, tabulka virtualnich metod,
-   konstruktory vnorenych objektu (potom inicializace a telo) */
+/* beginning of constructor: base constructor, virtual method table,
+   constructors of nested objects (then initialization and body) */
 static void codeCtorPrologue (TypePtr cls, ObjectPtr ctor)
 {
     if (ctor != NULL && ctor->base_init)
@@ -4230,7 +4225,7 @@ static void codeCtorPrologue (TypePtr cls, ObjectPtr ctor)
         ObjectPtr m = p->item;
         if (! IsField (m)) continue;
         TypePtr t = ArrayElem (m->type);
-        if (isZeroInit (t))              /* std::string, kontejner => prazdny */
+        if (isZeroInit (t))              /* std::string, container => empty */
         {
             long off = memberOffset (m, cls);
             loadThis ();
@@ -4246,7 +4241,7 @@ static void codeCtorPrologue (TypePtr cls, ObjectPtr ctor)
     }
 }
 
-/* implicitni konstruktor (trida bez uzivatelskeho konstruktoru) */
+/* implicit constructor (class without user-defined constructor) */
 static void codeImplicitCtor (TypePtr cls)
 {
     current_class = cls;
@@ -4272,9 +4267,9 @@ static void codeImplicitCtor (TypePtr cls)
     this_obj = NULL;
 }
 
-/* ---- destruktory ---------------------------------------------------- */
+/* ---- destructors --------------------------------------------------- */
 
-/* navesti destruktoru (implicitni se vygeneruje na konci) */
+/* label of destructor (the implicit one is generated at the end) */
 static char * dtorLabel (TypePtr cls)
 {
     if (DictContains (&dtor_labels, (long) cls))
@@ -4291,8 +4286,8 @@ static char * dtorLabel (TypePtr cls)
     return label;
 }
 
-/* rax = adresa promenne => destruktory (objekt, pole od posledniho prvku),
-   std::string - reference -1, Sequence / Dictionary - uvolneni */
+/* rax = address of variable => destructors (object, array from the last element),
+   std::string - reference -1, Sequence / Dictionary - release */
 static void destructVar (TypePtr type)
 {
     TypePtr elem = ArrayElem (type);
@@ -4349,7 +4344,7 @@ static void destructVar (TypePtr type)
     depth -= 2;
 }
 
-/* konec destruktoru: vnorene objekty (v opacnem poradi), potom baze */
+/* end of destructor: nested objects (in reverse order), then base */
 static void codeDtorEpilogue (TypePtr cls)
 {
     Seq * members = SeqNew ();       /* ObjectPtr */
@@ -4374,11 +4369,11 @@ static void codeDtorEpilogue (TypePtr cls)
     {
         loadThis ();
         ins2 (iMov, gp (RDI), gp (RAX));
-        callRt (dtorLabel (cls->base), Cat ("~", className (cls->base)));   /* bez virtualniho volani */
+        callRt (dtorLabel (cls->base), Cat ("~", className (cls->base)));   /* without virtual call */
     }
 }
 
-/* implicitni destruktor (trida bez uzivatelskeho destruktoru) */
+/* implicit destructor (class without user-defined destructor) */
 static void codeImplicitDtor (TypePtr cls)
 {
     current_class = cls;
@@ -4403,7 +4398,7 @@ static void codeImplicitDtor (TypePtr cls)
     this_obj = NULL;
 }
 
-/* delete p:  p != nullptr => destruktor (virtualni pres tabulku), free */
+/* delete p:  p != nullptr => destructor (virtual through the table), free */
 static void codeDelete (ExprPtr expr)
 {
     TypePtr T = expr->e2->type->from;
@@ -4441,8 +4436,8 @@ static void codeDelete (ExprPtr expr)
     bind (skip);
 }
 
-/* destruktory globalnich (i statickych lokalnich) objektu - po main:
-   glibc atexit (i pri exit), vlastni knihovna po navratu z main */
+/* destructors of global (and static local) objects - after main:
+   glibc atexit (also at exit), own library after return from main */
 static void codeGlobalFini (void)
 {
     blank ();
@@ -4462,7 +4457,7 @@ static void codeGlobalFini (void)
     ins0 (iRet);
 }
 
-/* konstruktory globalnich objektu - vola start pred main */
+/* constructors of global objects - start calls them before main */
 static void codeGlobalInit (void)
 {
     blank ();
@@ -4479,12 +4474,12 @@ static void codeGlobalInit (void)
         constructVar (obj->type);
     }
     ins2 (iXor, gp (EDI), gp (EDI));
-    ins1 (iCall, jlab ("RT_TREL"));                 /* docasne hodnoty konstruktoru */
+    ins1 (iCall, jlab ("RT_TREL"));                 /* temporary values of constructors */
     if (use_libc)
     {
-        /* destruktory pres atexit, ne .fini_array: libc ToaruOS 2.3.2 .fini_array
-           pri ukonceni nevola (ani u programu z gcc), atexit ano; poradi jako
-           drive - CFINI je registrovana pred main, probehne po handlerech z main */
+        /* destructors via atexit, not .fini_array: libc ToaruOS 2.3.2 does not call .fini_array
+           at termination (not even for programs from gcc), atexit does; the order as before -
+           CFINI is registered before main, runs after the handlers from main */
         note (ins2 (iLea, gp (RDI), alab ("CFINI")), "atexit (CFINI)");
         ins1 (iCall, jlab ("LC_atexit"));
     }
@@ -4494,9 +4489,9 @@ static void codeGlobalInit (void)
 
 /* ------------------------------------------------------------------ */
 
-/* staticka inicializace (data): hodnoty 8-bajtovych slotu podle rozlozeni
-   pameti - cela cisla, "offset navesti" (retezcove konstanty), pole znaku
-   po bajtech; chybejici prvky = 0 */
+/* static initialization (data): values of 8-byte slots according to the memory layout -
+   integers, "offset label" (string constants), arrays of chars byte by byte;
+   missing items = 0 */
 static void flattenList (ExprPtr e, Seq * items)
 {
     if (e == NULL) return;
@@ -4509,9 +4504,9 @@ static void flattenList (ExprPtr e, Seq * items)
         SeqAdd (items, (long) e);
 }
 
-/* staticka inicializace: pos je posun v bajtech (rozlozeni jako v C - char 1,
-   short 2, int 4, ...), slots = 8bajtova mista dat (dq, char *); hodnota se zapise po
-   bajtech do mist, ktera zasahuje */
+/* static initialization: pos is the offset in bytes (layout as in C - char 1,
+   short 2, int 4, ...), slots = 8-byte places of data (dq, char *); the value is written
+   byte by byte into the places it reaches */
 static void staticBytes (Seq * slots, long pos, unsigned long value, long size, const char * name)
 {
     long i;
@@ -4529,7 +4524,7 @@ static void staticBytes (Seq * slots, long pos, unsigned long value, long size, 
     }
 }
 
-/* adresa (offset navesti) - cele 8bajtove misto, ukazatel je zarovnany na 8 */
+/* address (offset of label) - whole 8-byte place, the pointer is aligned to 8 */
 static void staticOffset (Seq * slots, long pos, const char * label, const char * name)
 {
     if (pos % VAR_SIZE != 0 || pos / VAR_SIZE >= SeqSize (slots))
@@ -4581,7 +4576,7 @@ static void staticInit (TypePtr type, ExprPtr init, Seq * slots, long pos, const
         flattenList (init->e1, items);
         if (SeqSize (items) > n)
             InstrError (Cat ("Too many initializers: ", name));
-        long step = typeBytes (elem);                 /* prvky po bajtech jako v C */
+        long step = typeBytes (elem);                 /* elements byte by byte as in C */
         for (i = 0; i < SeqSize (items); i++)
             staticInit (elem, (ExprPtr) SeqGet (items, i), slots, pos + i * step, name);
         return;
@@ -4593,7 +4588,7 @@ static void staticInit (TypePtr type, ExprPtr init, Seq * slots, long pos, const
             InstrError (Cat ("Structure initializer { ... } expected: ", name));
         if (IsPolymorphic (type) || type->base != NULL)
             InstrError (Cat ("Initialization of polymorphic or derived objects is not supported: ", name));
-        structCount (type);                            /* rozlozeni (member_offsets) */
+        structCount (type);                            /* layout (member_offsets) */
         Seq * items = SeqNew ();
         flattenList (init->e1, items);
         long k = 0;
@@ -4635,8 +4630,8 @@ static void staticInit (TypePtr type, ExprPtr init, Seq * slots, long pos, const
             staticOffset (slots, pos, fnLabel (x->obj), name);
             return;
         }
-        /* static char * argv [] = { prog, nullptr }; char * p = &g;  (adresa globalni promenne
-           nebo statickeho pole - konstanta; pole se rozpadne na ukazatel) */
+        /* static char * argv [] = { prog, nullptr }; char * p = &g;  (address of a global variable
+           or a static array - constant; the array decays to a pointer) */
         if (x->op == IDENT && x->obj != NULL && type->sort == Pointer && DictContains (&vars, (long) x->obj) &&
             (init->op == ADR || (x->obj->type != NULL && x->obj->type->sort == Array)))
         {
@@ -4667,7 +4662,7 @@ static void staticInit (TypePtr type, ExprPtr init, Seq * slots, long pos, const
     staticBytes (slots, pos, (unsigned long) value, typeBytes (type), name);
 }
 
-/* globalni (i staticka lokalni) promenna v datovem segmentu */
+/* global (and static local) variable in the data segment */
 static void allocGlobal (ObjectPtr obj)
 {
     long i;
@@ -4676,7 +4671,7 @@ static void allocGlobal (ObjectPtr obj)
 
     if (objmode && obj->storage == Extern)
     {
-        /* extern int x;  - definice je v jinem souboru */
+        /* extern int x;  - the definition is in another file */
         Variable * var = Variable_new ();
         var->global = true;
         char * name = obj->name;
@@ -4698,14 +4693,14 @@ static void allocGlobal (ObjectPtr obj)
     if (elem != NULL && IsClsSort (elem->sort) && NeedsCtor (elem, true))
     {
         if (obj->init == NULL)
-            SeqAdd (&global_objects, (long) obj);           /* konstruktor pred main (CINIT) */
+            SeqAdd (&global_objects, (long) obj);           /* constructor before main (CINIT) */
         else if (elem->ctor != NULL)
             InstrError (Cat ("Initialization of objects with constructor is not supported: ", obj->name));
-        /* jinak staticka inicializace (implicitni konstruktor jen nuluje) */
+        /* otherwise static initialization (the implicit constructor only zeroes) */
     }
 
     if (elem != NULL && IsClsSort (elem->sort) && NeedsDtor (elem, true))
-        SeqAdd (&global_dtor_objects, (long) obj);          /* destruktor po main (CFINI) */
+        SeqAdd (&global_dtor_objects, (long) obj);          /* destructor after main (CFINI) */
 
     Seq * slots = SeqNew ();                    /* char * */
     for (i = 0; i < count; i++)
@@ -4716,11 +4711,11 @@ static void allocGlobal (ObjectPtr obj)
     var->global = true;
     var->label = newLabel ("G");
     DictStore (&vars, (long) obj, (long) var);
-    /* globalni promenna (ne static; konstanta ma v C++ vnitrni linkovani) */
+    /* global variable (not static; a constant has internal linkage in C++) */
     TypePtr ct = ArrayElem (obj->type);
     bool constant = (ct != NULL && ct->Const) || obj->type->Const ||
                     (obj->desc != NULL && obj->desc->Const);
-    if (obj->extern_decl) constant = false;   /* extern const char T []; v hlavicce - vnejsi vazba */
+    if (obj->extern_decl) constant = false;   /* extern const char T []; in the header - external linkage */
     if (objmode && obj->storage != Static && obj->owner == NULL && current_fce == NULL && !constant)
         addPublic (var->label, obj->name);
 
@@ -4736,7 +4731,7 @@ static void allocGlobal (ObjectPtr obj)
     }
     else
     {
-        /* pocet opakovani DUP je v pasm 16bitovy => po castech */
+        /* number of DUP repetitions is 16-bit in pasm => in parts */
         long chunk = 30000;
         long done;
         for (done = 0; done < count; done += chunk)
@@ -4751,7 +4746,7 @@ static void allocGlobals (void)
     {
         ObjectPtr obj = p->item;
         if (obj->fce || obj->storage == Typedef || obj->name [0] == 0)
-            continue;          /* funkce, typedef, struct X { ... }; */
+            continue;          /* function, typedef, struct X { ... }; */
         allocGlobal (obj);
     }
 }
@@ -4763,7 +4758,7 @@ static void allocLocal (ObjectPtr obj)
 
     long count = (obj->type->sort == Reference) ? 1 : typeCount (obj->type);
     frame_size += count * VAR_SIZE;
-    var->offset = - frame_size;     /* pole: prvky od [rbp+offset] smerem nahoru */
+    var->offset = - frame_size;     /* array: elements from [rbp+offset] upward */
     DictStore (&vars, (long) obj, (long) var);
 }
 
@@ -4777,7 +4772,7 @@ static void collectLocalDecls (Queue * decl)
             continue;
         if (obj->storage == Static)
         {
-            allocGlobal (obj);       /* staticka lokalni promenna = data, inicializace jednou */
+            allocGlobal (obj);       /* static local variable = data, initialized once */
             continue;
         }
         if (obj->name [0] == 0)
@@ -4786,7 +4781,7 @@ static void collectLocalDecls (Queue * decl)
     }
 }
 
-/* projdi telo funkce a prirad lokalnim promennym misto v ramci */
+/* go through the function body and assign the local variables their place in the frame */
 static void collectLocals (StatPtr stat)
 {
     StatPtr s;
@@ -4805,7 +4800,7 @@ static void collectLocals (StatPtr stat)
             collectLocalDecls (&stat->decl);
             collectLocals (stat->s1);
             break;
-        case COLON:                        /* for (T x : seq) - promenna a 2 skryte */
+        case COLON:                        /* for (T x : seq) - variable and 2 hidden ones */
             collectLocalDecls (&stat->decl);
             frame_size += 2 * VAR_SIZE;
             DictStore (&range_slots, (long) stat, - frame_size);
@@ -4860,7 +4855,7 @@ static void codeFunction (ObjectPtr decl)
     frame_size = 0;
     depth = 0;
 
-    /* parametry */
+    /* parameters */
     Seq * params = SeqNew ();                  /* ObjectPtr */
     for (p = decl->type->list.first; p != NULL; p = p->next)
     {
@@ -4874,7 +4869,7 @@ static void codeFunction (ObjectPtr decl)
         SeqAdd (params, (long) par);
     }
 
-    /* vysledek - struktura hodnotou: skryty parametr (adresa), za this */
+    /* result - struct passed by value: hidden parameter (address), after this */
     DictClear (&inptr_offsets);
     ret_obj = NULL;
     if (isStructVal (decl->type->from))
@@ -4884,7 +4879,7 @@ static void codeFunction (ObjectPtr decl)
         SeqInsertFirst (params, (long) ret_obj);
     }
 
-    /* metoda nebo konstruktor: skryty parametr this */
+    /* method or constructor: hidden parameter this */
     bool ctor = decl->owner != NULL && decl->owner->ctor == decl;
     current_class = (decl->method || ctor) ? decl->owner : NULL;
     this_obj = NULL;
@@ -4894,8 +4889,8 @@ static void codeFunction (ObjectPtr decl)
         SeqInsertFirst (params, (long) this_obj);
     }
 
-    /* parametry: System V (stejne rozlozeni jako u volajiciho, viz classifyArgs):
-       registry se ulozi do ramce, zasobnik volajiciho [rbp + 16 + 8 * k] (struktura in situ) */
+    /* parameters: System V (same layout as for the caller, see classifyArgs):
+       registers are saved into the frame, caller's stack [rbp + 16 + 8 * k] (struct in place) */
     Seq * ptys = SeqNew ();                    /* TypePtr */
     Seq * pfp = SeqNew ();                     /* bool */
     for (i = 0; i < SeqSize (params); i++)
@@ -4920,15 +4915,15 @@ static void codeFunction (ObjectPtr decl)
             allocLocal (par);
     }
 
-    /* lokalni promenne */
+    /* local variables */
     collectLocals (decl->body);
-    fn_temps = statOwned (decl->body);     /* docasne retezce / kontejnery */
+    fn_temps = statOwned (decl->body);     /* temporary strings / containers */
     if (fn_temps)
     {
         frame_size += VAR_SIZE;
         temp_mark = - frame_size;
     }
-    long frame = (frame_size + 15) & ~15;   /* rsp zustane zarovnany na 16 */
+    long frame = (frame_size + 15) & ~15;   /* rsp stays aligned to 16 */
 
     char * title = decl->name;
     if (decl->owner != NULL)
@@ -4940,7 +4935,7 @@ static void codeFunction (ObjectPtr decl)
     bind (DictGetStr (&fce_labels, (long) decl));
     ins1 (iPush, gp (RBP));
     ins2 (iMov, gp (RBP), gp (RSP));
-    AsmNode * frame_pos = AsmCursor (prog);   /* za nej sub rsp (docasna mista - upravi se na konci) */
+    AsmNode * frame_pos = AsmCursor (prog);   /* after it sub rsp (temporary places - adjusted at the end) */
     AsmNode * frame_node = NULL;
     if (frame > 0)
         frame_node = ins2 (iSub, gp (RSP), imm (frame));
@@ -4960,7 +4955,7 @@ static void codeFunction (ObjectPtr decl)
             note (ins2 (iMovq, qword_ptr (RBP, ((Variable *) DictGet (&vars, (long) par))->offset), xreg (sl->regno)), par->name);
     }
 
-    /* parametry - struktury hodnotou: uz jsou v ramci (kopie volajiciho); vlastnene polozky +1 */
+    /* parameters - structs passed by value: already in the frame (copy of the caller); owned members +1 */
     for (i = 0; i < SeqSize (params); i++)
     {
         ObjectPtr par = (ObjectPtr) SeqGet (params, i);
@@ -4971,7 +4966,7 @@ static void codeFunction (ObjectPtr decl)
         }
     }
 
-    /* parametry std::string hodnotou: vlastni reference */
+    /* parameters std::string passed by value: own reference */
     for (i = 0; i < SeqSize (params); i++)
     {
         ObjectPtr par = (ObjectPtr) SeqGet (params, i);
@@ -4992,7 +4987,7 @@ static void codeFunction (ObjectPtr decl)
 
     codeStat (decl->body);
 
-    /* docasna mista (vysledky volani - struktury hodnotou) zvetsila ramec */
+    /* temporary places (results of calls - structs passed by value) enlarge the frame */
     long frame2 = (frame_size + 15) & ~15;
     if (frame2 != frame)
     {
@@ -5003,18 +4998,18 @@ static void codeFunction (ObjectPtr decl)
     }
 
     if (ctor)
-        loadThis ();                 /* konstruktor vraci this */
+        loadThis ();                 /* constructor returns this */
     else
-        ins2 (iXor, gp (EAX), gp (EAX));    /* bez return => vysledek 0 */
+        ins2 (iXor, gp (EAX), gp (EAX));    /* without return => result 0 */
     bind (epilogue_label);
     if (decl->owner != NULL && decl->owner->dtor == decl)
-        codeDtorEpilogue (current_class);   /* destruktor: polozky a baze */
+        codeDtorEpilogue (current_class);   /* destructor: members and base */
     if (fn_temps)
     {
         ins2 (iMov, gp (RDI), qword_ptr (RBP, temp_mark));
-        callRt ("RT_TREL", "");                 /* docasne hodnoty (rax se zachova) */
+        callRt ("RT_TREL", "");                 /* temporary values (rax is preserved) */
     }
-    /* parametry std::string / kontejner hodnotou; kopie objektu s destruktorem */
+    /* parameters std::string / container passed by value; copy of object with destructor */
     bool saved = false;
     for (i = 0; i < SeqSize (params); i++)
     {
@@ -5038,7 +5033,7 @@ static void codeFunction (ObjectPtr decl)
     }
     if (saved) pop (RAX);
     if (fpKind (decl->type->from) != 0)
-        ins2 (iMovq, xreg (0), gp (RAX));          /* vysledek float / double v xmm0 */
+        ins2 (iMovq, xreg (0), gp (RAX));          /* result float / double in xmm0 */
     ins2 (iMov, gp (RSP), gp (RBP));
     ins1 (iPop, gp (RBP));
     ins0 (iRet);
@@ -5067,10 +5062,10 @@ static void normalizeBool (void)
     ins2 (iMovzx, gp (RAX), gp (AL));
 }
 
-/* rax := adresa promenne (u reference adresa ulozena v promenne) */
+/* rax := address of variable (for a reference the address is stored in the variable) */
 static void codeVarAddress (ExprPtr expr)
 {
-    /* polozka tridy v metode nebo konstruktoru:  this + posun */
+    /* member of class in a method or constructor:  this + offset */
     if (current_class != NULL && expr->obj != NULL && ! DictContains (&vars, (long) expr->obj) &&
         !expr->obj->fce && IsMemberOf (expr->obj, current_class))
     {
@@ -5090,7 +5085,7 @@ static void codeVarAddress (ExprPtr expr)
         ins2 (iMov, gp (RAX), qword_ptr (RAX, 0));
 }
 
-/* rax := adresa l-hodnoty */
+/* rax := address of l-value */
 static void codeAddress (ExprPtr expr)
 {
     expr = SkipParens (expr);
@@ -5119,7 +5114,7 @@ static void codeAddress (ExprPtr expr)
             if (arr->type->sort == Pointer)
             {
                 checkPointee (arr->type);
-                codeExpr (arr);               /* ukazatel => jeho hodnota */
+                codeExpr (arr);               /* pointer => its value */
             }
             else if (arr->type->sort == Array)
                 codeAddress (arr);
@@ -5173,10 +5168,10 @@ static void codeAddress (ExprPtr expr)
             break;
         }
 
-        case FCE:                             /* f ().x - struktura hodnotou */
+        case FCE:                             /* f ().x - struct passed by value */
             if (! isStructVal (expr->type))
                 InstrError ("lvalue expected");
-            codeCall (expr);                  /* adresa docasneho mista */
+            codeCall (expr);                  /* address of temporary place */
             break;
 
         default:
@@ -5184,14 +5179,14 @@ static void codeAddress (ExprPtr expr)
     }
 }
 
-/* ukazatel na 8-bajtove promenne nebo na znaky (bajty) */
+/* pointer to 8-byte variables or to chars (bytes) */
 static void checkPointee (TypePtr ptr)
 {
     if (ptr == NULL || ptr->from == NULL || ptr->from->sort == Void)
         InstrError ("Dereferencing of void pointer");
 }
 
-/* rax := hodnota promenne nebo prvku pole */
+/* rax := value of variable or array element */
 static void codeLoad (ExprPtr expr)
 {
     if (IsClsSort (expr->type->sort))
@@ -5200,17 +5195,17 @@ static void codeLoad (ExprPtr expr)
         InstrError ("Function or method used as a value");
 
     if (expr->type->sort == Array)
-        codeAddress (expr);           /* pole => adresa prvniho prvku */
+        codeAddress (expr);           /* array => address of first element */
     else
     {
         codeAddress (expr);
-        loadValue (expr);              /* podle velikosti typu (jako v C) */
+        loadValue (expr);              /* according to the size of the type (as in C) */
     }
 }
 
 /* rax op= rcx */
-/* operace bez znamenka: nektery operand je unsigned (jako obvykly prevod v C),
-   ukazatele se porovnavaji bez znamenka */
+/* operations without sign: some operand is unsigned (as the usual conversion in C),
+   pointers are compared without sign */
 static bool isUnsignedOp (TypePtr t1, TypePtr t2)
 {
     return (t1 != NULL && (t1->sign == Unsigned || t1->sort == Pointer)) ||
@@ -5233,7 +5228,7 @@ static void codeOperation (SYMBOL kind, bool uns)
             }
             else
             {
-                ins0 (iCqo);          /* rdx:rax = znamenkove rozsireny rax */
+                ins0 (iCqo);          /* rdx:rax = sign-extended rax */
                 ins1 (iIdiv, gp (RCX));
             }
             break;
@@ -5278,7 +5273,7 @@ static void codeOperation (SYMBOL kind, bool uns)
 
 static void codeBinary (ExprPtr expr)
 {
-    /* std::string:  a + b  (novy retezec),  porovnani */
+    /* std::string:  a + b  (new string),  comparison */
     if (IsStdString (expr->e1->type) || IsStdString (expr->e2->type))
     {
         codeStringValue (expr->e1);
@@ -5314,9 +5309,9 @@ static void codeBinary (ExprPtr expr)
     codeExpr (expr->e1);
     push (RAX);
     codeExpr (expr->e2);
-    ins2 (iMov, gp (RCX), gp (RAX));     /* rcx = pravy operand */
-    pop (RAX);                  /* rax = levy operand */
-    /* obvykly aritmeticky prevod (jako v C); posun: rozhoduje jen typ leveho operandu */
+    ins2 (iMov, gp (RCX), gp (RAX));     /* rcx = right operand */
+    pop (RAX);                  /* rax = left operand */
+    /* usual arithmetic conversion (as in C); shift: only the type of the left operand decides */
     bool shift = expr->op == SHL || expr->op == SHR;
     long size;
     bool uns;
@@ -5332,10 +5327,10 @@ static void codeBinary (ExprPtr expr)
     {
         case PLUS: case MINUS: case ASTERISK: case SLASH: case MOD:
         case SHL: case SHR: case AND: case OR: case XOR:
-            normalizeSize (size, uns);         /* preteceni jako v C (int 32 bitu) */
+            normalizeSize (size, uns);         /* overflow as in C (int 32 bits) */
             break;
         default:
-            break;                             /* porovnani: 0 / 1 */
+            break;                             /* comparison: 0 / 1 */
     }
 }
 
@@ -5343,20 +5338,20 @@ static bool isPtrValue (TypePtr t)
 {
     return t != NULL && (t->sort == Pointer || t->sort == Array);
 }
-/* ---- plovouci carka (SSE2) -------------------------------------------
-   Hodnota float / double je v rax jako bitovy obraz (double 64 bitu,
-   float dolnich 32 bitu, horni nulove), v pameti v 8bajtovem slotu.
-   Vypocet v xmm0 / xmm1: double - instrukce ...SD, float - ...SS. */
+/* ---- floating point (SSE2) ----------------------------------------------
+   The value of float / double is in rax as a bit image (double 64 bits,
+   float lower 32 bits, upper zero), in memory in an 8-byte slot.
+   Computation in xmm0 / xmm1: double - instructions ...SD, float - ...SS. */
 
 
-/* bitovy obraz konstanty pro typ (float / double) */
+/* bit image of the constant for the type (float / double) */
 static unsigned long fpBits (double v, int kind)
 {
     if (kind == 1)
     {
         float f = (float) v;
-        uint64_t u = 0;         /* ne uint32_t: cmini ma int v 8bajtovem slotu a memcpy */
-        memcpy (&u, &f, 4);     /* 4 bajtu by nechalo horni polovinu neurcenou (x86-64: little endian) */
+        uint64_t u = 0;         /* not uint32_t: cmini has int in an 8-byte slot, and memcpy */
+        memcpy (&u, &f, 4);     /* 4 bytes would leave the upper half undefined (x86-64: little endian) */
         return u;
     }
     uint64_t u;
@@ -5364,7 +5359,7 @@ static unsigned long fpBits (double v, int kind)
     return u;
 }
 
-/* konstantni vyraz s plovouci carkou (inicializace v datech) */
+/* constant floating-point expression (initialization in data) */
 static bool fpConstValue (ExprPtr expr, double * value)
 {
     if (expr == NULL) return false;
@@ -5404,21 +5399,21 @@ static bool fpConstValue (ExprPtr expr, double * value)
     }
 }
 
-/* xmm<n> := hodnota v rax */
+/* xmm<n> := value in rax */
 static void toXmm (int n, int kind)
 {
     if (kind == 1) ins2 (iMovd, xreg (n), gp (EAX));
     else ins2 (iMovq, xreg (n), gp (RAX));
 }
 
-/* rax := hodnota v xmm0 */
+/* rax := value in xmm0 */
 static void fromXmm (int kind)
 {
     if (kind == 1) ins2 (iMovd, gp (EAX), xreg (0));
     else ins2 (iMovq, gp (RAX), xreg (0));
 }
 
-/* rax: float / double => bool (0.0 a -0.0 => 0, NaN => 1) */
+/* rax: float / double => bool (0.0 and -0.0 => 0, NaN => 1) */
 static void fpToBool (int kind)
 {
     toXmm (0, kind);
@@ -5430,13 +5425,13 @@ static void fpToBool (int kind)
     ins2 (iMovzx, gp (RAX), gp (AL));
 }
 
-/* rax: hodnota typu from => hodnota typu to (cele cislo <=> float <=> double) */
+/* rax: value of type from => value of type to (integer <=> float <=> double) */
 static void convert (TypePtr from, TypePtr to)
 {
     int f = fpKind (from), t = fpKind (to);
     if (from != NULL && to != NULL && f == 0 && t == 0 && isIntegralType (to) && Resolve (to)->sort != Bool)
     {
-        normalizeTo (to);                       /* cele cislo => uzsi / jine znamenko (jako v C) */
+        normalizeTo (to);                       /* integer => narrower / other sign (as in C) */
         return;
     }
     if (from == NULL || to == NULL || (f == 0 && t == 0) || f == t)
@@ -5458,20 +5453,20 @@ static void convert (TypePtr from, TypePtr to)
         fromXmm (t);
         return;
     }
-    /* plovouci carka => cele cislo (orezani k nule) */
+    /* floating point => integer (truncation toward zero) */
     toXmm (0, f);
     if (f == 2) ins2 (iCvttsd2si, gp (RAX), xreg (0)); else ins2 (iCvttss2si, gp (RAX), xreg (0));
     normalizeTo (to);
 }
 
-/* rax := hodnota vyrazu jako typ 'to' */
+/* rax := value of the expression as type 'to' */
 static void codeExprAs (ExprPtr e, TypePtr to)
 {
     codeExpr (e);
     convert (e->type, to);
 }
 
-/* rax := podminka 0 / 1 (nebo cele cislo) - i z plovouci carky */
+/* rax := condition 0 / 1 (or integer) - also from floating point */
 static void codeBoolValue (ExprPtr e)
 {
     codeExpr (e);
@@ -5484,7 +5479,7 @@ static TypePtr fpCommon (TypePtr t1, TypePtr t2)
     return (fpKind (t1) == 2 || fpKind (t2) == 2) ? &DoubleDef : &FloatDef;
 }
 
-/* a op b s plovouci carkou: + - * / a porovnani */
+/* a op b with floating point: + - * / and comparison */
 static void codeFpBinary (ExprPtr expr)
 {
     TypePtr common = fpCommon (expr->e1->type, expr->e2->type);
@@ -5504,7 +5499,7 @@ static void codeFpBinary (ExprPtr expr)
         case ASTERISK: ins2 (k == 2 ? iMulsd : iMulss, xreg (0), xreg (1)); fromXmm (k); break;
         case SLASH:    ins2 (k == 2 ? iDivsd : iDivss, xreg (0), xreg (1)); fromXmm (k); break;
 
-        /* porovnani (NaN => nepravda, krome !=):  a < b  <=>  b > a */
+        /* comparison (NaN => false, except !=):  a < b  <=>  b > a */
         case LESS:
         case LESSEQUAL:
         case GREATER:
@@ -5541,7 +5536,7 @@ static void codeFpBinary (ExprPtr expr)
         convert (common, expr->type);
 }
 
-/* a op= b, ++, -- s plovouci carkou */
+/* a op= b, ++, -- with floating point */
 static void codeFpAssign (ExprPtr expr, SYMBOL op)
 {
     TypePtr lt = expr->e1->type;
@@ -5557,9 +5552,9 @@ static void codeFpAssign (ExprPtr expr, SYMBOL op)
         ins2 (iMov, gp (RAX), imm_hex (fpBits (1.0, k)));   /* ++ a -- */
     toXmm (1, k);
     ins2 (iMov, gp (RAX), qword_ptr (RSP, 0));
-    loadValue (expr->e1);                    /* puvodni hodnota */
+    loadValue (expr->e1);                    /* original value */
     convert (lt, common);
-    push (RAX);                              /* puvodni hodnota (postfix) */
+    push (RAX);                              /* original value (postfix) */
     toXmm (0, k);
     switch (op)
     {
@@ -5571,13 +5566,13 @@ static void codeFpAssign (ExprPtr expr, SYMBOL op)
     }
     fromXmm (k);
     convert (common, lt);
-    pop (RCX);                               /* puvodni hodnota */
+    pop (RCX);                               /* original value */
     pop (R11);
     storeSized (R11, RAX, lvalueSize (expr->e1));
 }
 
-/* pretypovani: cele cislo se zuzi na velikost ciloveho typu (char, short,
-   int, unsigned), bool => 0 / 1, ukazatele a long beze zmeny */
+/* cast: integer is narrowed to the size of the target type (char, short,
+   int, unsigned), bool => 0 / 1, pointers and long unchanged */
 static void codeCast (ExprPtr expr)
 {
     TypePtr t = expr->type;
@@ -5604,7 +5599,7 @@ static void codeCast (ExprPtr expr)
     {
         if (t->sort == Void)
         {
-            codeStructAddr (expr->e1);        /* (void) s - jen vyhodnoceni */
+            codeStructAddr (expr->e1);        /* (void) s - evaluation only */
             return;
         }
         InstrError ("Unsupported type conversion");
@@ -5617,23 +5612,23 @@ static void codeCast (ExprPtr expr)
     }
 
     codeExpr (expr->e1);
-    normalizeTo (t);                            /* cele cislo, bool; ukazatele, void beze zmeny */
+    normalizeTo (t);                            /* integer, bool; pointers, void unchanged */
 }
 
-/* dynamic_cast: rax = adresa objektu tridy src => rax = adresa (je-li
-   skutecny typ target nebo odvozeny), jinak NULL / chyba (reference);
-   retez tabulek virtualnich metod pres [VT - 8] */
+/* dynamic_cast: rax = address of object of class src => rax = address (if the actual type
+   is target or derived), otherwise NULL / error (reference); chain of virtual method
+   tables via [VT - 8] */
 static void codeDynamicCheck (TypePtr src, TypePtr target, bool ref, ExprPtr expr)
 {
     src = Resolve (src);
     target = Resolve (target);
     if (expr->id != NULL && expr->id [0] == '^')
-        return;                                   /* k bazi - bez kontroly */
+        return;                                   /* to base - without check */
 
     char * end_label = newLabel ("L");
     if (!IsPolymorphic (target))
     {
-        /* nepolymorfni cil nemuze byt skutecnym typem polymorfniho objektu */
+        /* a non-polymorphic target cannot be the actual type of a polymorphic object */
         if (ref)
         {
             ins2 (iLea, gp (RDI), alab ("rt_bcmsg"));
@@ -5658,14 +5653,14 @@ static void codeDynamicCheck (TypePtr src, TypePtr target, bool ref, ExprPtr exp
     if (ref)
     {
         ins2 (iLea, gp (RDI), alab ("rt_bcmsg"));
-        callRt ("RT_ASSERT", "");                     /* bad_cast - vyjimky nejsou */
+        callRt ("RT_ASSERT", "");                     /* bad_cast - there are no exceptions */
     }
     else
         ins2 (iXor, gp (EAX), gp (EAX));
     bind (end_label);
 }
 
-/* p + n,  n + p,  p - n  (n * velikost prvku),  p - q  (pocet prvku) */
+/* p + n,  n + p,  p - n  (n * element size),  p - q  (number of elements) */
 static void codePointerArith (ExprPtr expr)
 {
     bool p1 = isPtrValue (expr->e1->type);
@@ -5716,13 +5711,13 @@ static void codeAndOr (ExprPtr expr)
     ins2 (iTest, gp (RAX), gp (RAX));
 
     if (expr->op == LOGAND)
-        ins1 (iJz, jlab (end_label));    /* levy = 0 => vysledek 0 */
+        ins1 (iJz, jlab (end_label));    /* left = 0 => result 0 */
     else
-        ins1 (iJnz, jlab (end_label));    /* levy != 0 => vysledek 1 */
+        ins1 (iJnz, jlab (end_label));    /* left != 0 => result 1 */
 
     long mark2 = SeqSize (&pending_temps);
     codeBoolValue (expr->e2);
-    releaseTemps (mark2);                /* pravy operand se vyhodnoti jen podmineně */
+    releaseTemps (mark2);                /* right operand is evaluated only conditionally */
     bind (end_label);
     normalizeBool ();
 }
@@ -5733,7 +5728,7 @@ static void codeConditional (ExprPtr expr)
     char * else_label = newLabel ("L");
     char * end_label = newLabel ("L");
 
-    bool str = IsStdString (expr->type);     /* c ? s : "abc" - obe vetve jako std::string */
+    bool str = IsStdString (expr->type);     /* c ? s : "abc" - both branches as std::string */
     codeCond (expr->e1);
     ins1 (iJz, jlab (else_label));
     long mark2 = SeqSize (&pending_temps);
@@ -5770,7 +5765,7 @@ static SYMBOL assignOp (SYMBOL op)
 static void codeAssign (ExprPtr expr)
 {
 
-    /* std::string:  s = x,  s += x  (retezce se nemeni - staci ukazatel) */
+    /* std::string:  s = x,  s += x  (strings are not changed - a pointer is enough) */
     if (IsStdString (expr->e1->type))
     {
         codeAddress (expr->e1);
@@ -5779,25 +5774,25 @@ static void codeAssign (ExprPtr expr)
         if (expr->op == ADDASSIGN)
         {
             ins2 (iMov, gp (RSI), gp (RAX));
-            ins2 (iMov, gp (RAX), qword_ptr (RSP, 0));    /* adresa */
-            ins2 (iMov, gp (RDI), qword_ptr (RAX, 0));    /* puvodni hodnota */
+            ins2 (iMov, gp (RAX), qword_ptr (RSP, 0));    /* address */
+            ins2 (iMov, gp (RDI), qword_ptr (RAX, 0));    /* original value */
             callRt ("RT_SCAT", "");
             strTemp ();
         }
         ins2 (iMov, gp (RSI), gp (RAX));
         pop (RDI);
-        callRt ("RT_SASSIGN", "");                         /* reference: nova +1, stara -1 */
+        callRt ("RT_SASSIGN", "");                         /* reference: new +1, old -1 */
         return;
     }
 
-    /* s [i] = c  =>  s = RT_SSET (s, i, c)  (kopie retezce) */
+    /* s [i] = c  =>  s = RT_SSET (s, i, c)  (copy of the string) */
     ExprPtr lhs = SkipParens (expr->e1);
     if (lhs->op == LBRACK && IsStdString (SkipParens (lhs->e1)->type))
     {
         if (expr->op != ASSIGN)
             InstrError ("Only s [i] = c is supported for characters of std::string");
         codeAddress (lhs->e1);
-        push (RAX);                       /* adresa retezce */
+        push (RAX);                       /* address of the string */
         codeExpr (lhs->e2);
         push (RAX);                       /* index */
         codeExpr (expr->e2);
@@ -5814,20 +5809,20 @@ static void codeAssign (ExprPtr expr)
         push (RDX);
         callRt ("RT_SASSIGN", "");
         pop (RDX);
-        ins2 (iMovsx, gp (RAX), gp (DL));            /* vysledek = prirazeny znak */
+        ins2 (iMovsx, gp (RAX), gp (DL));            /* result = assigned character */
         return;
     }
 
     if (IsContainer (expr->e1->type))
     {
-        /* a = b (kontejnery): kopie */
+        /* a = b (containers): copy */
         if (expr->op != ASSIGN)
             InstrError ("Invalid operation with Sequence / Dictionary");
         codeAddress (expr->e1);
         push (RAX);
         codeContValue (expr->e2);
         pop (R11);
-        ins2 (iMov, gp (RDI), qword_ptr (R11, 0));       /* puvodni hodnota se uvolni */
+        ins2 (iMov, gp (RDI), qword_ptr (R11, 0));       /* the original value is released */
         ins2 (iMov, qword_ptr (R11, 0), gp (RAX));
         push (RAX);
         callRt (IsDictionary (expr->e1->type) ? "RT_DFREE" : "RT_QFREE", "");
@@ -5843,7 +5838,7 @@ static void codeAssign (ExprPtr expr)
     }
     if (fp)
     {
-        /* x = vyraz (prevod mezi celym cislem, float a double) */
+        /* x = expression (conversion between integer, float and double) */
         codeAddress (expr->e1);
         push (RAX);
         codeExprAs (expr->e2, expr->e1->type);
@@ -5854,13 +5849,13 @@ static void codeAssign (ExprPtr expr)
 
     if (IsClsSort (expr->e1->type->sort))
     {
-        /* a = b (struktury): kopie vsech 8-bajtovych slotu, std::string
-           reference +1, kontejnery vlastni kopie; puvodni hodnoty a se
-           uvolni; vysledek = adresa a */
+        /* a = b (structs): copy of all 8-byte slots, std::string
+           reference +1, containers own copy; the original values of a are
+           released; result = address of a */
         if (expr->op != ASSIGN)
             InstrError ("Invalid operation with structure");
         long count = structBytes (expr->e1->type);
-        codeStructAddr (expr->e2);            /* i vysledek funkce */
+        codeStructAddr (expr->e2);            /* and the result of the function */
         push (RAX);
         codeAddress (expr->e1);
         ins2 (iMov, gp (RDI), gp (RAX));
@@ -5913,7 +5908,7 @@ static void codeAssign (ExprPtr expr)
         }
         if (IsPolymorphic (expr->e1->type))
         {
-            /* rez (base = derived): cil si ponecha tabulku virtualnich metod sveho typu */
+            /* slice (base = derived): the target keeps the virtual method table of its own type */
             note (ins2 (iLea, gp (RCX), alab (vtableLabel (expr->e1->type))), Cat ("vtable ", className (expr->e1->type)));
             ins2 (iMov, qword_ptr (RDX, DictGet (&vptr_offsets, (long) expr->e1->type)), gp (RCX));
         }
@@ -5928,7 +5923,7 @@ static void codeAssign (ExprPtr expr)
     codeAddress (expr->e1);
     push (RAX);
     if (expr->op == ASSIGN)
-        codeExprAs (expr->e2, expr->e1->type);   /* prevod na typ cile (orezani jako v C) */
+        codeExprAs (expr->e2, expr->e1->type);   /* conversion to the target type (truncation as in C) */
     else
         codeExpr (expr->e2);
     pop (R11);                  /* r11 = adresa */
@@ -5936,7 +5931,7 @@ static void codeAssign (ExprPtr expr)
     if (expr->op != ASSIGN)
     {
         ins2 (iMov, gp (RCX), gp (RAX));
-        if (ptr_arith)            /* p += n  =>  n * velikost prvku */
+        if (ptr_arith)            /* p += n  =>  n * element size */
         {
             long esize = elemSize (expr->e1->type->from);
             if (esize != 1)
@@ -5952,13 +5947,13 @@ static void codeAssign (ExprPtr expr)
         if (ptr_arith) { csize = 8; uns = false; }
         if (csize == 4 && uns && op != SHL && op != SHR)
         {
-            ins2 (iMov, gp (EAX), gp (EAX));      /* unsigned int - spolecny typ */
+            ins2 (iMov, gp (EAX), gp (EAX));      /* unsigned int - common type */
             ins2 (iMov, gp (ECX), gp (ECX));
         }
         codeOperation (op, uns);
     }
 
-    normalizeTo (expr->e1->type);   /* vysledek prirazeni = ulozena hodnota (bool 0 / 1) */
+    normalizeTo (expr->e1->type);   /* result of the assignment = stored value (bool 0 / 1) */
     storeSized (R11, RAX, size);
 }
 
@@ -5971,7 +5966,7 @@ static void codeIncDec (ExprPtr expr)
 
     if (fpKind (operand->type) != 0)
     {
-        /* x++, ++x (double, float): vysledek ++x = nova hodnota, x++ = puvodni */
+        /* x++, ++x (double, float): result of ++x = new value, x++ = original value */
         Expr tmp;
         memcpy (&tmp, expr, sizeof (Expr));
         tmp.e1 = operand;
@@ -5982,7 +5977,7 @@ static void codeIncDec (ExprPtr expr)
     }
 
     long step = 1;
-    if (operand->type->sort == Pointer)     /* p++  =>  + velikost prvku */
+    if (operand->type->sort == Pointer)     /* p++  =>  + element size */
         step = elemSize (operand->type->from);
     long size = lvalueSize (operand);
 
@@ -5992,14 +5987,14 @@ static void codeIncDec (ExprPtr expr)
 
     if (postfix)
     {
-        ins2 (iMov, gp (RDX), gp (RAX));           /* vysledek = puvodni hodnota */
+        ins2 (iMov, gp (RDX), gp (RAX));           /* result = original value */
         ins2 (op, gp (RDX), imm (step));
         storeSized (RCX, RDX, size);
     }
     else
     {
         ins2 (op, gp (RAX), imm (step));
-        normalizeTo (operand->type);             /* preteceni jako v C */
+        normalizeTo (operand->type);             /* overflow as in C */
         storeSized (RCX, RAX, size);
     }
 }
@@ -6016,7 +6011,7 @@ static void collectArgs (ExprPtr expr, Seq * args)
         SeqAdd (args, (long) expr);
 }
 
-/* assert (podminka) - vestavena funkce */
+/* assert (condition) - built-in function */
 static void codeAssert (Seq * args)
 {
     if (SeqSize (args) != 1)
@@ -6031,7 +6026,7 @@ static void codeAssert (Seq * args)
     ins2 (iXor, gp (EAX), gp (EAX));
 }
 
-/* new T  /  new T (argumenty konstruktoru) */
+/* new T  /  new T (arguments of the constructor) */
 static void codeNew (ExprPtr expr)
 {
     TypePtr T = expr->type->from;
@@ -6039,8 +6034,8 @@ static void codeNew (ExprPtr expr)
 
     if (expr->e2 != NULL)
     {
-        /* new T [n] => calloc (n, velikost prvku); prvky jsou vynulovane
-           (std::string prazdne, ukazatele NULL), konstruktory se nevolaji */
+        /* new T [n] => calloc (n, element size); the elements are zeroed
+           (std::string empty, pointers NULL), constructors are not called */
         if (IsClsSort (T->sort) && NeedsCtor (T, true))
             InstrError ("new T [n] is not supported for structures with constructor");
         codeExpr (expr->e2);
@@ -6055,58 +6050,58 @@ static void codeNew (ExprPtr expr)
     if (!IsClsSort (T->sort) && !SeqEmpty (args))
         InstrError ("new T (...) is supported only for structures with constructor");
 
-    /* calloc (1, size) - pamet je vynulovana */
+    /* calloc (1, size) - memory is zeroed */
     ins2 (iMov, gp (EDI), imm (1));
     ins2 (iMov, gp (RSI), imm (size));
     callRt ("RT_CALLOC", Cat ("new ", expr->id));
 
     if (IsClsSort (T->sort) && (NeedsCtor (T, true) || !SeqEmpty (args)))
-        callCtor (T, args);                    /* vraci this */
+        callCtor (T, args);                    /* returns this */
 }
 
-/* struktury hodnotou (ExprRec, AsmOp - parametr, vysledek funkce): ve vyrazu
-   je struktura reprezentovana adresou; parametr - volajici preda adresu,
-   volany si strukturu v prologu zkopiruje do sveho ramce; vysledek -
-   volajici preda adresu docasneho mista ve svem ramci (skryty parametr za
-   this), return do nej kopiruje a vraci ji v rax */
-/* kopie po 8-bajtovych slotech nestaci pro std::string a kontejnery
-   (pocty referenci, vlastni kopie) a objekty s destruktorem */
+/* structs passed by value (ExprRec, AsmOp - parameter, function result): in an expression
+   the struct is represented by its address; parameter - the caller passes the address,
+   the callee copies the struct into its frame in the prologue; result - the caller passes
+   the address of a temporary place in its frame (hidden parameter after this), return copies
+   into it and returns it in rax */
+/* copy by 8-byte slots is not enough for std::string and containers
+   (reference counts, own copy) and for objects with a destructor */
 static void checkStructVal (TypePtr t)
 {
-    /* vysledek funkce hodnotou: vlastnene polozky (std::string, kontejnery) se kopiruji a
-       uvolnuji; uzivatelsky destruktor a jiny destruktor (vnorena trida) ne */
+    /* function result by value: owned members (std::string, containers) are copied and
+       released; user-defined destructor and other destructor (nested class) not */
     Seq * owned = SeqNew ();
     collectContMembers (t, 0, owned);
     if (hasUserDtor (t) || (SeqEmpty (owned) && NeedsDtor (t, true)))
         InstrError (Cat ("Structures with a destructor as values are not supported: ", className (t)));
 }
 
-/* vlastni kopirovaci konstruktor T (const T &) - jediny konstruktor tridy */
-/* kopie parametru hodnotou a T x = y: objekt s destruktorem staci zkopirovat po
-   slotech (vychozi kopie po polozkach), kdyz nema std::string, kontejnery ani
-   vlastni kopirovaci konstruktor; destruktor kopie na konci funkce / bloku */
+/* own copy constructor T (const T &) - the only constructor of the class */
+/* copy of a parameter by value and T x = y: an object with a destructor can simply be copied
+   slot by slot (default member-wise copy) when it has no std::string, containers
+   or own copy constructor; the destructor of the copy at the end of the function / block */
 static void checkStructCopy (TypePtr t)
 {
     if (hasCopyCtor (t))
         InstrError (Cat ("Structures with a copy constructor as values are not supported: ", className (t)));
 }
 
-/* docasne misto v ramci (prolog se upravi na konci funkce) => [rbp + vysledek] */
+/* temporary place in the frame (prologue is adjusted at the end of the function) => [rbp + result] */
 static long allocTemp (long count)
 {
     frame_size += count * VAR_SIZE;
     return - frame_size;
 }
 
-/* kopie count 8-bajtovych slotu:  rsi => rdi */
+/* copy of count 8-byte slots:  rsi => rdi */
 static void copySlots (long count)
 {
     ins2 (iMov, gp (RCX), imm (count));
     insPrefix (iRep, iMovsq);
 }
 
-/* struktura hodnotou: po bajtove kopii do rdi  => nove vlastnene polozky (std::string:
-   pocet referenci, Sequence / Dictionary: hluboka kopie) - jako u prirazeni */
+/* struct passed by value: after the byte copy into rdi  => new owned members (std::string:
+   reference count, Sequence / Dictionary: deep copy) - as in assignment */
 static void incOwned (TypePtr type)
 {
     Seq * owned = SeqNew ();
@@ -6131,8 +6126,8 @@ static void incOwned (TypePtr type)
     pop (RDI);
 }
 
-/* struktura hodnotou: uvolneni vlastnenych polozek ve strukture na adrese rdi
-   (docasny objekt, ktery uz byl zkopirovany) */
+/* struct passed by value: release of owned members in the struct at address rdi
+   (temporary object that has already been copied) */
 static void decOwned (TypePtr type)
 {
     Seq * owned = SeqNew ();
@@ -6150,7 +6145,7 @@ static void decOwned (TypePtr type)
     pop (RDI);
 }
 
-/* uvolni docasne objekty od pozice mark (vcetne) - RAX (vysledek) se zachova */
+/* release temporary objects from position mark (inclusive) - RAX (result) is preserved */
 static void releaseTemps (long mark)
 {
     if (SeqSize (&pending_temps) <= mark) return;
@@ -6165,8 +6160,8 @@ static void releaseTemps (long mark)
     pop (RAX);
 }
 
-/* rax := adresa struktury: promenna, *p, p->x, ... i vysledek volani funkce
-   (adresa docasneho mista volajiciho) */
+/* rax := address of struct: variable, *p, p->x, ... and the result of a function call
+   (address of the caller's temporary place) */
 static void codeStructAddr (ExprPtr e)
 {
     e = SkipParens (e);
@@ -6176,20 +6171,20 @@ static void codeStructAddr (ExprPtr e)
         codeAddress (e);
 }
 
-/* rax := hodnota argumentu pro parametr typu ptype (NULL => ...) */
+/* rax := value of argument for parameter of type ptype (NULL => ...) */
 static void codeArg (ExprPtr arg, TypePtr ptype)
 {
     if (isStructVal (ptype))
     {
         checkStructCopy (ptype);
-        codeStructAddr (arg);              /* struktura hodnotou => adresa (kopii udela volany) */
+        codeStructAddr (arg);              /* struct passed by value => address (the copy is made by the callee) */
     }
     else if (ptype != NULL && ptype->sort == Reference && !isValueRef (ptype))
-        codeAddress (arg);                 /* reference => adresa */
+        codeAddress (arg);                 /* reference => address */
     else if (IsStdString (ptype) || isValueRef (ptype))
         codeStringValue (arg);             /* std::string, const std::string & */
     else if (IsContainer (ptype))
-        codeContValue (arg);               /* Sequence / Dictionary hodnotou - kopie */
+        codeContValue (arg);               /* Sequence / Dictionary passed by value - copy */
     else if (ptype == NULL)
     {
         codeExpr (arg);                    /* ... : float => double */
@@ -6199,7 +6194,7 @@ static void codeArg (ExprPtr arg, TypePtr ptype)
         codeExprAs (arg, ptype);
 }
 
-/* parametr / argument v registru XMM (float, double hodnotou) */
+/* parameter / argument in XMM register (float, double by value) */
 static bool isFpArg (TypePtr ptype, ExprPtr arg)
 {
     if (ptype != NULL) return fpKind (ptype) != 0;
@@ -6207,13 +6202,13 @@ static bool isFpArg (TypePtr ptype, ExprPtr arg)
 }
 
 
-/* umisteni parametru podle System V: cele cislo / ukazatel - rdi, rsi, rdx,
-   rcx, r8, r9; float, double - xmm0 .. xmm7; dalsi na zasobniku (v poradi);
-   reg >= 0 - obecny registr, xmm >= 0 - registr XMM, jinak stack (poradi) */
-/* vyhodnoti this (code_this != NULL) a argumenty, ulozi je do registru
-   a na zasobnik; nxmm = pocet pouzitych registru XMM; vraci pocet
-   8bajtovych mist na zasobniku k uvolneni po volani */
-/* rax := this podle code_this */
+/* location of parameter according to System V: integer / pointer - rdi, rsi, rdx,
+   rcx, r8, r9; float, double - xmm0 .. xmm7; others on the stack (in order);
+   reg >= 0 - general register, xmm >= 0 - XMM register, otherwise stack (order) */
+/* evaluates this (code_this != NULL) and the arguments, stores them in registers
+   and on the stack; nxmm = number of used XMM registers; returns the number of
+   8-byte places on the stack to release after the call */
+/* rax := this according to code_this */
 static void codeThis (ThisCode * t)
 {
     switch (t->kind)
@@ -6233,9 +6228,9 @@ static void codeThis (ThisCode * t)
     }
 }
 
-/* klasifikace argumentu: types[i] = typ parametru (NULL = skryty parametr nebo ...),
-   fp[i] = float / double v XMM. Struktura hodnotou: do 16 bajtu v registrech INTEGER (qword po
-   qwordu), vetsi na zasobniku (cela, od nejnizsiho qwordu). Ostatni jako System V. */
+/* classification of arguments: types[i] = type of the parameter (NULL = hidden parameter or ...),
+   fp[i] = float / double in XMM. Struct passed by value: up to 16 bytes in INTEGER registers
+   (qword by qword), larger ones on the stack (whole, from the lowest qword). Others as System V. */
 static Seq * classifyArgs (Seq * types, Seq * fp)
 {
     Seq * out = SeqNew ();       /* ArgSlot * */
@@ -6278,18 +6273,18 @@ static Seq * classifyArgs (Seq * types, Seq * fp)
     return out;
 }
 
-/* parametr je struktura hodnotou (ne this, ne skryty vysledek) */
+/* parameter is a struct passed by value (not this, not a hidden result) */
 static bool isStructParam (ObjectPtr par)
 {
     return par != this_obj && par != ret_obj && isStructVal (par->type);
 }
 
-/* registry parametru (System V) */
+/* parameter registers (System V) */
 static const Register pass_arg_regs [] = { RDI, RSI, RDX, RCX, R8, R9 };
 
 static long passArgs (ThisCode * code_this, Seq * args, Seq * ptypes, int * nxmm, long sret_off)
 {
-    /* skryte parametry: this, adresa pro vysledek (sret_off != 0), pak argumenty */
+    /* hidden parameters: this, address for the result (sret_off != 0), then the arguments */
     long nthis = (code_this != NULL) ? 1 : 0;
     long first = nthis + ((sret_off != 0) ? 1 : 0);
     long total = first + SeqSize (args);
@@ -6304,7 +6299,7 @@ static long passArgs (ThisCode * code_this, Seq * args, Seq * ptypes, int * nxmm
     }
     Seq * slots = classifyArgs (types, fp);
 
-    /* argumenty na zasobniku: od posledniho, prvni bude na [rsp] */
+    /* arguments on the stack: from the last one, the first one will be at [rsp] */
     long nstack = 0;
     for (i = 0; i < SeqSize (slots); i++)
     {
@@ -6312,7 +6307,7 @@ static long passArgs (ThisCode * code_this, Seq * args, Seq * ptypes, int * nxmm
         if (s->kind == 2) nstack += s->nq;
     }
     long drop = nstack;
-    if (nstack > 0 && (depth + nstack) % 2 != 0)  /* rsp pri volani zarovnany na 16 */
+    if (nstack > 0 && (depth + nstack) % 2 != 0)  /* rsp at the call aligned to 16 */
     {
         ins2 (iSub, gp (RSP), imm (8));
         depth ++;
@@ -6330,12 +6325,12 @@ static long passArgs (ThisCode * code_this, Seq * args, Seq * ptypes, int * nxmm
             }
             else if (j < first)
             {
-                ins2 (iLea, gp (RAX), any_ptr (RBP, sret_off));   /* misto pro vysledek */
+                ins2 (iLea, gp (RAX), any_ptr (RBP, sret_off));   /* place for the result */
                 push (RAX);
             }
             else if ((TypePtr) SeqGet (ptypes, j - first) != NULL && isStructVal ((TypePtr) SeqGet (ptypes, j - first)))
             {
-                codeStructAddr ((ExprPtr) SeqGet (args, j - first));   /* rax = adresa struktury */
+                codeStructAddr ((ExprPtr) SeqGet (args, j - first));   /* rax = address of struct */
                 for (q = sj->nq - 1; q >= 0; q--)
                 {
                     ins2 (iMov, gp (RCX), qword_ptr (RAX, 8 * q));
@@ -6350,7 +6345,7 @@ static long passArgs (ThisCode * code_this, Seq * args, Seq * ptypes, int * nxmm
         }
     }
 
-    /* argumenty v registrech: postupne na zasobnik, potom do registru */
+    /* arguments in registers: first pushed onto the stack, then into registers */
     for (j = 0; j < total; j++)
     {
         ArgSlot * sj = (ArgSlot *) SeqGet (slots, j);
@@ -6363,7 +6358,7 @@ static long passArgs (ThisCode * code_this, Seq * args, Seq * ptypes, int * nxmm
             }
             else if (j < first)
             {
-                ins2 (iLea, gp (RAX), any_ptr (RBP, sret_off));   /* misto pro vysledek */
+                ins2 (iLea, gp (RAX), any_ptr (RBP, sret_off));   /* place for the result */
                 push (RAX);
             }
             else if (sj->kind == 0 && (TypePtr) SeqGet (ptypes, j - first) != NULL && isStructVal ((TypePtr) SeqGet (ptypes, j - first)))
@@ -6401,18 +6396,18 @@ static long passArgs (ThisCode * code_this, Seq * args, Seq * ptypes, int * nxmm
     return drop;
 }
 
-/* volani funkce, metody (obj.f (), p->f (), f () v metode, T::f ()),
-   virtualni metody pres tabulku virtualnich metod */
+/* call of a function, method (obj.f (), p->f (), f () in a method, T::f ()),
+   virtual methods through the virtual method table */
 static void codeCall (ExprPtr expr)
 {
     ExprPtr f = SkipParens (expr->e1);
     ObjectPtr fce = NULL;
     ExprPtr object = NULL;        /* obj.f (), p->f () */
-    TypePtr cls = NULL;           /* staticky typ objektu */
-    bool qualified = false;       /* T::f () - bez virtualniho volani */
+    TypePtr cls = NULL;           /* static type of the object */
+    bool qualified = false;       /* T::f () - without virtual call */
     long i;
 
-    /* primo funkce nebo metoda, jinak volani pres ukazatel na funkci */
+    /* directly a function or method, otherwise a call through a pointer to function */
     bool direct = ((f->op == IDENT || f->op == DCOLON || f->op == PERIOD || f->op == ARROW) &&
                    f->obj != NULL && f->obj->fce);
     if (!direct)
@@ -6450,19 +6445,19 @@ static void codeCall (ExprPtr expr)
             InstrError ("Only direct function calls are supported");
     }
 
-    /* vestavene metody Sequence a Dictionary */
+    /* built-in methods of Sequence and Dictionary */
     if (cls != NULL && IsContainer (cls))
     {
         codeContMethod (expr, f, fce, cls);
         return;
     }
 
-    /* vestavene metody std::string: c_str, length, size, empty,
+    /* built-in methods of std::string: c_str, length, size, empty,
        substr, find, rfind, clear */
     if (cls != NULL && IsStdString (cls))
     {
         char * name = fce->name;
-        if (StrEq (name, "reserve"))          /* bez ucinku (retezce se nemeni) */
+        if (StrEq (name, "reserve"))          /* no effect (strings are not changed) */
         {
             Seq * rargs = SeqNew ();
             collectArgs (expr->e2, rargs);
@@ -6490,7 +6485,7 @@ static void codeCall (ExprPtr expr)
             collectArgs (expr->e2, args);
             ExprPtr a [2];
             NodePtr par = fce->type->list.first;
-            for (i = 0; i < 2; i++)           /* chybejici argumenty - implicitni hodnoty */
+            for (i = 0; i < 2; i++)           /* missing arguments - default values */
             {
                 a [i] = (i < SeqSize (args)) ? (ExprPtr) SeqGet (args, i) : par->item->init;
                 par = par->next;
@@ -6534,11 +6529,11 @@ static void codeCall (ExprPtr expr)
         return;
     }
 
-    /* chybejici argumenty => implicitni hodnoty parametru:  int level = 0 */
+    /* missing arguments => default values of parameters:  int level = 0 */
     addDefaultArgs (fce, args);
 
 
-    /* cil volani */
+    /* target of the call */
     bool is_virtual = fce->method && fce->Virtual && !qualified;
     char * target = (char *) "";
     if (!is_virtual)
@@ -6548,7 +6543,7 @@ static void codeCall (ExprPtr expr)
         else if (fce->owner != NULL)
             target = methodTarget (fce, "Method");
         else if (use_libc)
-            target = externLabel (fce->name);     /* glibc - overi linker */
+            target = externLabel (fce->name);     /* glibc - the linker checks */
         else
         {
             target = rtlFunction (fce->name);
@@ -6557,7 +6552,7 @@ static void codeCall (ExprPtr expr)
         }
     }
 
-    /* typy parametru k argumentum (NULL => ...) */
+    /* parameter types for the arguments (NULL => ...) */
     Seq * ptypes = SeqNew ();    /* TypePtr */
     {
         NodePtr par = fce->type->list.first;
@@ -6568,7 +6563,7 @@ static void codeCall (ExprPtr expr)
         }
     }
 
-    /* this a argumenty do registru (System V), prebytecne na zasobnik */
+    /* this and arguments into registers (System V), surplus onto the stack */
     ThisCode * code_this = NULL;
     if (fce->method)
     {
@@ -6581,7 +6576,7 @@ static void codeCall (ExprPtr expr)
         else
             code_this->kind = THIS_EXPR;
     }
-    /* vysledek - struktura hodnotou: docasne misto v ramci volajiciho */
+    /* result - struct passed by value: temporary place in the frame of the caller */
     long sret_off = 0;
     if (isStructVal (fce->type->from))
     {
@@ -6591,7 +6586,7 @@ static void codeCall (ExprPtr expr)
         collectContMembers (fce->type->from, 0, owned);
         if (! SeqEmpty (owned) && current_fce != NULL)
         {
-            PendingTemp * t = (PendingTemp *) MemAlloc (sizeof (PendingTemp));   /* uvolni se po vyrazu (releaseTemps) */
+            PendingTemp * t = (PendingTemp *) MemAlloc (sizeof (PendingTemp));   /* released after the expression (releaseTemps) */
             t->off = sret_off;
             t->type = fce->type->from;
             SeqAdd (&pending_temps, (long) t);
@@ -6600,7 +6595,7 @@ static void codeCall (ExprPtr expr)
     int nxmm = 0;
     long stack_drop = passArgs (code_this, args, ptypes, &nxmm, sret_off);
 
-    bool pad = (depth % 2) != 0;               /* zarovnani rsp na 16 bajtu */
+    bool pad = (depth % 2) != 0;               /* alignment of rsp to 16 bytes */
     if (pad) ins2 (iSub, gp (RSP), imm (8));
 
     if (is_virtual)
@@ -6613,7 +6608,7 @@ static void codeCall (ExprPtr expr)
     else
     {
         if (nxmm == 0)
-            ins2 (iXor, gp (EAX), gp (EAX));          /* al = pocet registru XMM (variadicke funkce) */
+            ins2 (iXor, gp (EAX), gp (EAX));          /* al = number of XMM registers (variadic functions) */
         else
             ins2 (iMov, gp (EAX), imm (nxmm));
         char * title = fce->name;
@@ -6623,23 +6618,23 @@ static void codeCall (ExprPtr expr)
 
     if (pad) ins2 (iAdd, gp (RSP), imm (8));
 
-    if (stack_drop > 0)                        /* argumenty na zasobniku */
+    if (stack_drop > 0)                        /* arguments on the stack */
     {
         ins2 (iAdd, gp (RSP), imm (stack_drop * VAR_SIZE));
         depth -= stack_drop;
     }
 
-    /* vysledek float / double v xmm0 */
+    /* result float / double in xmm0 */
     TypePtr res = fce->type->from;
     if (fpKind (res) != 0)
     {
         fromXmm (fpKind (res));
         return;
     }
-    if (ownedTemp (res))            /* std::string, kontejner - docasna hodnota */
+    if (ownedTemp (res))            /* std::string, container - temporary value */
         return;
 
-    /* cele cislo jen v dolni casti rax (knihovni funkce, ABI) => rozsirit podle typu */
+    /* integer only in the lower part of rax (library function, ABI) => extend according to the type */
     if (res != NULL && isIntegralType (res))
         normalizeTo (res);
 }
@@ -6685,9 +6680,9 @@ static void codeExpr (ExprPtr expr)
         case IDENT:
         {
             long value;
-            if (expr->obj != NULL && expr->obj->fce)   /* jmeno funkce => adresa */
+            if (expr->obj != NULL && expr->obj->fce)   /* function name => address */
                 note (ins2 (iLea, gp (RAX), alab (fnLabel (expr->obj))), Cat ("&", expr->id));
-            else if (enumValue (expr->obj, &value))    /* vyctova konstanta */
+            else if (enumValue (expr->obj, &value))    /* enum constant */
                 ins2 (iMov, gp (RAX), imm (value));
             else if (IsStaticMember (expr->obj))  /* static const int max = 10; */
             {
@@ -6701,7 +6696,7 @@ static void codeExpr (ExprPtr expr)
         }
 
         case LBRACK:
-            if (IsStdString (SkipParens (expr->e1)->type))   /* s [i] - znak retezce */
+            if (IsStdString (SkipParens (expr->e1)->type))   /* s [i] - character of a string */
             {
                 codeExpr (expr->e1);
                 ins2 (iMov, gp (RDI), gp (RAX));
@@ -6721,7 +6716,7 @@ static void codeExpr (ExprPtr expr)
         case ARROW:
         {
             long value;
-            if (IsStaticMember (expr->obj))      /* p->max - staticka konstanta */
+            if (IsStaticMember (expr->obj))      /* p->max - static constant */
             {
                 if (!constValue (expr->obj->init, &value))
                     InstrError (Cat ("Static data members are supported only as integer constants: ", expr->id));
@@ -6734,7 +6729,7 @@ static void codeExpr (ExprPtr expr)
 
         case DEREF:
             if (expr->type != NULL && expr->type->sort == Function)
-                codeExpr (expr->e2);          /* *f - ukazatel na funkci */
+                codeExpr (expr->e2);          /* *f - pointer to function */
             else
                 codeLoad (expr);
             break;
@@ -6753,7 +6748,7 @@ static void codeExpr (ExprPtr expr)
 
         case DYNAMIC_CAST_:                    /* dynamic_cast <T *> (p) */
             if (IsClsSort (expr->type->sort))
-                codeAddress (expr);           /* dynamic_cast <T &> - adresa objektu */
+                codeAddress (expr);           /* dynamic_cast <T &> - address of object */
             else
             {
                 codeExpr (expr->e1);
@@ -6761,7 +6756,7 @@ static void codeExpr (ExprPtr expr)
             }
             break;
 
-        case DELETE_:                          /* delete p => destruktor, free */
+        case DELETE_:                          /* delete p => destructor, free */
             codeDelete (expr);
             break;
 
@@ -6829,7 +6824,7 @@ static void codeExpr (ExprPtr expr)
             codeExpr (expr->e2);
             if (fpKind (expr->e2->type) != 0)
             {
-                /* zmena znamenkoveho bitu */
+                /* change of the sign bit */
                 if (fpKind (expr->e2->type) == 2) ins2 (iMov, gp (RCX), imm_hex_lit (0x8000000000000000UL)); else ins2 (iMov, gp (ECX), imm_hex_lit (0x80000000UL));
                 ins2 (iXor, gp (RAX), gp (RCX));
                 convert (expr->e2->type, expr->type);
@@ -6840,7 +6835,7 @@ static void codeExpr (ExprPtr expr)
                 long size;
                 bool uns;
                 arithType (expr->e2->type, NULL, &size, &uns);
-                normalizeSize (size, uns);      /* -x v typu int / unsigned (jako v C) */
+                normalizeSize (size, uns);      /* -x of type int / unsigned (as in C) */
             }
             break;
 
@@ -6869,7 +6864,7 @@ static void codeExpr (ExprPtr expr)
 
 /* ------------------------------------------------------------------ */
 
-/* vyhodnot podminku a nastav priznaky (ZF=1 <=> nepravda) */
+/* evaluate the condition and set the flags (ZF=1 <=> false) */
 static void codeCond (ExprPtr expr)
 {
     long mark = SeqSize (&pending_temps);
@@ -6878,14 +6873,14 @@ static void codeCond (ExprPtr expr)
     ins2 (iTest, gp (RAX), gp (RAX));
 }
 
-/* lokalni objekt k uvolneni na konci aktualniho bloku */
+/* local object to release at the end of the current block */
 static void cleanupAdd (ObjectPtr obj)
 {
     ObjectList * l = (ObjectList *) SeqLast (&cleanup);
     SeqAdd (&l->items, (long) obj);
 }
 
-/* deklarace lokalnich promennych - inicializace */
+/* declaration of local variables - initialization */
 static void codeLocalDecls (Queue * decl)
 {
     NodePtr p;
@@ -6893,13 +6888,13 @@ static void codeLocalDecls (Queue * decl)
     {
         ObjectPtr obj = p->item;
         if (! DictContains (&vars, (long) obj))
-            continue;         /* typedef, extern, deklarace funkce */
+            continue;         /* typedef, extern, function declaration */
 
         Variable * var = (Variable *) DictGet (&vars, (long) obj);
         if (var->global)
-            continue;         /* staticka lokalni promenna - inicializovana v datech */
+            continue;         /* static local variable - initialized in data */
 
-        /* Sequence / Dictionary: kopie inicializace nebo prazdny */
+        /* Sequence / Dictionary: copy of the initialization or empty */
         if (IsContainer (ArrayElem (obj->type)))
         {
             if (obj->init != NULL)
@@ -6915,11 +6910,11 @@ static void codeLocalDecls (Queue * decl)
                 zeroVar (obj->type);
             }
             if (! SeqEmpty (&cleanup) && obj->type->sort != Reference)
-                cleanupAdd (obj);     /* uvolni se na konci bloku */
+                cleanupAdd (obj);     /* released at the end of the block */
             continue;
         }
 
-        /* std::string: inicializace nebo prazdny retezec */
+        /* std::string: initialization or empty string */
         TypePtr st = isValueRef (obj->type) ? obj->type->from : obj->type;
         if (IsStdString (ArrayElem (st)))
         {
@@ -6936,7 +6931,7 @@ static void codeLocalDecls (Queue * decl)
                 if (! isValueRef (obj->type))
                 {
                     ins2 (iMov, gp (RDI), gp (RAX));
-                    callRt ("RT_SINC", "");       /* promenna vlastni referenci */
+                    callRt ("RT_SINC", "");       /* variable owning a reference */
                 }
                 note (ins2 (iMov, qword_ptr (RBP, var->offset), gp (RAX)), obj->name);
             }
@@ -6946,14 +6941,14 @@ static void codeLocalDecls (Queue * decl)
                 zeroVar (obj->type);
             }
             if (! SeqEmpty (&cleanup) && ! isValueRef (obj->type) && obj->type->sort != Reference)
-                cleanupAdd (obj);     /* reference se uvolni na konci bloku */
+                cleanupAdd (obj);     /* the reference is released at the end of the block */
             continue;
         }
 
         TypePtr elem = ArrayElem (obj->type);
         if (elem != NULL && IsClsSort (elem->sort))
         {
-            /* T x = y (y typu T): kopie po slotech, destruktor na konci bloku */
+            /* T x = y (y of type T): copy slot by slot, destructor at the end of the block */
             if (obj->init != NULL && obj->type == elem && obj->init->op != LBRACE &&
                 obj->init->type == elem && (elem->ctor != NULL || IsPolymorphic (elem) || NeedsDtor (elem, true)))
             {
@@ -6967,7 +6962,7 @@ static void codeLocalDecls (Queue * decl)
                 InstrError (Cat ("Initialization of objects with constructor is not supported: ", obj->name));
             if (obj->init != NULL)
             {
-                /* struktura (pole struktur) s inicializaci { ... } */
+                /* struct (array of structs) with initialization { ... } */
                 note (ins2 (iLea, gp (RAX), any_ptr (RBP, var->offset)), obj->name);
                 zeroVar (obj->type);
                 if (NeedsCtor (elem, true))
@@ -6983,7 +6978,7 @@ static void codeLocalDecls (Queue * decl)
                 constructVar (obj->type);
             }
             if (NeedsDtor (elem, true) && ! SeqEmpty (&cleanup))
-                cleanupAdd (obj);     /* destruktor na konci bloku */
+                cleanupAdd (obj);     /* destructor at the end of the block */
             continue;
         }
 
@@ -6996,7 +6991,7 @@ static void codeLocalDecls (Queue * decl)
 
         if (obj->type->sort == Array)
         {
-            /* int a [3] = { 1, 2, 3 },  char s [] = "abc" - zbytek nulovy */
+            /* int a [3] = { 1, 2, 3 },  char s [] = "abc" - the rest is zeroed */
             note (ins2 (iLea, gp (RAX), any_ptr (RBP, var->offset)), obj->name);
             zeroVar (obj->type);
             codeLocalInit (obj->type, obj->init, var->offset, obj->name);
@@ -7017,17 +7012,17 @@ static void codeLocalDecls (Queue * decl)
     }
 }
 
-/* ---- uvolnovani pameti (pocitani referenci) -------------------------- */
+/* ---- memory release (reference counting) -------------------------- */
 
-/* rax = novy retezec (1 reference) => docasna hodnota (uvolni se na
-   zacatku pristiho prikazu, pokud ji nevezme promenna) */
+/* rax = new string (1 reference) => temporary value (released at the start of the next
+   statement, unless a variable takes it) */
 static void strTemp (void)
 {
     ins2 (iMov, gp (RDI), gp (RAX));
     callRt ("RT_STEMP", "");
 }
 
-/* vysledek volani typu std::string / kontejner => docasna hodnota */
+/* result of a call of type std::string / container => temporary value */
 static bool ownedTemp (TypePtr res)
 {
     if (IsStdString (res)) { strTemp (); return true; }
@@ -7040,7 +7035,7 @@ static bool ownedTemp (TypePtr res)
     return false;
 }
 
-/* funkce pracuje s retezci / kontejnery => docasne hodnoty, znacka */
+/* function works with strings / containers => temporary values, mark */
 static bool exprOwned (ExprPtr e)
 {
     if (e == NULL) return false;
@@ -7064,15 +7059,15 @@ static bool statOwned (StatPtr s)
 }
 /* ---- Sequence <T>, Dictionary <K, V> --------------------------------- */
 
-/* hodnota kontejneru: z l-hodnoty kopie (hodnotova semantika jako v C++),
-   vysledek volani funkce uz je nova hodnota */
+/* container value: from an l-value a copy (value semantics as in C++),
+   the result of a function call is already a new value */
 static void codeContValue (ExprPtr e)
 {
     codeExpr (e);
     ExprPtr x = SkipParens (e);
     if (x->op == FCE)
     {
-        /* vysledek volani: docasnou hodnotu prevezme promenna (bez kopie) */
+        /* result of a call: the variable takes over the temporary value (without a copy) */
         ins2 (iMov, gp (RDI), gp (RAX));
         ins2 (iOr, gp (RDI), imm (IsDictionary (e->type) ? 2 : 1));
         callRt ("RT_TSTEAL", "");
@@ -7086,8 +7081,8 @@ static void codeContValue (ExprPtr e)
     callRt (IsDictionary (e->type) ? "RT_DCOPY" : "RT_QCOPY", "kopie");
 }
 
-/* polozky typu std::string, Sequence, Dictionary ve strukture (i v bazi,
-   vnorenych objektech a polich): (posun v bajtech, typ) */
+/* items of type std::string, Sequence, Dictionary in a struct (also in the base,
+   nested objects and arrays): (offset in bytes, type) */
 static void collectContMembers (TypePtr cls, long base, Seq * out)
 {
     NodePtr p;
@@ -7117,7 +7112,7 @@ static void collectContMembers (TypePtr cls, long base, Seq * out)
     }
 }
 
-/* druh hodnoty pro porovnani v behove knihovne */
+/* kind of value for comparison in the runtime library */
 static int cmpKind (TypePtr t)
 {
     if (IsStdString (t)) return 1;
@@ -7126,7 +7121,7 @@ static int cmpKind (TypePtr t)
     return 0;
 }
 
-/* vestavene metody Sequence a Dictionary;  f = obj.m / p->m */
+/* built-in methods of Sequence and Dictionary;  f = obj.m / p->m */
 static void codeContMethod (ExprPtr expr, ExprPtr f, ObjectPtr fce, TypePtr cls)
 {
     ExprPtr object = f->e1;
@@ -7165,11 +7160,11 @@ static void codeContMethod (ExprPtr expr, ExprPtr f, ObjectPtr fce, TypePtr cls)
             contSlotAddr (f);
             push (RAX);
             codeArg ((ExprPtr) SeqGet (args, 0), T);
-            if (isBoxedElem (T)) boxElem (T);  /* struktura: kopie na halde */
+            if (isBoxedElem (T)) boxElem (T);  /* struct: copy on the heap */
             if (IsStdString (T))
             {
                 ins2 (iMov, gp (RDI), gp (RAX));
-                callRt ("RT_SINC", "");             /* prvek vlastni referenci */
+                callRt ("RT_SINC", "");             /* element owning a reference */
             }
             ins2 (iMov, gp (RSI), gp (RAX));
             pop (RDI);
@@ -7238,14 +7233,14 @@ static void codeContMethod (ExprPtr expr, ExprPtr f, ObjectPtr fce, TypePtr cls)
     codeDictMethod (name, args, cls, f);
 }
 
-/* adresa promenne kontejneru (zmeny);  f = obj.m / p->m */
+/* address of the container variable (changes);  f = obj.m / p->m */
 static void contSlotAddr (ExprPtr f)
 {
     if (f->op == ARROW) codeExpr (f->e1);
     else codeAddress (f->e1);
 }
 
-/* hodnota (hlavicka) kontejneru */
+/* value (header) of the container */
 static void contHandle (ExprPtr f)
 {
     codeExpr (f->e1);
@@ -7290,13 +7285,13 @@ static void codeDictMethod (const char * name, Seq * args, TypePtr cls, ExprPtr 
         InstrError (Cat ("Unknown method of Dictionary: ", name));
 }
 
-/* druh prvku kontejneru (uvolnovani): 0 jiny, 1 std::string */
+/* kind of container element (release): 0 other, 1 std::string */
 static int elemKind (TypePtr T)
 {
     return IsStdString (T) ? 1 : 0;
 }
 
-/* rax = adresa prvku, rdx = nova hodnota typu T */
+/* rax = address of element, rdx = new value of type T */
 static void storeElem (TypePtr T)
 {
     if (IsStdString (T))
@@ -7309,16 +7304,16 @@ static void storeElem (TypePtr T)
         ins2 (iMov, qword_ptr (RAX, 0), gp (RDX));
 }
 
-/* prvek kontejneru struktura (Sequence <DtorVar> ve zdrojich cmm): ve slotu je ukazatel
-   na vlastni kopii na halde; s [i], get, last vraci jeji adresu (hodnota struktury
-   = adresa), add, change, store ulozi novou kopii, d [k] s novym klicem ji zalozi;
-   kopie celeho kontejneru neni podporovana (sdilene kopie) */
+/* container element of struct type (Sequence <DtorVar> in the cmm sources): the slot holds a pointer
+   to its own copy on the heap; s [i], get, last return its address (value of struct
+   = address), add, change, store save a new copy, d [k] with a new key creates it;
+   copying the whole container is not supported (shared copies) */
 static bool isBoxedElem (TypePtr T)
 {
     return isStructVal (Resolve (T));
 }
 
-/* rax = adresa struktury typu T => rax = jeji kopie na halde */
+/* rax = address of struct of type T => rax = its copy on the heap */
 static void boxElem (TypePtr T)
 {
     TypePtr R = Resolve (T);
@@ -7328,11 +7323,11 @@ static void boxElem (TypePtr T)
     callRt ("RT_CALLOC", "");
     pop (RSI);
     ins2 (iMov, gp (RDI), gp (RAX));
-    copyBytes (structBytes (R));            /* rax zustava */
+    copyBytes (structBytes (R));            /* rax stays */
 }
 
-/* rax = adresa slotu => rax = adresa struktury ve slotu; prazdny slot (novy klic
-   slovniku, chybejici klic v get) - nova vynulovana struktura (store_slot: ulozit do slotu) */
+/* rax = address of slot => rax = address of struct in the slot; empty slot (new dictionary key,
+   missing key in get) - new zeroed struct (store_slot: save into the slot) */
 static void unboxElem (TypePtr T, bool store_slot)
 {
     TypePtr R = Resolve (T);
@@ -7353,7 +7348,7 @@ static void unboxElem (TypePtr T, bool store_slot)
         ins2 (iMov, gp (RAX), gp (RCX));
         return;
     }
-    ins2 (iTest, gp (RAX), gp (RAX));         /* rax = obsah slotu (RT_DGET) */
+    ins2 (iTest, gp (RAX), gp (RAX));         /* rax = content of slot (RT_DGET) */
     ins1 (iJnz, jlab (ok));
     ins2 (iMov, gp (EDI), imm (1));
     ins2 (iMov, gp (ESI), imm (structCount (R) * VAR_SIZE));
@@ -7361,28 +7356,28 @@ static void unboxElem (TypePtr T, bool store_slot)
     bind (ok);
 }
 
-/* druh klice slovniku: 0 cislo / ukazatel, 1 std::string */
+/* kind of dictionary key: 0 number / pointer, 1 std::string */
 static int dictKind (TypePtr K)
 {
     return IsStdString (K) ? 1 : 0;
 }
 
-/* rax := adresa prvku kontejneru:  seq [i],  dict [k] */
+/* rax := address of container element:  seq [i],  dict [k] */
 static void codeContElemAddress (ExprPtr expr)
 {
     ExprPtr arr = SkipParens (expr->e1);
     if (IsSequence (arr->type))
     {
-        codeExpr (arr);                   /* hlavicka */
+        codeExpr (arr);                   /* header */
         push (RAX);
         codeExpr (expr->e2);
         ins2 (iMov, gp (RSI), gp (RAX));
         pop (RDI);
         callRt ("RT_QREF", "");
-        if (isBoxedElem (arr->type->elem)) ins2 (iMov, gp (RAX), qword_ptr (RAX, 0));   /* struktura */
+        if (isBoxedElem (arr->type->elem)) ins2 (iMov, gp (RAX), qword_ptr (RAX, 0));   /* struct */
         return;
     }
-    /* dict [k] - adresa hodnoty, chybejici klic se vlozi (jako std::map) */
+    /* dict [k] - address of value, a missing key is inserted (as std::map) */
     codeAddress (arr);
     push (RAX);
     codeArg (expr->e2, arr->type->key);
@@ -7395,7 +7390,7 @@ static void codeContElemAddress (ExprPtr expr)
     if (isBoxedElem (arr->type->elem)) unboxElem (arr->type->elem, true);
 }
 
-/* for (T x : seq),  for (T & x : seq):  [h] = hlavicka, [i] = index */
+/* for (T x : seq),  for (T & x : seq):  [h] = header, [i] = index */
 static void codeRangeFor (StatPtr stat)
 {
     comment ("for (T x : seq)");
@@ -7407,12 +7402,12 @@ static void codeRangeFor (StatPtr stat)
     char * end_label = newLabel ("L");
     Variable * vv = (Variable *) DictGet (&vars, (long) var);
 
-    bool str = IsStdString (var->type);           /* promenna vlastni referenci */
+    bool str = IsStdString (var->type);           /* variable owning a reference */
     bool steal = SkipParens (stat->e1)->op == FCE;
     if (str)
         note (ins2 (iMov, qword_ptr (RBP, vv->offset), imm (0)), var->name);
     if (steal)
-        codeContValue (stat->e1);           /* vysledek volani - prevzit, uvolnit po cyklu */
+        codeContValue (stat->e1);           /* result of call - taken over, released after the loop */
     else
         codeExpr (stat->e1);
     ins2 (iMov, qword_ptr (RBP, h), gp (RAX));
@@ -7434,12 +7429,12 @@ static void codeRangeFor (StatPtr stat)
     else if (isBoxedElem (Resolve (stat->e1->type)->sort == Reference ? Resolve (Resolve (stat->e1->type)->from)->elem
                                                                      : Resolve (stat->e1->type)->elem))
     {
-        ins2 (iMov, gp (RAX), qword_ptr (RAX, 0));         /* adresa struktury */
+        ins2 (iMov, gp (RAX), qword_ptr (RAX, 0));         /* struct address */
         if (var->type->sort == Reference)
             note (ins2 (iMov, qword_ptr (RBP, vv->offset), gp (RAX)), var->name);
         else
         {
-            ins2 (iMov, gp (RSI), gp (RAX));            /* kopie struktury do promenne */
+            ins2 (iMov, gp (RSI), gp (RAX));            /* copy of struct into variable */
             note (ins2 (iLea, gp (RDI), any_ptr (RBP, vv->offset)), var->name);
             copyBytes (structBytes (Resolve (var->type)));
         }
@@ -7447,11 +7442,11 @@ static void codeRangeFor (StatPtr stat)
     else
     {
         if (var->type->sort != Reference)
-            ins2 (iMov, gp (RAX), qword_ptr (RAX, 0));     /* hodnota prvku */
+            ins2 (iMov, gp (RAX), qword_ptr (RAX, 0));     /* element value */
         note (ins2 (iMov, qword_ptr (RBP, vv->offset), gp (RAX)), var->name);
     }
 
-    /* return uvnitr cyklu uvolni promennou (a prevzaty kontejner) */
+    /* return inside the loop releases the variable (and the taken-over container) */
     SeqAdd (&cleanup, (long) MemAlloc (sizeof (ObjectList)));
     if (str) SeqAdd (& ((ObjectList *) SeqLast (&cleanup))->items, (long) var);
     if (steal)
@@ -7483,8 +7478,8 @@ static void codeRangeFor (StatPtr stat)
     }
 }
 
-/* inicializace lokalni promenne (pole, struktury) po prvcich;
-   promenna uz je vynulovana, off = posun v ramci [rbp + off] */
+/* initialization of a local variable (array, struct) member by member;
+   the variable is already zeroed, off = offset in the frame [rbp + off] */
 static void codeLocalInit (TypePtr type, ExprPtr init, long off, const char * name)
 {
     init = SkipParens (init);
@@ -7534,7 +7529,7 @@ static void codeLocalInit (TypePtr type, ExprPtr init, long off, const char * na
     {
         if (init->op != LBRACE)
         {
-            /* T x = y;  T x = f ();  - kopie (struktura hodnotou) */
+            /* T x = y;  T x = f ();  - copy (struct passed by value) */
             checkStructCopy (type);
             long mark = SeqSize (&pending_temps);
             codeStructAddr (init);
@@ -7543,7 +7538,7 @@ static void codeLocalInit (TypePtr type, ExprPtr init, long off, const char * na
             copyBytes (structBytes (type));
             ins2 (iLea, gp (RDI), any_ptr (RBP, (int) off));
             incOwned (type);
-            releaseTemps (mark);               /* docasny objekt volani uz neni potreba */
+            releaseTemps (mark);               /* the temporary object of the call is no longer needed */
             return;
         }
         if (IsPolymorphic (type) || type->base != NULL)
@@ -7608,7 +7603,7 @@ static void codeIf (StatPtr stat)
     bind (end_label);
 }
 
-/* navesti pro goto (v ramci funkce) */
+/* label for goto (within the function) */
 static char * userLabel (const char * id)
 {
     if (SDictContains (&user_labels, id))
@@ -7618,7 +7613,7 @@ static char * userLabel (const char * id)
     return label;
 }
 
-/* case a default patrici k tomuto switch (ne k vnorenym) */
+/* case and default belonging to this switch (not to nested ones) */
 static void collectCases (StatPtr stat, Seq * cases)
 {
     StatPtr s;
@@ -7640,14 +7635,14 @@ static void collectCases (StatPtr stat, Seq * cases)
         case WHILE_: case DO_: case FOR_: case LAB: case COLON:
             collectCases (stat->s1, cases);
             break;
-        default:              /* SWITCH_ - vlastni case */
+        default:              /* SWITCH_ - own case */
             break;
     }
 }
 
 static void codeSwitch (StatPtr stat)
 {
-    /* switch (e1) s1 - porovnani s hodnotami case, skok na navesti */
+    /* switch (e1) s1 - comparison with the case values, jump to the label */
     comment ("switch statement");
     char * end_label = newLabel ("L");
 
@@ -7683,7 +7678,7 @@ static void codeSwitch (StatPtr stat)
 
     char * cont = SeqEmpty (&loops) ? (char *) "" : ((LoopLabels *) SeqLast (&loops))->continue_label;
     long cont_depth = SeqEmpty (&loops) ? 0 : ((LoopLabels *) SeqLast (&loops))->continue_depth;
-    SeqAdd (&loops, (long) LoopLabels_new (end_label, cont, SeqSize (&cleanup), cont_depth));    /* break ukonci switch */
+    SeqAdd (&loops, (long) LoopLabels_new (end_label, cont, SeqSize (&cleanup), cont_depth));    /* break ends the switch */
     codeStat (stat->s1);
     SeqPop (&loops);
 
@@ -7731,7 +7726,7 @@ static void codeDo (StatPtr stat)
 
 static void codeFor (StatPtr stat)
 {
-    /* for (e1;e2;e3) s1     nebo  for (deklarace; e2; e3) s1 */
+    /* for (e1;e2;e3) s1     or  for (declaration; e2; e3) s1 */
     comment ("for statement");
     char * begin_label = newLabel ("L");
     char * next_label = newLabel ("L");
@@ -7739,11 +7734,11 @@ static void codeFor (StatPtr stat)
 
     long mark0 = SeqSize (&pending_temps);
     codeLocalDecls (&stat->decl);
-    codeExpr (stat->e1);              /* inicializace */
+    codeExpr (stat->e1);              /* initialization */
     releaseTemps (mark0);
 
     bind (begin_label);
-    if (stat->e2 != NULL)          /* for (;;) => bez testu */
+    if (stat->e2 != NULL)          /* for (;;) => without test */
     {
         codeCond (stat->e2);
         ins1 (iJz, jlab (end_label));
@@ -7755,7 +7750,7 @@ static void codeFor (StatPtr stat)
 
     bind (next_label);
     long mark3 = SeqSize (&pending_temps);
-    codeExpr (stat->e3);              /* inkrement */
+    codeExpr (stat->e3);              /* increment */
     releaseTemps (mark3);
     ins1 (iJmp, jlab (begin_label));
 
@@ -7769,7 +7764,7 @@ static void codeReturn (StatPtr stat)
     {
         if (ret_obj != NULL)
         {
-            /* struktura hodnotou: kopie na misto volajiciho, vysledek = jeho adresa */
+            /* struct passed by value: copy to the caller's place, result = its address */
             long ret_off = ((Variable *) DictGet (&vars, (long) ret_obj))->offset;
             codeStructAddr (stat->e1);
             ins2 (iMov, gp (RSI), gp (RAX));
@@ -7781,12 +7776,12 @@ static void codeReturn (StatPtr stat)
         }
         else if (current_fce != NULL && IsStdString (current_fce->type->from))
         {
-            codeStringValue (stat->e1);        /* funkce vraci std::string */
+            codeStringValue (stat->e1);        /* function returns std::string */
             ins2 (iMov, gp (RDI), gp (RAX));
-            callRt ("RT_SINC", "");                /* volajici dostane vlastni referenci */
+            callRt ("RT_SINC", "");                /* the caller gets its own reference */
         }
         else if (current_fce != NULL && IsContainer (current_fce->type->from))
-            codeContValue (stat->e1);          /* funkce vraci kontejner - kopie */
+            codeContValue (stat->e1);          /* function returns a container - copy */
         else if (current_fce != NULL)
             codeExprAs (stat->e1, current_fce->type->from);
         else
@@ -7797,7 +7792,7 @@ static void codeReturn (StatPtr stat)
     releaseTemps (mark);
     if (hasLocalsToDestroy (0))
     {
-        push (RAX);                       /* vysledek */
+        push (RAX);                       /* result */
         destroyLocals (0);
         pop (RAX);
     }
@@ -7806,7 +7801,7 @@ static void codeReturn (StatPtr stat)
 
 static void codeCompoundStat (StatPtr stat)
 {
-    /* { s1 s1->next ... }  - na konci se zrusi lokalni objekty bloku */
+    /* { s1 s1->next ... }  - at the end the local objects of the block are released */
     StatPtr body;
     SeqAdd (&cleanup, (long) MemAlloc (sizeof (ObjectList)));
     for (body = stat->s1; body != NULL; body = body->next)
@@ -7823,8 +7818,8 @@ static bool hasLocalsToDestroy (long depth)
     return false;
 }
 
-/* destruktory lokalnich objektu v blocich od nejvnitrnejsiho po uroven depth
-   (vcetne), v opacnem poradi deklarace */
+/* destructors of local objects in blocks from the innermost up to level depth
+   (inclusive), in reverse order of declaration */
 static void destroyLocals (long depth)
 {
     long i;
@@ -7847,7 +7842,7 @@ static void codeStat (StatPtr stat)
 
     if (fn_temps && current_fce != NULL && stat->st != LBRACE)
     {
-        /* docasne hodnoty predchoziho prikazu */
+        /* temporary values of the previous statement */
         ins2 (iMov, gp (RDI), qword_ptr (RBP, temp_mark));
         callRt ("RT_TREL", "");
     }
