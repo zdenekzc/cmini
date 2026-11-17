@@ -54,7 +54,11 @@ cecko_prepare
 $CECKO_OK || { echo "  toaruos-tcc: mkcross.sh selhal ($T/mkcross.log)" >&2; cecko_stop; finish; }
 
 # ------------------------------------------------------------- VM
-WORKV=$T/vm; mkdir -p $WORKV
+# with a window (manual run) the VM stays up after the test: its directory is kept
+KEEP_VM=0
+if [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ] && [ "${TOARU_GUI:-1}" != 0 ]; then KEEP_VM=1; fi
+if [ "$KEEP_VM" = 1 ]; then WORKV=$TOOLS/_build/vm-keep; else WORKV=$T/vm; fi
+mkdir -p $WORKV
 truncate -s 1M $WORKV/share.img
 VM="env WORK=$WORKV SHARE=$WORKV/share.img INITRD=$TOOLS/_build/ramdisk.tgz KERNEL=$TOOLS/_build/kernel.mb $TOOLS/toaru-vm.sh"
 up=false
@@ -79,7 +83,14 @@ cecko_guest $D
 $VM log 1000000 > $D/guest.log
 cp $T/cecko.log $D/guest.log 2> /dev/null
 cecko_stop
-$VM stop > /dev/null
+# Manual run with a window (DISPLAY set, TOARU_GUI not 0): QEMU stays up so that the
+# ToaruOS desktop can be used. Its working directory is kept (not under $T, which
+# finish removes); stop it with:  WORK=$WORKV $TOOLS/toaru-vm.sh stop
+if [ "$KEEP_VM" = 1 ]; then
+   echo "  toaruos-tcc: QEMU zustava bezet (okno). Zastaveni: WORK=$WORKV $TOOLS/toaru-vm.sh stop" >&2
+else
+   $VM stop > /dev/null
+fi
 
 report toaruos-tcc "cmini a pasm v ToaruOS: programy prelozene v ToaruOS, vystup = vzor"
 finish

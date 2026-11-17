@@ -30,9 +30,15 @@ HOLDERF=${WORK}/holder.pid
 # (tests/output.sh nastavi TOARU_GUI=0). Serial line (mon:stdio) zustava pro ovladani skripty.
 if [[ "${TOARU_GUI:-1}" != 0 && ( -n "${DISPLAY:-}" || -n "${WAYLAND_DISPLAY:-}" ) ]]; then
     DISPLAY_OPT=(-display "${TOARU_DISPLAY:-gtk}")
+    WINDOW=1
 else
     DISPLAY_OPT=(-nographic)
+    WINDOW=0
 fi
+# SOUND=none (default): AC97 with QEMU's "none" audio backend. Plain "-device AC97"
+# opens the host's ALSA; without a sound server the guest can stall at startup
+# (seen in /abc/new2: the boot stops after "Launching startup application").
+SOUND=${SOUND:-none}
 
 die() { echo "error: $*" >&2; exit 1; }
 
@@ -83,24 +89,33 @@ do_start() {
     # ToaruOS cannot even read its own CD. Network: the only NIC supported by ToaruOS is e1000.
     # fw_cfg sets up boot without graphics and the getty on the second serial line.
     # Boot: INITRD => -kernel/-initrd (direct kernel boot, the kernel command line as
-    # boot.sys would assemble it: root on the ramdisk, writable root, headless start);
-    # otherwise the ISO as CD-ROM.
-    local -a bootsrc
+    # boot.sys would assemble it: root on the ramdisk, writable root, headless start
+    # (serial getty on ttyS1, where the tests log in as root). Otherwise the ISO as CD-ROM.
+    # The window (WINDOW=1) only shows the screen; the start mode stays headless, since
+    # live-session would take the serial getty away and the tests would never see the prompt.
+    local -a bootsrc bootmode=() sound=()
     if [[ -n $INITRD ]]; then
         bootsrc=(-kernel "$KERNEL" -initrd "$INITRD" -append "root=/dev/ram0 migrate start=--headless")
     else
         bootsrc=(-cdrom "$ISO")
     fi
+    bootmode=(-fw_cfg name=opt/org.toaruos.bootmode,string=headless)
+    case $SOUND in
+        none) sound=(-audiodev none,id=snd0 -device AC97,audiodev=snd0) ;;
+        alsa) sound=(-device AC97) ;;
+        off)  ;;
+        *)    die "SOUND should be none|alsa|off" ;;
+    esac
 
     qemu-system-x86_64 "${accel[@]}" \
         -M pc -m "$RAM" -smp "$SMP" \
-        "${bootsrc[@]}" -vga std -device AC97 \
+        "${bootsrc[@]}" -vga std "${sound[@]}" \
         -drive format=raw,if=none,id=share,file="$SHARE" \
         -device ide-hd,drive=share,bus=ide.0,unit=0 \
         -netdev user,id=n0 -device e1000,netdev=n0 \
-        -fw_cfg name=opt/org.toaruos.bootmode,string=headless \
+        "${bootmode[@]}" \
         -fw_cfg name=opt/org.toaruos.gettyargs,string='-a root /dev/ttyS1 115200 linux' \
-        -no-reboot "${DISPLAY_OPT[@]}" -serial null -serial mon:stdio \
+        -no-reboot "${DISPLAY_OPT[@]}" -serial file:"${WORK}/ttyS0.log" -serial mon:stdio \
         < "$FIFO" > "$OUT" 2>&1 &
     echo $! > "${PIDF}"
     # take cmdline only after qemu has exec'd (right after & it may still be a bash subprocess; stop would
