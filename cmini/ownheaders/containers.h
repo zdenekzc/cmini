@@ -1,6 +1,6 @@
 /* containers.h - Sequence <T> a Dictionary <K, V> pro g++
 
-   cparser ma oba typy vestavene (README.txt, kapitola 22) - tento soubor
+   cparser ma oba typy vestavene (CHANGELOG.txt, kapitola 22) - tento soubor
    pouziva jen g++ (testy, vypis -p); chovani je stejne:
      - hodnotova semantika (prirazeni a predani hodnotou = kopie),
      - index mimo rozsah:  "Assertion failed in function Sequence (index out

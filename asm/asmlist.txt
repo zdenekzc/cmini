@@ -125,7 +125,7 @@ behova knihovna RTL_... v instr.cc jsou radky textu (AN_TEXT).
 
 Pouziti v prekladaci
 --------------------
-../cmini/instr.cc (cparser, test_instr -0; README.txt kapitoly 27 a 30):
+../cmini/instr.cc (cparser, test_instr -0; CHANGELOG.txt kapitoly 27 a 30):
    ins (iMov, gp (RAX), qword_ptr (RBP, -16));
 - jeden AsmProgram s kurzory pro extrn / data / kod,
 - behova knihovna RTL_... jako AN_TEXT,

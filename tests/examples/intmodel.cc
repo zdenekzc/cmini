@@ -2,7 +2,7 @@
    int, unsigned a float 4, long, ukazatel a double 8; zarovnani polozek, sizeof,
    preteceni int a short, unsigned, posuny, smisene porovnani int / unsigned,
    float (presnost), pole int pro libc (qsort, memset, sscanf), struktury a pole
-   struktur, ukazatelova aritmetika; vzor z g++ (README.txt, kapitola 55) */
+   struktur, ukazatelova aritmetika; vzor z g++ (CHANGELOG.txt, kapitola 55) */
 
 #include <stdio.h>
 #include <stdlib.h>

@@ -26,7 +26,7 @@ do
       gcc $CMINI_CFLAGS $D/$p.c $T/cminirt.o -o $D/$p.bin -lm 2> /dev/null
    run $D $p
 done
-# cout / cerr (C++ iostream => printf, dprintf; viz tests/02 a kap. 86 v README.txt)
+# cout / cerr (C++ iostream => printf, dprintf; viz tests/02 a kap. 86 v CHANGELOG.txt)
 for p in cout
 do
    ./cmini/cmini.bin -C -I cmini/ownheaders -o $D/$p.c $EX/$p.cc > /dev/null 2>&1 &&

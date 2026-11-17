@@ -119,7 +119,7 @@ ToaruOS 2.3.2 in QEMU (KVM); details in sections 1-5c.
    * `make test-toaru` (5 checks): the image byte-identical with the one that ran; without `-T`
      base 0x400000; `-T` without `-e` => 2; `-T` + USE32 => error; a jump before the data
      (e_entry 0x3F000078, E9).
-   * `./check.sh` (20 OK, 0 failed, QEMU skipped; ch. 84 in README.txt): building the package with a clean gcc, `-T` and the jump, cmini
+   * `./check.sh` (20 OK, 0 failed, QEMU skipped; ch. 84 in CHANGELOG.txt): building the package with a clean gcc, `-T` and the jump, cmini
      against gcc, cmini `-T` (T2b), image format, package and ext2, VM control.
    * with VM: `./guest-run.sh` - programs from c-mini in the host against Linux.
    * `sh tests/15-toaruos.sh` (from the root of the tree): the same for 16 programs
@@ -155,7 +155,7 @@ Directory `_preklad/` renamed to `guest-src/` (sources of the compiler, which is
 inside the guest - nothing generated, therefore without `_`).  The reference
 `push/toaru64.bin` (byte-identical with the original `probe/toaru64.bin`) is no longer a reference
 file in the repository: `check.sh` T1b and `make test-toaru` check only the LOAD address
-(0x3F000000 with -T, 0x400000 without -T), not the bytes (ch. 84 in README.txt).
+(0x3F000000 with -T, 0x400000 without -T), not the bytes (ch. 84 in CHANGELOG.txt).
 The package `cmini-src.tar.gz` no longer carries the precompiled `asm/pasm.bin` and `libpasm.a`
 (mkpkg.sh always leaves them out, the LEAN option was removed): 235 556 B, 108 entries.
 Verified: `./check.sh` 25 OK, 0 failed, 1 skipped (VM start);

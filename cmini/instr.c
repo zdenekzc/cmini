@@ -1,10 +1,10 @@
 /* INSTR.C */
 
 /* Generator kodu x86-64 prekladace c-mini - jediny generator bez asmjit
-   (README.txt, kapitola 30; drive tri varianty instr.cc, instr0.cc,
+   (CHANGELOG.txt, kapitola 30; drive tri varianty instr.cc, instr0.cc,
    instr-list.cc - text pro assembler byl ve vsech bajtove shodny).
 
-   - Ciste C (2026-11-16, README.txt kapitola 103; drive instr.cc v podmnozine
+   - Ciste C (2026-11-16, CHANGELOG.txt kapitola 103; drive instr.cc v podmnozine
      c-mini a z nej cmini.bin -C vygenerovany instr.c): prelozi ho gcc, tcc
      (bootstrap) i sam cmini.bin (samopreklad) - proto jen konstrukce, ktere
      c-mini zna: struktury s polozkami long / ukazatel (polozka = 8 bajtu),
@@ -103,7 +103,7 @@
      - destruktory se jen prelozi (delete zatim neni).
 
    Dalsi prostredky jazyka (ukazatele, float / double, switch, goto,
-   std::string, Sequence, Dictionary, ...) - README.txt, kapitoly 15 - 24.
+   std::string, Sequence, Dictionary, ...) - CHANGELOG.txt, kapitoly 15 - 24.
 
    Assembler pasm se vola jako knihovna (asm/libpasm.a: asmlist.h, pasmlib.h).
 */

@@ -408,7 +408,7 @@ Link-only mode (2026-11-11):  pasm -k out.bin input.o ... library.a ...
   (../toaruos-tools/mkcross.sh) and linking objects in ToaruOS:
         pasm.bin -k p /lib/crt0.o /lib/crti.o p.o lib/cminirt.o /lib/libc.a /lib/crtn.o
 
-AN_CFI nodes in asmlist (2026-11-16, ../README.txt chapter 65):
+AN_CFI nodes in asmlist (2026-11-16, ../CHANGELOG.txt chapter 65):
 - AsmCfi (p, ASM_CFI_OFFSET, RBX, -24) - information for .eh_frame as
   pseudo-instructions of GNU as (.cfi_startproc, .cfi_endproc, .cfi_def_cfa_offset,
   .cfi_def_cfa_register, .cfi_def_cfa, .cfi_offset, .cfi_restore,

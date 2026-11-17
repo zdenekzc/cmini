@@ -17,7 +17,7 @@
    instr.cc umi vse jako instr5.cc a navic tridy (v testech ma uroven 6:
    min_gen <= 6 <= max_gen).
    instr.cc je napsan v podmnozine c-mini (prelozi ho i cparser a cmini.bin -C)
-   a sklada program jako seznam instrukci asm/asmlist.h (README.txt, kapitola 30).
+   a sklada program jako seznam instrukci asm/asmlist.h (CHANGELOG.txt, kapitola 30).
 */
 
 #include "ifc.h"

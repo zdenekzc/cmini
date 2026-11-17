@@ -1,4 +1,4 @@
-CPARSER - CODE GENERATOR (asmjit)
+CHANGELOG - cmini, pasm a nastroje
 =================================
 
 Change log of the code generator (instr*.cc) and the parser. The chapters are
@@ -11,9 +11,7 @@ CONTENTS
      0. BUILD AND TESTS
      1. REVIEW OF THE ORIGINAL instr1.cc
      2. FIXES IN instr1.cc (x86::Assembler)
-     3. ADDITION OF win.h, GUI BUILD
      4. SUPPORT FOR AN OLDER asmjit VERSION (#if)
-     5. STOP HOOK "uv: command not found"
      6. SORTING PROGRAMS IN tests/examples/
      7. instr2.cc - INTERMEDIATE RESULTS IN REGISTERS INSTEAD OF push / pop
      8. instr3.cc - SWAPPING OPERAND BLOCKS (Sethi-Ullman)
@@ -85,12 +83,7 @@ Build scripts are run from the main directory; programs are created in
 subdirectories according to their sources: cmini/test_instr.bin,
 cmini/test_instr_lexer.bin, cmini/cmini.bin -C, asm/pasm.bin (and asm/libpasm.a).
 
-GUI (Qt 5):
-    qmake-qt5 cparser.pro && make                         local asmjit (_library/asmjit, 1.24)
-    qmake-qt5 CONFIG+=system_asmjit cparser.pro && make   system asmjit (1.11)
-    qmake-qt5 CONFIG+=lexer cparser.pro && make           cmini/lexer.c (with preprocessor) instead of cmini/lex.c
-
-Tests without Qt:
+Tests:
     tests/build-test.sh                 without asmjit: generator cmini/instr.c (-0) with the assembler pasm
                                         (asm/libpasm.a), cmini/test_instr.cc with -DNO_ASMJIT
                                         + comparison of the output of the programs tests/examples/*.cc
@@ -252,16 +245,7 @@ Other changes
   - asmjit 1.24 has a snake_case API (new_label, cpu_features ...) and
     asmjit/asmjit.h is deliberately empty upstream -> asmjit/x86.h is included.
 
-Tests: test_instr.cc + build-test.sh (without Qt).
-
-
-3. ADDITION OF win.h, GUI BUILD
-===============================
-
-With the added win.h the whole GUI application compiles and links against the
-local library _library/asmjit/libasmjit.so. Warnings of the type Error ("...")
-come from older parser code (a string literal passed as char *); they do not
-affect the function.
+Tests: test_instr.cc + build-test.sh.
 
 
 4. SUPPORT FOR AN OLDER asmjit VERSION (#if)
@@ -287,19 +271,6 @@ API), the local version is 1.24 (snake_case API).
 
 The constant kErrorOk exists in both versions. Versions between 1.11 and 1.24
 were not tested.
-
-
-5. STOP HOOK "uv: command not found"
-====================================
-
-The message did not come from the project. The data-engineering plugin (Airflow,
-data warehouses) is installed in Claude Code and it registered a Stop hook:
-
-    uv run .../data-engineering/0.1.0/skills/analyzing-data/scripts/cli.py stop
-
-It failed without an installed uv (non-blocking, without effect on the work).
-The project does not need uv. If the plugin is not used, it can be disabled
-via /plugin.
 
 
 6. SORTING PROGRAMS IN tests/examples/
@@ -1306,7 +1277,7 @@ _output (vystup.sh) - directories per generator
   executables, outputs compared with the reference) and subdirectories cmini/,
   asm/ with the sources of the compilers that the generator handles (a
   file stays only if the result also compiles with gcc / nasm / clang / pasm);
-  Description in _output/README.txt.
+  Description in _output/CHANGELOG.txt.
   cmini/ownheaders/time.h, ctime: time, clock (tests/examples/quicksort.cc, heapsort.c).
 
 Tests without stored references (the reference is created on every run)
@@ -2159,7 +2130,7 @@ runs in a clean ToaruOS — without gcc and without ld.so: cmini -T, cmini -L /l
 
 tests/15-toaruos.sh and 16-toaruos-libc.sh (common part tests/toaruos-common.sh)
 send into the running VM, besides the examples, cecko-toaru.tar.gz (=> /tmp/cecko,
-README.txt with instructions) and the source cmini-src.tar.gz (=> /tmp/src; the
+CHANGELOG.txt with instructions) and the source cmini-src.tar.gz (=> /tmp/src; the
 guest compiles it with gcc from msk install build-essential — chapters 44, 48;
 network), and verify 3 steps inside the guest: cmini -T dama.c, cmini -L /lib
 classes.c, pasm -x libc64.asm — all identical with the pattern

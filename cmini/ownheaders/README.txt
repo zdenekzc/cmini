@@ -21,7 +21,7 @@ cmini/ownheaders (not -I cmini/ownheaders: the other headers in this
 directory are only for cparser).
 
 unistd.h, sys/wait.h, sys/stat.h, cstdint, stdint.h - for ../cmini/instr.cc
-(README.txt in cparser, chapter 25): processes, descriptors, waitpid and the
+(CHANGELOG.txt in cparser, chapter 25): processes, descriptors, waitpid and the
 macros WIFEXITED ..., chmod, fixed-width types.
 
 ctime, time.h - time, clock (tests/examples/quicksort.cc, heapsort.c:

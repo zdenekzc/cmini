@@ -40,7 +40,7 @@ begin ()   # begin <generator> - novy _output/<generator>, pracovni adresar $T, 
    # quicksort, heapsort (nahodna data, srand (time (NULL))) - posledni radek O.K.
    mkdir -p $T/exp
    for p in $PROGRAMS; do [ -f $EX/expected/$p.txt ] && cp $EX/expected/$p.txt $T/exp/; done
-   cp $EX/expected/cout.txt $T/exp/ 2> /dev/null      # cout (tests/02, 03 zvlast, kap. 86 README.txt)
+   cp $EX/expected/cout.txt $T/exp/ 2> /dev/null      # cout (tests/02, 03 zvlast, kap. 86 CHANGELOG.txt)
 }
 
 finish ()

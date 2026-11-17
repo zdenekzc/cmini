@@ -1,5 +1,5 @@
 /* UTIL.C - pomocne funkce generatoru c-mini (util.h): retezce, Seq, Dict, soubory
-   (2026-11-16, README.txt kapitola 103: drive v instr.c, PMAP a ReadWholeFile v translate.c) */
+   (2026-11-16, CHANGELOG.txt kapitola 103: drive v instr.c, PMAP a ReadWholeFile v translate.c) */
 
 #include <stdio.h>
 #include <stdlib.h>
