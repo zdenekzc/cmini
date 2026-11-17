@@ -2,33 +2,29 @@
 #   do bezici VM s ToaruOS posle krome prikladu i PREKLADACE a ZDROJE
 #   (output.sh ho samostatne nespousti - jmeno nezacina cislem)
 #
-#   cecko_prepare <port>    krizove prelozene prekladace (toaruos-tools/mkcross.sh):
+#   cecko_prepare           krizove prelozene prekladace (toaruos-tools/mkcross.sh):
 #                           _build/push/cecko-toaru.tar.gz (cmini.bin, pasm.bin,
 #                           cminirt.o, hlavicky, priklady) a zdroje cmini-src.tar.gz;
-#                           HTTP server nad _build/push na <port>
-#   cecko_guest <adresar>   v bezicim hostovi ($VM, toaru-vm.sh): stahne a rozbali
-#                           /tmp/cecko, zdroje do /tmp/src, a prekladace PRIMO
+#                           mkramdisk.sh je vlozi do ramdisku pod /extras (boot bez ISO)
+#   cecko_guest <adresar>   v bezicim hostovi ($VM, toaru-vm.sh): rozbali balik z
+#                           /extras do /tmp/cecko, zdroje do /tmp/src, a prekladace PRIMO
 #                           V ToaruOS prelozi a spusti:
 #                             guest-cmini-T    cmini -T dama.c (vlastni knihovna)
 #                             guest-cmini-L    cmini -L /lib classes.c (libc ToaruOS)
 #                             guest-pasm-x     pasm -x libc64.asm (assembler + linker)
 #                           vystupy <adresar>/guest-*.out, check proti vzorum
-#   cecko_stop              zastavi HTTP server
+#   cecko_stop              (bez HTTP serveru - nic k zastaveni)
 #
 # Zdroje cmini-src se v hostovi nepreklada (gcc z msk install
 # build-essential potrebuje sit) - viz toaruos-tools/guest-cmini.sh.
 
 CECKO_OK=false
-CECKO_WALL=""
 
 cecko_prepare ()
 {
-   CPORT=$1
-   if "$TOP/toaruos-tools/mkcross.sh" > $T/mkcross.log 2>&1; then
+   if "$TOP/toaruos-tools/mkcross.sh" > $T/mkcross.log 2>&1 &&
+      "$TOP/toaruos-tools/mkramdisk.sh" > $T/mkramdisk.log 2>&1; then
       CECKO_OK=true
-      python3 -m http.server $CPORT --bind 127.0.0.1 -d "$TOP/toaruos-tools/_build/push" > /dev/null 2>&1 &
-      CHTTP=$!
-      sleep 1
       # vzor pro libc64.asm: tentyz program na Linuxu (pasm -c, gcc, glibc)
       mkdir -p $T/cecko-ref
       cp asm/tests/libc64.asm $T/cecko-ref/
@@ -55,8 +51,7 @@ cecko_guest ()
    $CECKO_OK || return
    G=$1
    mkdir -p $G
-   u=http://10.0.2.2:$CPORT
-   $VM send "mkdir -p /tmp/src; cd /tmp; fetch $u/cecko-toaru.tar.gz -o cecko-toaru.tar.gz; tar xzf cecko-toaru.tar.gz; fetch $u/cmini-src.tar.gz -o /tmp/src/cmini-src.tar.gz; echo ==PKG-$RUN=="
+   $VM send "mkdir -p /tmp/src; cd /tmp; tar xzf /extras/cecko-toaru.tar.gz; cp /extras/cmini-src.tar.gz /tmp/src/; echo ==PKG-$RUN=="
    for i in $(seq 1 60); do
       $VM log 5 | grep -qx "==PKG-$RUN==" && break
       sleep 1
@@ -76,6 +71,5 @@ cecko_guest ()
 
 cecko_stop ()
 {
-   [ -n "${CHTTP:-}" ] && kill $CHTTP 2> /dev/null
-   CHTTP=""
+   :
 }

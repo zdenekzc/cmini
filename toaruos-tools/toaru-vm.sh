@@ -15,6 +15,9 @@ set -u
 
 DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 ISO=${ISO:-${DIR}/../_import/toaruos-2.3.2.iso}
+# Boot bez ISO: INITRD (ramdisk.tgz) + KERNEL (kernel.mb), viz mkramdisk.sh
+INITRD=${INITRD:-}
+KERNEL=${KERNEL:-${DIR}/_build/kernel.mb}
 SHARE=${SHARE:-${DIR}/_build/share.img}
 WORK=${WORK:-${DIR}/_build/work}
 RAM=${RAM:-1024}
@@ -56,7 +59,12 @@ mine() {
 running() { mine "${PIDF}"; }
 
 do_start() {
-    [[ -f "$ISO" ]] || die "missing ISO: $ISO (rename it or use ISO=/path)"
+    if [[ -n $INITRD ]]; then
+        [[ -f "$INITRD" ]] || die "missing INITRD: $INITRD (run ./mkramdisk.sh)"
+        [[ -f "$KERNEL" ]] || die "missing KERNEL: $KERNEL (run ./mkramdisk.sh)"
+    else
+        [[ -f "$ISO" ]] || die "missing ISO: $ISO (rename it or use ISO=/path)"
+    fi
     [[ -f "$SHARE" ]] || die "missing disk image: $SHARE"
     command -v qemu-system-x86_64 >/dev/null || die "missing qemu-system-x86_64"
     running && die "QEMU is already running (pid $(cat "${PIDF}")) — ./toaru-vm.sh stop"
@@ -74,9 +82,19 @@ do_start() {
     # -M pc is deliberate: ata.ko binds to the PIIX IDE 8086:7010/8086:7111 and on q35
     # ToaruOS cannot even read its own CD. Network: the only NIC supported by ToaruOS is e1000.
     # fw_cfg sets up boot without graphics and the getty on the second serial line.
+    # Boot: INITRD => -kernel/-initrd (direct kernel boot, the kernel command line as
+    # boot.sys would assemble it: root on the ramdisk, writable root, headless start);
+    # otherwise the ISO as CD-ROM.
+    local -a bootsrc
+    if [[ -n $INITRD ]]; then
+        bootsrc=(-kernel "$KERNEL" -initrd "$INITRD" -append "root=/dev/ram0 migrate start=--headless")
+    else
+        bootsrc=(-cdrom "$ISO")
+    fi
+
     qemu-system-x86_64 "${accel[@]}" \
         -M pc -m "$RAM" -smp "$SMP" \
-        -cdrom "$ISO" -vga std -device AC97 \
+        "${bootsrc[@]}" -vga std -device AC97 \
         -drive format=raw,if=none,id=share,file="$SHARE" \
         -device ide-hd,drive=share,bus=ide.0,unit=0 \
         -netdev user,id=n0 -device e1000,netdev=n0 \
