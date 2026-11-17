@@ -1,0 +1,205 @@
+code.c - output of the pasm assembler
+=======================================
+
+This document explains asm/code.c: how the assembled program is turned into
+output files (object files, executables, listings and the static linker), and
+how the parts of the file fit together. Line numbers refer to the file as it is
+in the repository now. The detailed rules are in the comments next to each
+function; this text gives the overview.
+
+
+1. Place in the assembler
+-------------------------
+
+pasm is an assembler for x86 (16, 32 and 64 bit) that is used both as a program
+(asm/pasm.c) and as a library (asm/pasmlib.c, asm/pasmlib.h). code.c is the last
+stage of it:
+
+    assembler text (or list of instructions, asm/asmlist.h)
+        --> FirstPass (inst.c)    reads the lines, computes the sizes and the
+                                  labels, and records every result as a
+                                  ResultRec in a list (FirstRes ...)
+        --> SecondPass (code.c)   walks the ResultRec list and writes the bytes,
+                                  and the fixups (relocations) for the
+                                  references that are only known now
+        --> output file:          object file (.obj, OMF), ELF64 object (.o),
+                                  ELF64 executable, Windows PE, COFF object,
+                                  Turbo Pascal inline, listing (.lst)
+        --> or the static linker  LinkToaru (ELF64 objects + libc.a)
+
+Compile (line ~2763) is the entry point of the translation. It sets up the
+error jump (AbortJump), runs CompileBody (Init, InitRes, FirstPass, SecondPass)
+and, after an error, CloseAll closes all files.
+
+The file is a translation of the Pascal original (code.pas), which is why many
+names and comments are in the Pascal style (Fixup, RepLevel, ...). The notes
+"translated from code.pas" are at the top of the file.
+
+
+2. Output modes
+---------------
+
+The modes are chosen by flags (asm/pasmlib.h, PasmAssemble). The flags are
+applied in pasmlib.c (lines 28-49), which sets the logical variables used in
+code.c:
+
+    flag            variable   output
+    PASM_OBJ        obj        OMF object (.obj)
+    PASM_EXE        elf        ELF64 executable (-e in pasm)
+    PASM_LST        lst        source listing (.lst)
+    PASM_INL        pas        Turbo Pascal inline (.inl)
+    PASM_ELFOBJ     eobj       ELF64 relocatable object (.o, for gcc)
+    PASM_TOARU      (target)   ToaruOS base address with PASM_EXE
+    PASM_PE         pe         Windows PE executable (-w); implies elf
+    PASM_COFF       cobj       COFF x64 object (-m); implies eobj
+
+Note: the comments next to these flags in asm/pasmlib.h do not match their
+names (for example PASM_EXE is described as "OMF object"). The table above
+follows the code in pasmlib.c and pasm.c; the header comments should be fixed.
+
+Combinations that are not allowed are rejected in pasmlib.c (lines 136-138,
+and in pasm.c for the command line): PE with an ELF executable, COFF with an
+OMF or ELF object.
+
+ToaruOS target: PASM_TOARU, or the environment variable PASM_TARGET=toaru,
+changes only the base address of the image (ToaruTarget). The format stays
+ELF64.
+
+
+3. Output buffers and records
+-----------------------------
+
+OMF objects are written as records, each with a type byte, a length and data
+(ObjRec). The record types are defined at the top of the file (THeaderMark,
+LNamesMark, SegDefMark, PubDefMark, ExtDefMark, LeDataMark, FixupMark, ...).
+Helper functions add data to the current record: PutByte, PutWord, PutDword,
+PutNumber, PutBytes, PutName, PutIndex. A record is sent (SendRec) when it is
+full (CheckSize, DatLim, FixLim, LinLim) or at the end.
+
+Limits: a record has at most RecSize bytes, the data buffer is DatLim bytes.
+Data bytes are collected (PrepDat, FlushDat) and line numbers (PrepLin,
+FlushLin) so that the records are as long as possible.
+
+
+4. Result records
+-----------------
+
+ResultRec (asm/oth.h) is one item of the list built in the first pass. Its
+class (cls, enum ClassTyp) is one of:
+
+    Data      bytes of the program (DataSeq, DataLen)
+    Fixup     a reference to a label or a segment that is written as a value
+              (FixTyp: FixOfs, FixSeg, FixNear, FixFar, FixRel - relative to RIP)
+    RepBeg    start of a repeated block (REPT, RepStack)
+    RepEnd    end of a repeated block
+    NewPos    change of the current position (ORG, or a new segment)
+    LineBeg   start of a source line (for the listing)
+    LineEnd   end of a source line
+
+CompileRes (line ~2692) and CompileResBody (line ~2543) handle one record. For
+a Fixup they compute the final value, or, when the target is not known yet
+(a forward reference), they leave a relocation for the linker or the loader
+(PutFixup, Convert, Fix). In the 1st pass a forward reference is written in the
+current segment, so the value is corrected in the 2nd pass (see the comment in
+CompileResBody).
+
+
+5. Fixups and relocations
+-------------------------
+
+Fixup (line ~432) writes the reference as the object format needs it:
+
+  - OMF: a FIXUP record with the frame and target index (Convert, ModEnd).
+  - ELF64 executable: the addresses are final; the relocation records of the
+    executable are built with ElfAddRela, ElfAddr and ElfSym.
+  - ELF64 object: a RELA entry for each relocation, with the addend
+    (int64_t addend) in the table of the section (ElfSymEnt, BufPatch).
+  - COFF: relocations of the section with the symbol index (CoffSymName).
+
+LongBytes writes a 32-bit value in little-endian order, the same helper for all
+formats.
+
+
+6. ELF64 executable
+-------------------
+
+OpenElf (line ~823) starts the file, and CloseElf (line ~1085) finishes it:
+
+  - the file is laid out as segments with alignment (ElfAlign);
+  - the code and data sections are written with ElfPut, the addresses come
+    from ElfAddr;
+  - the headers are written with H16, H32, H64 (ELF header, program headers);
+  - the base address is 0x400000 normally and 0x3F000000 for ToaruOS (section 2);
+  - WriteElf (line ~961) writes the program part of one result record.
+
+ElfArraySeg and the .init_array / .fini_array sections are supported, as well
+as .eh_frame (see CHANGELOG.txt, the chapters about .eh_frame).
+
+
+7. ELF64 relocatable object (-c)
+--------------------------------
+
+CloseElfObj (line ~1339) writes an object file for gcc or for the linker:
+sections (.text, .data, .bss, .eh_frame, ...), the symbol table with local and
+global symbols (ElfSymEnt), the string table and the relocation sections.
+Helpers: BufPut, BufAlign, BufPatch, ElfCodeSeg, ElfEhFrameSeg, ElfArraySeg,
+ElfSymName. The buffers are kept in memory (ElfBuf) and written at the end.
+
+
+8. Windows PE and COFF
+----------------------
+
+  - PE (-w): ClosePe (line ~1802) lays out the sections of an executable for
+    Windows (PeLayout), computes the RVAs (PeAddr) and writes the import table
+    (PeSplit, PeStrCaseCmp for the DLL and function names). The tests run the
+    PE programs under wine (CHANGELOG.txt, chapter 43).
+  - COFF x64 object (-m): CloseCoffObj (line ~1986) writes the COFF header,
+    the sections, the symbols and the relocations (CoffAlign, CoffSymName).
+    It is compared with the output of nasm -f win64 in asm/tests.
+
+
+9. Listing and Pascal inline
+----------------------------
+
+  - Listing (.lst): WriteLst (line ~2353) writes each line of the source with
+    the generated bytes, using the record classes. Disp shows an expression,
+    Dictionary and WrHex print the values. LstRequest reserves the columns.
+  - Turbo Pascal inline (.inl, pasm -i): WritePas (line ~2478), with PasRequest
+    and PasFollow.
+
+
+10. The static linker (LinkToaru)
+---------------------------------
+
+The linker (section LINKER, lines ~2775-3427) is used by cmini -L and by pasm -x
+for programs that use the ToaruOS libc. LinkToaru (line ~3410) is called by
+PasmLink from pasmlib.c. It takes the input files in order (for example
+crt0.o, crti.o, prog.o, libc.a, crtn.o) and writes one static ELF64
+executable.
+
+  - LnkReadFile reads an input file; LnkCheckElf checks that it is an ELF64
+    relocatable object;
+  - LnkAddObj adds the sections and symbols of an object (LnkSym table);
+  - LnkArchive reads a library (libc.a): only the members that resolve an
+    undefined symbol are taken (LnkMemberNeeded, LnkFind);
+  - LnkBody runs the whole link: it groups the sections into the output
+    segments (LnkGroup), computes the addresses (LnkAlignUp, LnkSymAddr),
+    applies the relocations of each object and writes the image
+    (LnkWriteImage).
+  - Errors are reported through LnkError with the message in LnkMsg; LinkToaru
+    gives the message back as "link: ..." in the msg buffer.
+
+
+11. Where to look for what
+--------------------------
+
+    adding an output format                   a new Close* function, and its flag in pasmlib.c
+    changing an ELF executable                CloseElf, WriteElf, ElfPut
+    changing relocations                      Fix, Convert, ElfAddRela, BufPatch
+    changing the listing                      WriteLst, Disp
+    changing the linker                       LinkToaru and the LINKER section
+    checking the output                       asm/tests (test-asm: pasm against nasm and the Pascal version)
+
+Related documents: asm/README.txt (the assembler),
+cmini/docs/instr.txt (the code generator that produces the assembler list),
+CHANGELOG.txt (history of the assembler, chapters about the output formats).
