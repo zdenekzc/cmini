@@ -37,7 +37,10 @@ else
 fi
 # SOUND=none (default): AC97 with QEMU's "none" audio backend. Plain "-device AC97"
 # opens the host's ALSA; without a sound server the guest can stall at startup
-# (seen in /abc/new2: the boot stops after "Launching startup application").
+# The screen then shows "Launching startup application..." as its last line (the
+# splash). With start=--headless the shell is the serial getty (ttyS1), not the
+# window, so nothing more appears on the screen; that is expected. A desktop needs
+# start=live-session, which has no serial getty and so the tests cannot log in.
 SOUND=${SOUND:-none}
 
 die() { echo "error: $*" >&2; exit 1; }
@@ -94,12 +97,21 @@ do_start() {
     # The window (WINDOW=1) only shows the screen; the start mode stays headless, since
     # live-session would take the serial getty away and the tests would never see the prompt.
     local -a bootsrc bootmode=() sound=()
+    # START=headless (default): serial getty, the tests log in there.
+    # START=live: desktop in the window (needs a window); no serial login.
+    case ${START:-headless} in
+        headless) START_ARG="start=--headless" ;;
+        live)
+            [[ $WINDOW == 1 ]] || die "START=live needs a window (DISPLAY, TOARU_GUI not 0)"
+            START_ARG="start=live-session vid=auto" ;;
+        *) die "START should be headless|live" ;;
+    esac
     if [[ -n $INITRD ]]; then
-        bootsrc=(-kernel "$KERNEL" -initrd "$INITRD" -append "root=/dev/ram0 migrate start=--headless")
+        bootsrc=(-kernel "$KERNEL" -initrd "$INITRD" -append "root=/dev/ram0 migrate $START_ARG")
     else
         bootsrc=(-cdrom "$ISO")
     fi
-    bootmode=(-fw_cfg name=opt/org.toaruos.bootmode,string=headless)
+    [[ ${START:-headless} == headless ]] && bootmode=(-fw_cfg name=opt/org.toaruos.bootmode,string=headless)
     case $SOUND in
         none) sound=(-audiodev none,id=snd0 -device AC97,audiodev=snd0) ;;
         alsa) sound=(-device AC97) ;;
