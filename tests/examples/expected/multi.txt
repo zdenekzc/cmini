@@ -1,0 +1,10 @@
+Registry () 1
+kruh circle area 3.0 circle 1
+ctverec shape area 4.0 circle 0
+kruh circle area 27.0 circle 1
+ctverec shape area 16.0 circle 0
+total 50.0 count 4 value 140 helper 2
+pointer 7.0
+C: 42 2010
+after delete 2, history 1 2 1 2 7 -1
+~Registry 2 shapes, history 6

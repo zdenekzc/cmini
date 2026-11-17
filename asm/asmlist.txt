@@ -1,0 +1,136 @@
+ASMLIST - PROGRAM PRO PASM JAKO SPOJOVY SEZNAM INSTRUKCI (navrh)
+================================================================
+
+Cil: prekladac (../cmini/instr.cc, pozdeji prekladac v C) negeneruje text
+pro assembler, ale seznam instrukci - jako x86::Builder z AsmJit: uzly lze
+pridavat na konec i vkladat kamkoli (kurzor), odebirat, prochazet
+(optimalizace, prolog funkce po vygenerovani tela).  Vse v cistem C.
+
+Soubory
+-------
+asmlist.h, asmlist.c   seznam, operandy, tisk, preklad (C99, gcc -pedantic)
+reg.h                  vycet Register (RAX, R8D, ...) a RegTable - presunuto
+                       z def.h, spolecne pro pasm (C++) i asmlist.c (C)
+key.h                  vycet keyword (iMov, iLea, iSegment, iDq, ...) -
+                       doplnen typedef pro C
+tests/asmlist_test.c   tests/hello64.asm sestaveny pres asmlist.h
+                       (make test-asmlist: stejny ELF jako pasm -e, exit 35)
+
+Datovy model
+------------
+AsmProgram   obousmerny seznam uzlu (first, last), kurzor, seznam navesti
+AsmNode      druh (kind) + spolecne polozky:
+               AN_INST   inst (keyword), prefix (iRep, iLock / iOther),
+                         nops, op [3]
+               AN_LABEL  label                         start:
+               AN_DATA   label, inst (iDb .. iDq), items   msg db 'Hi', 10
+               AN_EQU    label, value                  msglen equ 13
+               AN_DIR    inst (ipX64, iSegment, iEnds, iProc, iEndp, iExtrn,
+                         iPublic, iAlign, iEnd), label, text (atributy:
+                         "use64 para", "near 'printf'")
+               AN_TEXT   libovolny radek (prechod - behova knihovna RTL_...)
+             + comment (poznamka za ;)
+AsmOp        operand / polozka dat (struktura predavana hodnotou):
+               AO_REG     registr               AsmReg (RAX)
+               AO_XMM     xmm0 .. xmm15         AsmXmm (3)
+               AO_IMM     prima hodnota 64 b    AsmImm (10)
+               AO_MEM     [baze+index*m+posun], [navesti+posun], velikost
+                          AsmMem (8, RBP, -16)             qword ptr [rbp-16]
+                          AsmMemIdx (4, R10, R9, 4, 0)    dword ptr [r10+r9*4]
+                          AsmMemLab (0, msg, 0)            msg  (lea)
+                          AsmMemLab (4, count, 0)          dword ptr [count]
+               AO_LABEL   cil skoku / volani    AsmLab (loop)
+               AO_OFFSET  adresa jako hodnota   AsmOffset (ok)    (dq offset ok)
+               AO_STR     retezec v datech      AsmStr ("Hello")
+               AO_DUP     n dup (v)             AsmDup (16, 0)
+AsmLabel     jmeno (AsmNewLabel (p, "L") => L1, L2, ...; AsmNamedLabel)
+
+Vkladani (jako AsmJit)
+----------------------
+   AsmNode * head = AsmCursor (&p);         // zapamatovat misto
+   ... telo funkce ...                      // pridava se za kurzor
+   AsmNode * save = AsmSetCursor (&p, head);
+   AsmIns2 (&p, iSub, AsmReg (RSP), AsmImm (frame_size));   // prolog az ted
+   AsmSetCursor (&p, save);                 // zpet na konec
+
+Novy uzel se vlozi za kurzor a stane se kurzorem (kurzor NULL = zacatek
+seznamu).  AsmRemove (p, n) uzel odebere.  Uzly lze prochazet
+(for n = p.first; n; n = n->next) a menit primo (napr. peephole:
+push rax / pop rax).
+
+Preklad - faze 1 (hotovo)
+-------------------------
+AsmAssembleText (p, base, flags, msg, size): kazdy uzel => jedna radka textu
+(stejny tvar, jaky dnes pise instr.cc) => PasmAssembleText po radcich
+(bez souboru .asm).  Chyba "base.asm(r,s) Error: ..." => AsmNodeAtLine (p, r)
+je chybny uzel.  Kodovani zustava v pasm (code.c, inst.c) - zadne
+riziko odlisneho kodu, lze prechazet postupne (AN_TEXT pro zbytek).
+AsmPrint - text pro vypis (-v) nebo soubor .asm (-o).
+
+Overeni: tests/asmlist_test.c - kod napred, datovy segment vlozeny na
+zacatek kurzorem, ELF bajtove shodny s pasm -e tests/hello64.asm, exit 35;
+chybna instrukce (mov 1, rax) => hlaseni s cislem radky = spravny uzel.
+
+Faze 2 (hotovo) - pasm cte uzly primo
+-------------------------------------
+AsmAssemble (p, base, flags, msg, size) => PasmAssembleList (pasmlib.h);
+faze 1 zustava jako AsmAssembleText (porovnani: bajtove shodne .o / .bin
+/ .lst).  Kodovani instrukci (inst.c) beze zmeny.
+
+ 1. vstup (expr.c):  SetSourceNodes - zdroj je seznam uzlu, jeden uzel
+    = jedna radka (SourceEof, OpenSource, NextLine po uzlech; cislo
+    radky v hlaseni = poradi uzlu).  LineBuf = tisk uzlu (AsmNodeLine,
+    nejvyse LineLen znaku jako ReadLine) jen kdyz je potreba: vypis
+    .lst / .inl a uzly ctene jako text (NodeSourceText).
+
+ 2. CompileLineBody (inst.c):  NodeDirect (uzel) => CompileNode:
+       AN_LABEL  NodeLabel => NewLabel / SetLabel (jako "jmeno:")
+       AN_INST   InstPref = prefix, kontrola NoSeg, NodeOperands,
+                 Select (inst), CurSy = EOL
+    jinak (AN_DATA, AN_DIR, AN_EQU, AN_TEXT a neobvykle instrukce)
+    NodeSourceText a dale jako text.
+
+ 3. navesti:  AsmLabel.sym = TreePtr, AsmLabel.sym_gen = cislo prekladu
+    (SetSourceNodes); NodeLabel hleda jmeno jednou (SearchTree,
+    NewIdentif + orig - jako Insymbol).  Primo jen jmena, ktera Insymbol
+    cte jako jeden identifikator (nejvyse AlphaLen znaku) a ktera nejsou
+    klicova slova ani registry - jinak text (stejne chovani i v chybach).
+    Registry, XMM a klicova slova: tabulky RegSym, XmmSym, KeySym (jmeno
+    instrukce z AsmInstName musi Insymbol najit jako stejny keyword).
+
+ 4. operandy:  NodeOperands nastavi rezim uzlu - Insymbol dava symboly
+    Operand, Comma, Operand, ..., EOL (novy symbol Operand v def.h);
+    Expression pri CurSy = Operand prevede n->op [k] (NodeOperand) a
+    zavola Insymbol.  Obsluhy instrukci (Expression, Separator, testy
+    CurSy == Comma / EOL) zustaly beze zmeny.
+    NodeOperand pocita stejnymi operacemi (UnaryCalc, BinaryCalc, ConvReg)
+    a ve stejnem poradi jako cteni tisku operandu, napr.
+       qword ptr [rbp-16]  =  PtrOp (qword, ConvReg (SubOp (rbp, 16)))
+       [rax+rcx*8+4]       =  AddOp (AddOp (rax, MulOp (rcx, 8)), 4)
+       -5                  =  MinusOp (5)
+    - proto vychazi i zvlastnosti textu ([rax+rcx] => baze rcx, index
+    rax), zaporna cisla, 64bitove konstanty (val / val64) a dopredne
+    odkazy (ForwLabel) stejne; na konci Expression stejna uprava val
+    v segmentu USE64.
+
+ 5. kontrola:  make test-asmlist (hello64: faze 2 == faze 1 == pasm -e,
+    chyba "mov 1, rax" - stejne hlaseni, radka = poradi uzlu);
+    build-test.sh: tests/examples/*.cc (dnes -0), program a .lst z faze 2 == faze 1
+    (CPARSER_ASMLIST=text), i CPARSER_RTL=own;  gram_all.cc: program
+    630 kB a vypis 11 MB shodne, preklad gram 2,15 s => 1,50 s (vcetne
+    vypisu - ten vyzaduje tisk kazdeho uzlu).
+
+Direktivy a data (oth.c) se ctou nadale z tisku uzlu - jsou vzacne;
+behova knihovna RTL_... v instr.cc jsou radky textu (AN_TEXT).
+
+Pouziti v prekladaci
+--------------------
+../cmini/instr.cc (cparser, test_instr -0; README.txt kapitoly 27 a 30):
+   ins (iMov, gp (RAX), qword_ptr (RBP, -16));
+- jeden AsmProgram s kurzory pro extrn / data / kod,
+- behova knihovna RTL_... jako AN_TEXT,
+- instr.cc preklada i cparser, ktery struktury hodnotou nepredava a ma
+  vlastni model pameti (polozka = 8 bajtu) - proto rozhrani s ukazateli:
+  AsmCreate, AsmPReg / AsmPImm / AsmPMem ... (AsmOp * patri programu),
+  AsmInsP (p, iMov, a, b, NULL), AsmDataP / AsmDataAdd.
+Prekladac v C (translate.c => C) muze pouzit asmlist.h primo.

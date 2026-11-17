@@ -1,0 +1,13 @@
+# build outputs
+_build/
+_output/
+__pycache__/
+*.bin
+*.o
+*.a
+*.d
+*.stamp
+*.lst
+# verified prebuilt ToaruOS probe programs are kept
+!toaruos-tools/probe/*.elf
+!toaruos-tools/probe/counterexample/*.elf

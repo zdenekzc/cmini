@@ -1,0 +1,16 @@
+empty 1 size 0 get 0 contains 0
+size 3: 1 22 3 0
+contains 1 0
+index 5 101 0 size 5
+string key 22
+copy 6 -1  orig 5 101
+lookup 3 size 5 contains 0
+squares size 2000 sum 6000003000 get 8982009 0
+names 2000 vk0 vk9991 []
+clear 1 0 b
+rules 20 expr 2 null 1
+objects deset ten 2 3
+pointer keys 2 7 0
+enum keys 0.000000 2.500000 0.250000
+bool 1 0
+words a=3 b=1 c=1 d=0 size 3

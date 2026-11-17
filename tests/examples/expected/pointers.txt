@@ -1,0 +1,30 @@
+swap 2 1
+pp 10 10
+set 10 20
+sum 15
+arr 20 40 2 1
+list 3 5
+void 10
+double 2.500000
+names bb ccc
+arrptr 7
+f 5
+f 6 20
+ops 13
+ops 42
+apply 3 81
+choose 7 12
+half 2.500000
+plus 13
+krat 30
+arrow 4
+no logger
+log: hello
+1 2 3 5 7 9 
+strptr abcd 4
+null 1 1
+global 42
+puts pres ukazatel
+table 1
+integrate 8.999998
+fold 10 24

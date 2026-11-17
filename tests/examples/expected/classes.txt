@@ -1,0 +1,12 @@
+created before main: 3
+labeled    #10  area  125  perimeter  20
+circle     #9  area  108  perimeter  36
+rect       #8  area   35  perimeter  24
+square     #7  area   25  perimeter  20
+circle     #6  area   27  perimeter  18
+rect       #5  area    8  perimeter  12
+square     #4  area    4  perimeter   8
+total area 332
+stats sum 14
+created 10
+O.K.

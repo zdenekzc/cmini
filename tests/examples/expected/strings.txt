@@ -1,0 +1,19 @@
+0 12345 -678
+[ababab] []
+alpha = 1
+beta = -20
+gamma = 300
+report length 33
+0: '' (empty)
+1: 'Zebra'
+2: 'app'
+3: 'apple'
+4: 'apple pie'
+5: 'banana'
+6: 'fig'
+7: 'pear'
+lamp (250)
+chair (1200) [sale]
+big 1000 ok
+1 0 1 0
+O.K.

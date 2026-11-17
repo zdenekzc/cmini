@@ -1,0 +1,15 @@
+make: 1 2 [10 11 12]
+a: 1 2 [10 11 12]
+b: 7 2 [10 11 12]
+c: 7 2 [10 11 0]
+b: 7 2 [10 11 12]
+po change: 1 2 [10 11 12]
+add: 3 4 [30 32 34]
+vyraz: 8 4 [20 22 24]
+take 42
+alive 0
+copy 21, alive 0
+alive -1
+base: n 2 kind 1
+pair: 5 4 3
+O.K.

@@ -1,0 +1,18 @@
+empty 1 size 0
+size 20 get 5 last 20 contains 1 0
+a: 100 100 10
+first -1 size 21
+copy: a 21 -1  b 22 555
+assign: b 21 -1
+total 413 size 21
+0 1 4 9 16 
+ref loop 10 sum -2
+words 4: [jeden] [dva] [tri] [ctyri] contains 1 0
+w0 jeden! last ctyri
+double 3.750000 0.500000 1
+10 itemA; 11 itemB; 12 itemC; contains ptr 1
+enum 2 0 bool 1 0
+stack top 2 size 2
+clear 0 1
+bag 1 x  2 y
+pointer 22 -2

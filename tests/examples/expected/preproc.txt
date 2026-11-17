@@ -1,0 +1,10 @@
+m = 25
+n = 0
+MAX (SQUARE (3), MAX (2, 7)) = 9
+VAR (1) + VAR (2) = 300
+CALL (sum3, 1, 2, 3) = 6
+LONG_SUM (10, 20, 30) = 60
+MODE = 1
+__LINE__ = 60
+MODE = 7
+O.K.

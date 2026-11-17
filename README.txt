@@ -1,0 +1,2758 @@
+CPARSER - CODE GENERATOR (asmjit)
+=================================
+
+Change log of the code generator (instr*.cc) and the parser. The chapters are
+in the order in which the changes were made.
+
+
+CONTENTS
+--------
+
+     0. BUILD AND TESTS
+     1. REVIEW OF THE ORIGINAL instr1.cc
+     2. FIXES IN instr1.cc (x86::Assembler)
+     3. ADDITION OF win.h, GUI BUILD
+     4. SUPPORT FOR AN OLDER asmjit VERSION (#if)
+     5. STOP HOOK "uv: command not found"
+     6. SORTING PROGRAMS IN tests/examples/
+     7. instr2.cc - INTERMEDIATE RESULTS IN REGISTERS INSTEAD OF push / pop
+     8. instr3.cc - SWAPPING OPERAND BLOCKS (Sethi-Ullman)
+     9. instr4.cc - CALL ARGUMENTS IN REGISTERS
+    10. instr5.cc - VARIABLES IN REGISTERS, push / pop OF CALLEE-SAVED REGISTERS
+    11. dama, jezdec, avl, btree, veze - STRUCTS, POINTERS, new, CONSTRUCTORS
+    12. lexer.c - LEXICAL ANALYSIS WITH A PREPROCESSOR
+    13. instr.cc - TEXT GENERATOR FOR THE 64-BIT ASSEMBLER (asm/)
+    14. CLASSES - INHERITANCE, CONSTRUCTORS, VIRTUAL METHODS (instr.cc)
+    15. std::string (instr.cc)
+    16. instr.cc AND GLIBC (ELF64 OBJECT, gcc)
+    17. FUNCTION PROTOTYPES, DEFAULT PARAMETER VALUES, ENUM CONSTANTS
+    18. DESTRUCTORS
+    19. FLOATING POINT - float, double (SSE2)
+    20. POINTERS AND FUNCTION POINTERS
+    21. BUILT-IN TYPES Sequence <T> AND Dictionary <K, V>
+    22. dynamic_cast
+    23. BUILDING .o OBJECTS AND PROGRAMS FROM SEVERAL FILES
+    24. instr0.cc - VARIANT OF instr.cc COMPILABLE BY cparser (SELF-HOSTING)
+    25. translate.c - TRANSLATION OF cmini TO C
+    26. instr-list.cc - PROGRAM AS A LIST OF INSTRUCTIONS (asm/asmlist.h)
+    27. 2026-11-04/05: c-mini SELF-HOSTING, _output, TESTS WITHOUT STORED REFERENCES
+    28. 2026-11-06: ASSEMBLER AND FRONT-END OF cmini IN PURE C (.c)
+    29. 2026-11-06: SINGLE GENERATOR instr.cc (MERGED instr.cc, instr0.cc, instr-list.cc)
+    30. 2026-11-06: DIRECTORY tests/ - EXAMPLES, TESTS AND OUTPUTS FOR STUDENTS
+    31. 2026-11-06: instr.cc WITHOUT CLASSES, cmini/instr.c AND THE c-mini COMPILER ENTIRELY IN C
+    32. 2026-11-07: MORE TRANSLATOR SOURCES IN _output (cmini-*)
+    33. 2026-11-07: cparser - STRUCTS BY VALUE; ASSEMBLER pasm TRANSLATED BY cparser
+    34. 2026-11-07: FRONT-END ERRORS OF cmini VIA longjmp INSTEAD OF C++ EXCEPTIONS
+    35. 2026-11-07: BOOTSTRAP OF c-mini VIA TinyCC AND chibicc
+    36. 2026-11-07: OBJECTS WITH DESTRUCTOR BY VALUE AND SLICING IN cmini
+    37. 2026-11-08: cmini - SHARED FUNCTIONS OF translate.c AND instr.cc (sem.c)
+    38. 2026-11-10: .eh_frame IN THE pasm GENERATOR
+    39. 2026-11-10: FIXES WHEN CLOSING .eh_frame (cmini-c)
+    40. 2026-11-10: GNU as GENERATOR (instr-as.cc) - .eh_frame from .cfi
+    41. 2026-11-11: COMPILER FOR ToaruOS — TOOLS IN toaruos-tools
+    42. 2026-11-11: -T (ToaruOS TARGET) TRANSFERRED INTO THIS TREE TOO
+    43. 2026-11-11: ASSEMBLER pasm - WINDOWS: RUNNABLE PE (-w) AND COFF x64 OBJECT (-m)
+    44. 2026-11-11: toaruos-tools - GENERATED FILES IN _build, _preklad => guest-src
+    45. 2026-11-11: pasm FOR ToaruOS - .o AND RUNNABLE PROGRAMS VERIFIED IN THE GUEST
+    46. 2026-11-11: cmini -T - PROGRAMS IN C WITH ToaruOS SYSCALLS
+    47. 2026-11-11: tests/15-toaruos.sh - QEMU WINDOW WITH ToaruOS AND COMPILED PROGRAMS
+    48. 2026-11-11: cmini COMPILER DIRECTLY IN ToaruOS (LIBC DIFFERENCES OF ToaruOS)
+    49. 2026-11-11: LINKER IN asm/code.c - STATIC LINKING WITH THE ToaruOS libc ON THE HOST
+    50. 2026-11-11: cmini AND pasm FOR ToaruOS BUILT ON THE HOST (tests/15, 16)
+    51. 2026-11-11: WALLPAPERS FOR ToaruOS FROM GitHub (get-wallpapers.sh, fetch-tls)
+    52. 2026-11-14: include/ -> cmini/ownheaders/; test 02 - cmini-pasm-ownlib and cmini-pasm-libc
+    53. 2026-11-14: tests/examples/*.c -> *.cc; pasm help text
+    54. 2026-11-14: cmini.bin = translate.bin + generator (switch -C); -v, -h, usage
+    55. 2026-11-14: cmini - bug in instr.cc (depends on ASLR) and switch -S (saving the .asm)
+    56. 2026-11-14: cmini (pasm) - constants with |, &, ^, <<, >>, ~, !; structs with std::string values; pointer to an array in an initializer
+    57. 2026-11-14: cmini - releasing temporary struct objects (call results with owned members)
+    58. 2026-11-14: tests/17 - cmini (TinyCC) built for ToaruOS and run in the guest
+    59. 2026-11-14: cmini - bug in passing structs by value (System V); moving shared code to sem.c
+    60. 2026-11-14: tests/16 - QEMU window with ToaruOS; tests/vystup.sh without a window (TOARU_GUI=0)
+    61. 2026-11-14: probe/toaru64 - no reference image; kontext.md; regression after moving include/
+    62. 2026-11-14: cmini - cout, cerr and endl (cout << a << b << endl;)
+    63. 2026-11-16: x86-64 generators share the pasm instruction list for as, nasm and asmjit; .cfi in the list
+    64. 2026-11-16: asm64 reads the pasm instruction list
+    65. 2026-11-16: cmini - generator instr.c written by hand in C (no instr.cc); shared util.c and sem.c
+
+0. BUILD AND TESTS
+==================
+
+Source files are in the cmini/ subdirectory (decl.c, expr.c, instr.c, instr1-5.cc,
+lexer.c, translate.c, cminirt.c, ...); the text of the chapters refers to them
+without the cmini/ prefix.
+Build scripts are run from the main directory; programs are created in
+subdirectories according to their sources: cmini/test_instr.bin,
+cmini/test_instr_lexer.bin, cmini/cmini.bin -C, asm/pasm.bin (and asm/libpasm.a).
+
+GUI (Qt 5):
+    qmake-qt5 cparser.pro && make                         local asmjit (_library/asmjit, 1.24)
+    qmake-qt5 CONFIG+=system_asmjit cparser.pro && make   system asmjit (1.11)
+    qmake-qt5 CONFIG+=lexer cparser.pro && make           cmini/lexer.c (with preprocessor) instead of cmini/lex.c
+
+Tests without Qt:
+    tests/build-test.sh                 without asmjit: generator cmini/instr.c (-0) with the assembler pasm
+                                        (asm/libpasm.a), cmini/test_instr.cc with -DNO_ASMJIT
+                                        + comparison of the output of the programs tests/examples/*.cc
+                                        with tests/examples/expected (g++)
+    ASMJIT=local tests/build-test.sh    also cmini/instr1.cc ... cmini/instr5.cc (asmjit from _library/asmjit)
+    ASMJIT=system tests/build-test.sh   the same with the system asmjit
+    LEXER=lexer tests/build-test.sh     the same with cmini/lexer.c instead of cmini/lex.c
+                                        (+ preprocessor tests and the program tests/examples/preproc.cc)
+    tests/build-test.sh -e              regenerates tests/examples/expected/*.txt (g++ outputs, incl. multi.txt)
+    python3 cecko-makefiles.py          generates the Makefile in the main directory and the Makefiles
+                                        of asm/, cmini/; make = make -C asm, cmini:
+                                          asm/pasm.bin, asm/libpasm.a (previously a hand-written asm/makefile),
+                                          cmini/test_instr.bin, test_instr_lexer.bin, cmini.bin -C, cmini.bin;
+                                        objects are in _build/; make test | test-lexer | test-translate;
+                                        manually written makefiles (lowercase m)
+                                        are skipped by the generator
+    python3 cecko-files.py [-c]         list of files for backup (-c: rm commands for cleanup)
+    make test-quick                     common set (~1 min, 47 s): make all, test, test-asm, test-translate,
+                                        test-tcc
+    make test-all                       complete set without ToaruOS in QEMU: test-quick, test-lexer,
+                                        test-bootstrap, tests/vystup.sh with VYSTUP_TOARU=0
+                                        (without 15, 16, 17; their _output stays) - before a backup, after
+                                        a change of shared parts (comp.cc, cminirt.c, asm/code.c,
+                                        instr-asm.cc, instr-pasm.cc, sem.c, util.c)
+    make test-toaru-all                 ToaruOS in QEMU: tests/15, 16, 17 (without a window) and
+                                        toaruos-tools/check.sh - after a change of cmini, asm (pasm -T, -x)
+                                        or toaruos-tools
+    make test-asm                       assembler pasm (asm: test, test-nasm, test-nasm64):
+                                        16/32 bit against the Pascal version (pascal-text/asm, fpc),
+                                        x86-64 against nasm - no saved samples
+    make vystup  (sh tests/vystup.sh)   the _output/ directory - files created for students, after the
+                                        scripts (each can also be run separately and overwrites only
+                                        its own subdirectory _output/<generator>):
+                                          tests/01-asm.sh        asm/examples (pasm)
+                                          tests/02-cmini-asm.sh  c-mini => pasm (cmini/instr.c)
+                                          tests/03-cmini-c.sh    c-mini => C (cmini/translate.c)
+                                        in each examples/ - tests, including executable files;
+                                        cmini/, ... - sources of the translators that the generator
+                                        can handle; common functions tests/common.sh; description
+                                        in _output/README.txt; not included in backups
+
+Generated files are in the _build/ directory (deleted by make clean, not included
+in backups - cecko-files.py; everything can be created again at any time): objects
+and test outputs. In the source directories there are only programs (.bin,
+asm/libpasm.a).
+
+    _build/asm/libpasm/, pasm/          objects of asm/libpasm.a and asm/pasm.bin
+    _build/cmini/                       cmini/Makefile
+        test_instr/                     objects (.o) and dependencies (.d) of the program test_instr.bin
+                                        (cmini/lex.c, generator instr.c, -DNO_ASMJIT)
+        test_instr_lexer/               the same for test_instr_lexer.bin (cmini/lexer.c with the
+                                        preprocessor, -DUSE_LEXER) and c-mini itself
+        translate/                      objects of cmini.bin -C (cmini => C)
+        cmini/                          objects of cmini.bin (the compiler entirely in C, incl. cmini/instr.c)
+    _build/asm/                         make -C asm test | test-nasm | test-nasm64
+        tests/pasm/                     outputs of pasm.bin (C version) for asm/tests/*.asm
+        tests/ref/                      the same from the original Pascal version (reference for 16/32 bit)
+        tests/fpc/                      Pascal version compiled by fpc -Mtp (pasm, .o, .ppu)
+        tests/nasm/                     hello64, libc64, sse64 from asm/tests/nasm/*.nasm (x86-64 reference)
+        nasmcmp/, nasm64cmp/            working files comparing instruction encoding with nasm
+    _build/tmp/                         temporary files of build-test.sh and build-translate.sh
+                                        (mktemp), logs of manual runs
+    _build/vystup/                      working directories of tests/NN-*.sh (deleted after they finish)
+
+Compiling and running a single file:
+    ./cmini/test_instr.bin [-v] [-p] [-1|-2|-3|-4|-5] tests/examples/quicksort.cc
+        -v        print the generated assembler
+        -p        print the processed source text
+        -0        generator from cmini/instr.cc (program as a list of instructions asm/asmlist.h,
+                  assembler pasm - library asm/libpasm.a, ELF64; chapter 29)
+        -1 .. -5  generator from cmini/instr1.cc .. cmini/instr5.cc (default is -1)
+        -o file   (only -0) the program is not run, it is saved as an executable
+                  file (and file.asm)
+        -I dir    (LEXER=lexer) directory for #include; replacement system headers
+                  are in cmini/ownheaders/
+        -c        (only -0) object file.o without linking (chapter 23)
+        -S        (with -c) also the text for the assembler: file.o => file.asm
+
+Program from several files (-0, chapter 23):
+    ./cmini/test_instr.bin -0 [-I cmini/ownheaders] [-o prog] a.c b.c x.o lib.a -lm
+                  each source file separately into an object, linked by gcc;
+                  without -o the program is run
+
+The generators instr.cc, instr1.cc ... instr5.cc have their declarations in
+instr.h (instructions(), instructions1() ... instructions5()).
+
+
+1. REVIEW OF THE ORIGINAL instr1.cc
+===================================
+
+I went through instr1.cc together with decl.h, expr.c and stat.c. Apart from
+missing functions, there were also concrete bugs in what was already written.
+
+Bugs in the existing code
+
+Control structures
+  1. codeIf tested stat->e3 == nullptr. But the parser never sets e3 for if;
+     the else branch is in s2. That is why the else branch was never generated.
+  2. codeWhile: the jump jmp begin_label after the loop body was missing, so
+     the loop ran at most once.
+  3. codeFor had three bugs:
+       - the initialization e1 was translated via codeCond, codeExpr is enough,
+       - the jump back was missing (codeExpr (e3) and jmp begin_label),
+       - for (;;) has e2 == nullptr, and jz decided according to whatever
+         happened to remain in rax.
+
+Expressions
+  4. codeAndOr used cmp rax, rax, which always sets ZF=1. So && always jumped
+     to the end, and || never did. The correct form is test rax, rax with the
+     result normalized to 0/1.
+  5. Comparison: setl (rax) and similar instructions work only with an 8-bit
+     register. The correct form is setl al + movzx rax, al.
+  6. Division and modulo: the cqo (extension of rax into rdx) was missing
+     before idiv.
+  7. Shifts: the shift count must be in cl, i.e. shl rax, cl.
+  8. Unary operators never evaluated their operand.
+  9. NUM: stoi throws an exception on 0x10 or 10L; strtol (id, nullptr, 0)
+     is better.
+
+Function structure
+ 10. All functions were glued into a single asmjit function with signature
+     void(), but it was called as int(*)(int, char**). Only the first function ran.
+ 11. Mixing physical registers and push/pop with x86::Compiler is fragile
+     (Compiler computes the stack frame itself and allocates registers).
+ 12. There was no ErrorHandler, so asmjit errors were lost silently.
+
+Parser errors
+  - calc() in expr.c had no branches for UNARYPLUS, UNARYMINUS, UNARYNOT, so
+    the expression -x ended with the message "Internal error".
+  - ! was parsed as UNARYNOT and printed as ~. The branch for ~ (NOT) was missing.
+
+
+2. FIXES IN instr1.cc (x86::Assembler)
+======================================
+
+The generator uses x86::Assembler.
+
+  Problem                                       Fix
+  if tested e3 instead of s2                    tests s2
+  while and for did not jump back               added jmp begin
+  for: initialization, for (;;)                 init via codeExpr, the test is skipped when e2 == nullptr
+  && / || with cmp rax, rax                     test rax, rax, the result is always 0/1
+  setcc with a 64-bit register                  setl al + movzx rax, al
+  idiv without cqo                              added cqo
+  shift by rcx                                  shift by cl
+  unary operators without operand               evaluates it; ! logical, ~ bitwise negation
+  stoi                                          strtol (..., 0)
+  all functions in one                          each function has its own label and frame,
+                                                a jump to main at the start
+  asmjit errors were lost                       ErrorHandler, the error is reported via Error()
+  unknown expression -> mov rax, 777            reports the error "Unsupported ..."
+
+Other changes
+  - expr.c: fixed unary operators + - ~ !.
+  - instr.h: new function long runInstructions1 (bool verbose).
+  - cparser.pro: INCLUDEPATH pointed to the non-existent _library/asmjit/src.
+    It compiled against the system headers (2023) but linked against the local
+    asmjit 1.24. Fixed, and C++20 added (asmjit 1.24 requires it).
+  - asmjit 1.24 has a snake_case API (new_label, cpu_features ...) and
+    asmjit/asmjit.h is deliberately empty upstream -> asmjit/x86.h is included.
+
+Tests: test_instr.cc + build-test.sh (without Qt).
+
+
+3. ADDITION OF win.h, GUI BUILD
+===============================
+
+With the added win.h the whole GUI application compiles and links against the
+local library _library/asmjit/libasmjit.so. Warnings of the type Error ("...")
+come from older parser code (a string literal passed as char *); they do not
+affect the function.
+
+
+4. SUPPORT FOR AN OLDER asmjit VERSION (#if)
+============================================
+
+The system version is asmjit 1.11 (package asmjit-devel-0.0^20231007, camelCase
+API), the local version is 1.24 (snake_case API).
+
+  #if ASMJIT_LIBRARY_VERSION >= ASMJIT_LIBRARY_MAKE_VERSION(1, 24, 0)
+     #define ASMJIT_SNAKE_CASE_API 1
+  #else
+     #define ASMJIT_SNAKE_CASE_API 0
+  #endif
+
+                    1.24 (local)                   1.11 (system)
+  ErrorHandler      handle_error                   handleError
+  CodeHolder        set_error_handler, set_logger  setErrorHandler, setLogger
+  JitRuntime        cpu_features                   cpuFeatures
+  labels            new_label                      newLabel   (method newLabel ())
+  error text        stringify_error                DebugUtils::errorAsString (errorText ())
+  Builder           set_cursor, remove_node,       setCursor, removeNode, addAfter
+                    add_after
+
+The constant kErrorOk exists in both versions. Versions between 1.11 and 1.24
+were not tested.
+
+
+5. STOP HOOK "uv: command not found"
+====================================
+
+The message did not come from the project. The data-engineering plugin (Airflow,
+data warehouses) is installed in Claude Code and it registered a Stop hook:
+
+    uv run .../data-engineering/0.1.0/skills/analyzing-data/scripts/cli.py stop
+
+It failed without an installed uv (non-blocking, without effect on the work).
+The project does not need uv. If the plugin is not used, it can be disabled
+via /plugin.
+
+
+6. SORTING PROGRAMS IN tests/examples/
+======================================
+
+The compiler handles tests/examples/heapsort.cc (100 numbers) and
+tests/examples/quicksort.cc (1000 numbers); both print O.K. and the output is
+sorted.
+
+Test programs
+  cout is replaced by printf, <iostream> by <stdio.h>, and using namespace std;
+  is removed. <stdlib.h> was added to heapsort.c. The files can also be compiled
+  with g++ -x c++.
+
+Parser (it was a pure C parser)
+  - keywords bool, true, false, inline, nullptr; NULL is treated as nullptr;
+    #include lines (and other directives) are skipped,
+  - const in type specifiers (it did not work before; there was an infinite
+    loop in type_qualifier_list),
+  - declarations in for (int i = ...) with their own scope,
+  - references: int & x as a parameter and passing an lvalue into it,
+  - calling an undeclared function (printf, rand, srand, time) = implicit
+    declaration int f (...),
+  - Expr has a new field obj (the declared object), so the generator
+    distinguishes two different i,
+  - fixed bugs: ?: did not work (NextSymbol was missing), assignment was
+    left-associative, the lexer did not know /=.
+
+Generator (instr1.cc)
+  - memory: each variable takes 8 bytes; the generator allocates global
+    variables, parameters and local variables are in the frame [rbp - n];
+    multi-dimensional arrays; references are stored as addresses,
+  - calls according to the System V ABI: at most 6 parameters in registers,
+    rsp aligned to 16 bytes, al = 0 before the call (printf), library functions
+    are looked up via dlsym,
+  - ++ / --, compound assignments, ?:, comma, strings, characters, bool,
+    do-while, break, continue.
+
+Not working yet
+  - pointers (&x, *p); only string constants and nullptr can be passed to libraries,
+  - sizeof does not match C (each variable has 8 bytes),
+  - structs, float / double, switch, goto, more than 6 parameters,
+  - errors from the generator point to the end of the file (code is generated
+    only after the whole source has been read).
+
+
+7. instr2.cc - INTERMEDIATE RESULTS IN REGISTERS INSTEAD OF push / pop
+======================================================================
+
+x86::Assembler writes instructions directly into the buffer and cannot insert
+them retroactively. instr2.cc therefore uses x86::Builder: it keeps the
+instructions as a list of nodes with a cursor and translates them to machine
+code in finalize() at the end.
+
+codeBinary:
+  1. generates the left operand into rax and remembers the cursor,
+  2. sets max_reg = rax and generates the right operand; every place that uses
+     a register calls use (idx), max_reg is the highest register in the order
+     rax, rcx, rdx, rsi, rdi, r8 ... r15 (a function call records r11),
+  3. takes the first register above max_reg and inserts mov reg, rax at the
+     remembered place,
+  4. left operand into rax, right operand into rcx: xchg rax, rcx or
+     mov rcx, rax + mov rax, reg,
+  5. when no free register remains, inserts sub rsp, 8 + push rax (16 bytes -
+     the stack alignment for function calls stays valid).
+
+Registers r12-r15 must be preserved by the function (callee-saved): they have
+reserved places in the frame, and the saving mov is inserted retroactively into
+the prologue.
+
+                        push/pop        instructions
+  quicksort             47 -> 31        433 -> 420
+  heapsort              64 -> 39        512 -> 492
+
+Classes are in an anonymous namespace (they do not collide with instr1.cc).
+
+
+8. instr3.cc - SWAPPING OPERAND BLOCKS (Sethi-Ullman)
+=====================================================
+
+In instr1.cc (push/pop) the number of registers does not depend on the order,
+so instr3.cc starts from instr2.cc and differs only in the codeBinary function:
+
+  1. generates the block of the left operand and measures its need L (the
+     highest register used),
+  2. generates the block of the right operand and measures R,
+  3. when R > L, moves the nodes of the left block after the right block
+     (moveNodesAfter),
+  4. stores the result of the first block in the first register above the need
+     of the second block,
+  5. after the swap: rax = left, the stored register = right; if it is rcx,
+     nothing else is needed.
+
+The total register need is max (R, L+1) instead of max (L, R+1).
+The block is moved node by node (remove_node + add_after); the bulk remove_nodes
+clears the links between nodes.
+
+Example a - b * (c - d): instr2.cc needs rax, rcx, rdx, rsi; instr3.cc only rax, rcx.
+  1+(2+(3+...(15+16)))  instr2.cc -> instr3.cc: push 3 -> 0, r12-r15 16x -> 0x
+
+The order of evaluating the operands of C arithmetic and relational operators is
+not specified; &&, || and the comma are not swapped.
+
+
+9. instr4.cc - CALL ARGUMENTS IN REGISTERS
+==========================================
+
+Based on instr3.cc, codeCall:
+  1. each argument is a separate block, its register need is measured (a call
+     inside an argument = need up to r11),
+  2. the blocks are sorted in descending order of need and physically moved
+     (the order of evaluating arguments is not specified by C),
+  3. each value waits in a register above the need of the blocks counted after
+     it: preferably in the target register (rdi, rsi, rdx, rcx, r8, r9),
+     otherwise in a helper register (typically r12-r15); the last argument may
+     stay in rax; when the registers run out, sub rsp, 8 / push rax,
+  4. before the call, a parallel move into the target registers, cycles via xchg.
+
+                                     push/pop          instructions
+  heapsort      1 -> 2 -> 3 -> 4    64->39->39->23    512->492->491->478
+  quicksort     1 -> 2 -> 3 -> 4    47->31->31->16    433->420->419->406
+
+The branches "cycle via xchg" and "backup via the stack" for arguments are not
+triggered by any test (with the chosen register selection they occur only
+rarely); verified only by reading the code.
+
+
+10. instr5.cc - VARIABLES IN REGISTERS, push / pop OF CALLEE-SAVED REGISTERS
+============================================================================
+
+Function prologue
+  push rbx / push r15     <- inserted retroactively, once it is known what the function used
+  push rbp / mov rbp, rsp
+  sub rsp, 16             <- inserted retroactively; with an odd number of pushes, 8 more
+  ...
+  mov rsp, rbp / pop rbp / pop r15 / pop rbx / ret
+
+Registers are saved before push rbp; the addresses of local variables [rbp - n]
+do not change.
+
+Variables in registers
+  - candidates: register variables (including parameters) and control variables
+    of for loops (for (int i = ...) and for (i = ...) with a local i),
+  - only local variables and parameters of type int/char/bool whose address is
+    not taken (int & parameter, initialization of a reference, &x),
+  - priority: register, then for loops; a more deeply nested loop has precedence,
+  - registers rbx, r15, r14, r13 (at most 4); r12 is kept for intermediate results,
+  - -v prints the comment "register variables: i k".
+
+                        push        accesses [rbp...]   instructions
+  heapsort  3 -> 4      23 -> 27*   55 -> 35            458 -> 438
+  quicksort 3 -> 4      16 -> 18*   53 -> 42            389 -> 378
+  * pushes added for saving rbx/r15 in the prologue
+
+Fixes in the parser (all generators)
+  - int m[5][6] was built the wrong way round (6 elements of 5), the rows
+    overlapped; fixed,
+  - register on a function parameter.
+
+Variables of while loops stay in memory; they could be added by the same mechanism.
+
+
+11. dama, jezdec, avl, btree, veze - STRUCTS, POINTERS, new, CONSTRUCTORS
+=========================================================================
+
+Test programs
+  cout is rewritten to printf in all five programs (std::cout, cout << ' ' ...),
+  <cassert> is replaced by <assert.h>. The g++ outputs are stored in
+  tests/examples/expected/ and build-test.sh compares them (dama, jezdec - all
+  generators; avl, btree, veze - instr5.cc). All five programs give the same
+  output as g++.
+
+dama.c and jezdec.c worked in all generators without further changes.
+
+Parser
+  - constructors: Item () : key (0), height (1) { ... } inside a struct,
+    declaration Item (); and definition outside the struct Item::Item () { ... };
+    member initialization is converted into assignments at the start of the body;
+    the constructor is stored in Type::ctor, the definition in the list ctorlist,
+  - new T, new T (arguments),
+  - default parameter values: void print (Item * branch, int level = 0),
+  - an array parameter is a pointer: char * argv [] => char * * argv,
+  - parsing of parameters moved into the function ParameterList,
+  - declaration struct X { ... }; without a name no longer inserts an empty name
+    into the name table (two structs in one file reported "Duplicated identifier"),
+  - fix: IsType / IsDecl treated every variable of struct type as a type name,
+    so  P l; l.x = 3;  or  a = b;  was parsed as a declaration;
+    a type name is now recognized by typ->tag == obj->name.
+
+instr5.cc
+  - structs: each field takes 8 bytes (an array field N * 8), union - fields at
+    offset 0,
+  - s.x, p->x, *p, &x, p [i] - pointers to 8-byte variables,
+  - new T => calloc (1, size) - the memory is zeroed, then the constructor is called,
+  - constructor = function with a hidden parameter this (rdi), returns this;
+    the fields are addressed through this in it,
+  - assert (condition) - built-in function; when the condition is not met it
+    prints "Assertion failed in function ..." and calls abort,
+  - pointers can also be register variables.
+
+All generators
+  - default parameter values (missing arguments are filled in by codeCall).
+  instr1.cc ... instr4.cc report "Structures are not supported yet" for structs.
+
+Tests: TestCase has the range of generators (min_gen, max_gen); tests of structs,
+pointers, constructors, new, union, assert run only for instr5.cc.
+
+Not supported yet (instr5.cc reports an error)
+  - pointer arithmetic (p + 1, p++), pointers to char (except passing to libraries),
+  - assignment of structs and passing structs by value,
+  - constructors of global and local objects (only via new), delete,
+  - member functions except the constructor.
+
+
+12. lexer.c - LEXICAL ANALYSIS WITH A PREPROCESSOR
+==================================================
+
+lexer.c is an alternative to lex.c with the same interface (lex.h: sy, IdentVal,
+NumVal, StrVal, ChrVal, InitLex, NextSymbol, CheckSymbol, ...). Either lex.c or
+lexer.c is linked into the program (build-test.sh: LEXER=lexer, qmake:
+CONFIG+=lexer). The ideas are taken from utils/textio.cc and utils/envio.cc
+(EnvInput), but the code is written in C like the other *.cc files (without
+classes and std::string, with malloc / free and character arrays). It also
+passes compilation as C99.
+
+Layers
+  - input: a stack of levels - the main text (via inp.c: ch, NextChar),
+    included files, expanded macros, auxiliary texts (arguments, macro bodies),
+  - RawToken: preprocessor symbols with their original text, comments,
+    line continuation (\ at the end of a line),
+  - ExpToken: macro expansion,
+  - DirToken: directives (# at the beginning of a line) and conditional compilation,
+  - NextSymbol: conversion to SYMBOL and values (the same checks of numbers,
+    escape sequences, ... as in lex.c).
+
+Supported
+  - #define / #undef - macros without and with parameters, # (string),
+    ## (concatenation), ... and __VA_ARGS__; the arguments are expanded before
+    substitution; recursion of a macro is forbidden (#define g g + 1),
+  - #if, #elif, #else, #endif, #ifdef, #ifndef - expressions in long including
+    defined, ?:, &&, || (a branch that is not evaluated does not report
+    division by zero),
+  - #include "file" - searched in the directory of the source file, then in the
+    directories from LexIncludeDir; #include <file> only in LexIncludeDir; system
+    files not found (<stdio.h>, ...) are ignored as in lex.c,
+  - #error - compilation error; #pragma, #line, #warning are ignored,
+  - __LINE__, __FILE__,
+  - concatenation of adjacent strings "ab" "cd",
+  - NULL (if it is not a macro) is nullptr as in lex.c.
+
+Additional interface (lexer.h)
+  LexFileName (name)         source file (directory for #include "...", __FILE__)
+  LexIncludeDir (dir)        like -I
+  LexDefine (name, value)    like -D (only macros without parameters)
+  LexUndefine, LexClear
+
+Errors in an included file are reported by the preprocessor as "file:line: message".
+Parser errors (decl.c, expr.c, ...) have their position from inp.c, i.e. the line
+of the main file (for an included file, the line after #include).
+
+Tests
+  - test_instr.cc: with -DUSE_LEXER additionally the tests "pp ..." (macros, #if,
+    ##, #, __VA_ARGS__, __LINE__, line continuation, errors),
+  - tests/examples/preproc.cc + tests/examples/include/preproc.h: comparison with
+    the g++ output (tests/examples/expected/preproc.txt) for all generators.
+
+
+13. instr.cc - TEXT GENERATOR FOR THE 64-BIT ASSEMBLER (asm/)
+=============================================================
+
+A counterpart of instr1.cc (the same stack model, the same capabilities), but
+instead of asmjit it creates source text in MASM syntax for the assembler
+asm/pasm.bin (x86-64, see asm/README.txt).
+
+Procedure
+  1. the text is generated: the data segment (global variables G<n>, strings S<n>,
+     runtime library data) and the code segment (functions F<n>, main = FMAIN,
+     labels L<n>, runtime library), both USE64,
+  2. in a temporary directory ($TMPDIR or /tmp, cparser-XXXXXX) prog.asm is saved
+     and  pasm -e -l prog.asm  is run  =>  prog.bin (ELF64), prog.lst,
+  3. prog.bin is run as a separate process without the C library; the output goes
+     directly to standard output, the result of main (64 bits) is written by the
+     program to descriptor 3 (a pipe from the parent) - the process exit code has
+     only 8 bits,
+  4. the temporary directory is deleted.
+  With -v (test_instr.bin -v -0) the assembler listing prog.lst is printed
+  (addresses, machine code, source text).
+
+Variables: 8 bytes, global ones in data (lea rax, G<n> - relative to RIP), local
+and parameters in [rbp-n]. Calls: parameters in rdi, rsi, rdx, rcx, r8, r9, result
+in rax (as in instr1.cc).
+
+Runtime library (in instr.cc as the text RTL_DATA and RTL_CODE, kernel services
+via syscall): printf (%d %i %u %x %c %s %%, flags - and 0, width, l = long),
+putchar, puts, abs, labs, rand, srand, time, exit. The output is in a buffer of
+4096 bytes; it is printed when full and at the end of the program. Other
+functions without a body => "Undefined function".
+
+Assembler: previously the program asm/pasm.bin (variable PASM, PASM_PATH), now the
+library asm/libpasm.a (asm/pasmlib.h) - see asm/README.txt; the program text is
+passed from memory (today a list of nodes asm/asmlist.h - chapter 29), prog.asm
+is not written (only with -o as <program>.asm); build-test.sh builds the library
+(make -C asm), cparser.pro links it.
+
+Tests: test_instr.bin -0; in build-test.sh generator 0 (tests as for instr1.cc:
+84 / 103 with LEXER=lexer) and tests/examples/dama.cc, jezdec.c, preproc.c.
+printf verified against the C library (formats, widths, number of characters
+printed). Difference from instr1.cc: the result of a library function is not
+truncated to int (labs returns full 64 bits).
+
+Warning: struct Variable and LoopLabels are in an anonymous namespace - the same
+names in instr1.cc led to an ODR violation (std::map<..., Variable>) and a crash.
+
+
+14. CLASSES - INHERITANCE, CONSTRUCTORS, VIRTUAL METHODS (instr.cc)
+===================================================================
+
+This
+step adds classes, single inheritance, constructors without parameters and
+virtual methods; the generator instr.cc also took over structs, pointers, new
+and assert from instr5.cc (in test_instr.cc, level 6 = everything from instr5.cc
+plus classes).
+
+Front part (lex, decl.c, expr.c - common to all generators)
+  - keywords class, public, private, protected, virtual, this
+    (lex.c and lexer.c),
+  - class B : public A { ... }  - Type.base, single inheritance (more bases =>
+    error), LookupMember also searches in the bases,
+  - public: / private: / protected:  - access is not checked,
+  - methods: bodies inside the class, definitions outside the class
+    int A::f (...) { ... }, static methods, const and override after the parameters,
+  - virtual; overriding a virtual method of a base is virtual even without virtual;
+    pure virtual  virtual int f () = 0;
+  - this, qualified call  A::f (...)  (without the virtual mechanism),
+  - destructor ~A () is only compiled (delete does not exist yet)
+    it is called,
+  - bodies of methods and constructors inside a class are compiled only at the end
+    of the class (they may use members declared after them): the symbols are
+    recorded while the class is read and replayed at the end via ReplaySymbol
+    (lex.h, NextSymbol),
+  - output of -p prints classes as valid C++ (bases, public:, virtual, = 0, bodies).
+
+Generator instr.cc
+  - object: members of the base, a pointer to the table of virtual methods
+    (introduced by the first polymorphic class), its own members; the base is at
+    the beginning of the object,
+  - tables of virtual methods VT<n> in data, virtual call
+      mov r11, [rdi + vptr] / call qword ptr [r11 + 8 * slot],
+  - methods: hidden parameter this (rdi), at most 5 further parameters,
+  - constructor (user-defined or implicit C<n>): constructor of the base, setting
+    the table of virtual methods, constructors of nested objects (including
+    arrays), then initialization of members and the body; returns this,
+  - objects are constructed at new, at declaration of a local variable (including
+    arrays of objects) and before main (global objects - CINIT, calls start),
+  - runtime library: calloc / malloc (heap via brk, memory zeroed), free (does
+    nothing), assert (Assertion failed in function ..., SIGABRT), call of a pure
+    virtual method (Pure virtual method called).
+
+Tests
+  - test_instr.cc: 22 tests of classes (inheritance, virtual methods over several
+    levels, constructors in a chain, nested objects and arrays of objects, global
+    object, this, A::f, methods outside the class, static methods, errors),
+  - tests/examples/classes.cc: a hierarchy of shapes (abstract class, polymorphic
+    list, printf with %s from a virtual method) - comparison with g++,
+  - avl, btree, veze (structs) are also compared for instr.cc.
+
+
+15. std::string (instr.cc)
+==========================
+
+Built-in type (without general operator overloading):  string s;  std::string s;
+(#include <string> and  using namespace std;  are ignored).
+
+Operations:  =  +  +=  ==  !=  <  <=  >  >=, methods c_str (), length (),
+size (), empty ().  The operand can be std::string, a string constant, char * and
+a character (also an integer value used as a character:  s += 'a' + i).
+Parameters: string (by value), const string & (also a value, e.g. f ("abc")),
+string & (reference); functions can return string; class members, arrays,
+global variables (also with a constant:  string g = "abc";).
+
+Representation (instr.cc): the value is a pointer to characters terminated by
+zero; 8 bytes before them hold the length; 0 = empty string. Strings are not
+changed - + and += create a new string on the heap, so assignment, passing by
+value and returning only copy the pointer. Constants used as string are in data
+with their length (SL<n>), nothing is allocated. Variables and members of type
+string are zeroed at declaration / in the constructor.
+Runtime library: RT_SCAT (concatenation), RT_SCMP (comparison - unsigned bytes,
+then length, like std::string::compare), RT_SCHR, RT_SFROMC, RT_SLEN, RT_SCSTR,
+RT_SNEW. Memory is not freed (free does nothing).
+
+Other generators (instr1.cc ... instr5.cc) report
+"std::string is supported only by instr.cc".
+
+Front part additionally:  const before a type name (const string & s, const T * p),
+bool in arithmetic (1 + b).
+
+Assembler (asm/inst.c): fix of the short jump - the distance is computed from the
+end of the 2-byte instruction (ip + 2, originally ip + 1; a backward jump of 129
+bytes reported "Jump too long"); 16/32-bit outputs did not change.
+
+Tests: test_instr.cc - 10 tests of std::string, tests/examples/strings.cc (number
+conversion, concatenation, sorting an array of strings, strings in classes with a
+virtual method, 1000x +=) - comparison with g++.
+Not supported: indexing with [i], changing characters, substr, find, ...;
+casts (int) x are not yet known to the front part.
+
+
+16. instr.cc AND GLIBC (ELF64 OBJECT, gcc)
+==========================================
+
+Default mode of instr.cc: the program is compiled to an ELF64 object and linked
+with glibc. Functions without a body (printf, calloc, strlen, fopen, ...) are
+called directly from glibc:
+    pasm -c -l prog.asm  =>  prog.o        gcc -no-pie prog.o -o prog.bin
+(gcc can be changed with the variable CPARSER_CC). An undefined function is
+reported by the linker, and instr.cc prints it as "Undefined function: name".
+
+CPARSER_RTL=own - own runtime library in the assembler (without glibc, for small
+systems): pasm -e, standalone ELF64, printf, putchar, puts, abs, labs, rand,
+srand, time, exit, malloc, calloc, free (chapter 13).
+
+glibc mode:
+  - EXTRN LC_name: NEAR 'name' for each glibc function used,
+  - main is a wrapper CMAIN (PUBLIC CMAIN 'main'): constructors of global objects
+    (CINIT), then the main of the program. If the environment variable
+    CPARSER_RESULT is set (cparser sets it when it runs), the result of main
+    (64 bits) is written to descriptor 3, otherwise the program is an ordinary
+    standalone program,
+  - new => calloc from glibc, assert => fflush, dprintf (2, ...), abort,
+  - std::string - the same routines as for the own library (allocation by calloc),
+  - the result of a library function int / char / bool is extended to 64 bits
+    (movsxd / movsx / movzx), because the library returns only the lower part
+    of rax,
+  - calls of runtime routines (RT_...) and functions: rsp aligned to 16 bytes.
+
+Tests: build-test.sh runs instr.cc with glibc (default) and with CPARSER_RTL=own
+(tests test_instr.cc and the programs dama, jezdec, avl, classes, strings).
+test_instr.bin -0 (without a file) runs only the tests of the instr.cc generator.
+
+Assembler: switch -c (relocatable ELF64 object), see asm/README.txt.
+
+
+17. FUNCTION PROTOTYPES, DEFAULT PARAMETER VALUES, ENUM CONSTANTS
+=================================================================
+
+Declarations in the header, definitions
+in the .cc file, default parameter values only in the declaration.
+
+Front end (decl.c, all generators)
+  - prototype and later definition of a global function (also several prototypes,
+    a prototype after the definition):  int f (int a, int b = 3);  ...
+    int f (int a, int b) { ... }  - the object from the first declaration is used,
+    the parameter names from the last one, and the definition is moved in glist
+    to its own place (output -p stays valid C++). Previously "Duplicated identifier",
+  - MergeDefaults: default values from the declaration are taken over into the
+    definition also for methods defined outside the class (int A::f (int a, int b) { ... })
+    and for constructors - previously they were lost in the definition,
+  - check: a different number of parameters => "Parameters do not match previous
+    declaration of f", two bodies => "Multiple definition of function f";
+    f () and f (void) are the same,
+  - output -p: type std::string (previously missing), values of enum
+    constants (c = 10).
+
+instr.cc generator
+  - enum constants  enum K { a, b, c = 10, d };  - in expressions, in constant
+    expressions (global variables, array bounds), as a default value of a
+    parameter (previously "Unknown variable"); other generators do not support
+    enum constants yet.
+
+Tests: test_instr.cc - prototype, proto twice, proto void, proto redef,
+proto params (all generators), method dflt, enum const (instr.cc);
+tests/examples/defaults.cc - default values of type string, char (constant),
+enum, NULL, bool, methods outside the class, virtual methods - comparison with g++
+(build-test.sh, also CPARSER_RTL=own).
+
+
+18. DESTRUCTORS
+===============
+
+Front end (decl.c)
+  - a destructor is a method named "~" (the same name in all classes -
+    it overrides the virtual destructor of the base in the table of virtual
+    methods), Type::dtor, is also among the members of the class,
+  - ~T ();  virtual ~T ();  virtual ~T () = 0;  ~T () { ... }  ~T (void);
+    the body inside the class is compiled only at the end of the class (like
+    other methods); definition outside the class  T::~T () { ... },
+  - a destructor is virtual even without virtual, if the base has a virtual
+    destructor,
+  - errors: Destructor is not declared in class, Multiple definition
+    (declaration) of destructor,
+  - output -p:  ~T (), virtual ~T (), T::~T () { ... } at the place of the definition.
+
+instr.cc generator
+  - destructor: the body, then the destructors of nested objects (in the reverse
+    order of declaration, arrays from the last element) and the destructor of the
+    base (without a virtual call); return in the body jumps to this part,
+  - implicit destructor D<n> for a class without its own destructor whose base or
+    nested objects need a destructor,
+  - the destructor slot in the table of virtual methods always points to the
+    destructor of the given class (also an implicit one) - delete through a
+    pointer to the base destroys the whole object,
+  - delete p:  p != nullptr => destructor (virtual through the table, otherwise a
+    direct call), then free;  delete [] of objects with a destructor => error
+    (the number of elements is not stored),
+  - local objects: a stack of levels (cleanup) - destructors in the reverse order
+    at the end of a block, at return (the result is saved), break and continue
+    (only blocks inside a loop / switch); goto does not call destructors; objects
+    from the initialization of a for belong to the enclosing block,
+  - global and static local objects: CFINI in the reverse order; glibc -
+    atexit (CFINI) in CMAIN (also at exit), own library - after the return from
+    main (not at exit); static local objects are created before main.
+
+Tests: test_instr.cc - dtor order, dtor virtual, dtor outside, dtor undecl,
+dtor array; tests/examples/dtors.cc (virtual destructor, implicit destructor of a
+derived class, nested objects, arrays, end of block, return, break, continue,
+global and static object, delete nullptr) - comparison with g++ (build-test.sh,
+also CPARSER_RTL=own and output -p).
+
+
+19. FLOATING POINT - float, double (SSE2)
+=========================================
+
+Assembler (asm/README.txt, SSE part): registers XMM0 .. XMM15, MOVSD, MOVSS,
+MOVQ, MOVD, ADDSD ... DIVSD, SQRTSD, UCOMISD, CVTSI2SD, CVTTSD2SI, CVTSD2SS,
+CVTSS2SD, XORPD, ANDPD, ... (and the ...SS variants) - encoding identical to NASM.
+
+instr.cc generator
+  - the value of float / double is in rax as a bit image (double 64 bits, float
+    lower 32 bits, upper bits zero) - intermediate results via push / pop as with
+    integers; in memory an 8-byte slot (arrays, struct members, global variables),
+  - computation in xmm0 / xmm1: double - ADDSD, SUBSD, MULSD, DIVSD; float -
+    ADDSS ... (single precision as in gcc, results identical to g++),
+  - comparison UCOMISD / UCOMISS: a < b as b > a (SETA), == with SETNP,
+    != with SETP - NaN gives false (except for !=),
+  - conversions (assignment, initialization, arithmetic, arguments, return, (T) e,
+    conditions): CVTSI2SD / SS, CVTTSD2SI / SS (truncation toward zero), CVTSS2SD,
+    CVTSD2SS; a condition from double: 0.0 and -0.0 are false, NaN is true,
+  - unary minus - change of the sign bit, ++ / -- / op= also with double,
+  - constants: 3.5, 1e-3, 2.5f (MOV rax, bit image), in data DQ / DD with the bit
+    image (also expressions of constants: -1.5, 1.0 / 3),
+  - calls according to System V: integers and pointers in rdi .. r9, float and
+    double in xmm0 .. xmm7, other arguments on the stack (in order), result float /
+    double in xmm0; for variadic functions (printf) al = number of XMM registers
+    and a float is converted to double - compatible with glibc (printf %f, libm),
+  - common function passArgs for calls of functions, methods and constructors,
+  - the program is linked also with libm (gcc ... -lm); cmini/ownheaders/cmath,
+    math.h (sqrt, pow, fabs, floor, ...), cstdlib: strtod, atof,
+  - own runtime library (CPARSER_RTL=own): computations work, printf does not
+    support %f and libm is not available.
+
+Front end
+  - the condition of if / while / for can also be float / double or a pointer
+    (BoolExpr: previously only an integer),
+  - base constructor with arguments:  Circle (double r) : Shape (r) { ... }
+    (check of arguments, output -p).
+
+Tests: tests/examples/floats.cc - arithmetic of float / double and mixed,
+conversions, comparison (also NaN), printf %f %g %e, op=, ++, unary minus,
+a function with 17 parameters (part on the stack), a virtual method and a base
+constructor with double, structs, arrays, global and static variables, libm -
+comparison with g++ and output -p (build-test.sh).
+
+Limitations: long double, unsigned long => double above 2^63 (local arrays
+with an initializer - from chapter 20).
+
+
+20. POINTERS AND FUNCTION POINTERS
+==================================
+
+Pointers (instr.cc) - verified by the test tests/examples/pointers.cc: pointer to
+a pointer (int **, Node **), &x, *p = ..., p [i], &a [i], arithmetic and
+comparison, void * with a cast, double *, arrays of pointers, pointer to an
+array of strings (const char **), string * (*sp += ..., sp->length ()), linked
+list through a pointer to an element (Node ** link = &n.next).
+
+Local arrays and structs with an initializer (previously an error):
+    int a [5] = { 1, 2, 3 };   char s [] = "abc";   const char * n [] = { ... };
+    string t [2] = { "x", "y" };   Point p = { 1, 2 };   Cmd c [2] = { { "a", f }, ... };
+  - the variable is zeroed (missing elements = 0), then the elements are assigned
+    (with type conversion), char arrays byte by byte; structs without a
+    constructor (also with std::string members), not polymorphic or derived.
+
+Function pointers
+  - declarations:  int (*f) (int, int);   typedef int (*BinOp) (int, int);
+    BinOp ops [2];   member of a struct, parameter, return value, default value
+    of a parameter (BinOp op = add),
+  - value:  f = add;  f = &mul;  f = nullptr;  comparison, if (f),
+  - call:  f (a, b),  (*f) (a, b),  ops [i] (a, b),  c->op (a, b),
+    choose (k) (a, b) - the function address is saved on the stack, arguments as
+    in a direct call (System V, also float / double), call r11; a result int /
+    char / bool is extended (the target can also be a function from glibc),
+  - a function name as a value: lea rax, F<n> (for a glibc library symbol -
+    EXTRN, relocation), in data  dq offset F<n>  (global and static variables,
+    also arrays:  int (*t [3]) (const char *) = { puts, ... }),
+  - callbacks from C: functions follow System V, e.g. qsort (v, n, size, cmp) -
+    the comparator calls glibc,
+  - front end: a call through a pointer (FCE with type pointer to function),
+    a function name into a pointer to a function (otherwise "Pointer to function
+    expected", also in an initialization  int k = f;),
+  - pointers to methods ("Pointers to methods are not supported").
+
+Fixes: global variables are allocated only after labels have been assigned to
+functions (function pointers in data); with -o the text for the assembler is
+saved also when the assembler reports an error.
+
+Tests: test_instr.cc - fn pointer, fn ptr arr, fn ptr int, fn ptr meth;
+tests/examples/pointers.cc - comparison with g++ and output -p (build-test.sh,
+only with glibc - qsort).
+
+
+21. BUILT-IN TYPES Sequence <T> AND Dictionary <K, V>
+=====================================================
+
+Similar to std::string: types with a parameter built into the language (generator
+instr.cc; other generators report "Sequence and Dictionary are supported only by
+instr.cc"). For g++ (tests, output -p) cmini/ownheaders/containers.h contains
+templates with the same methods and behavior (in cparser they are empty -
+#ifndef __CPARSER__); output -p inserts  #include "containers.h"  (g++ -iquote
+cmini/ownheaders).
+
+    Sequence <int> s;   Sequence <GrmRule *> rules;   Sequence <string> w;
+    Dictionary <string, GrmRule *> rule_dict;   Dictionary <int, string> n;
+    typedef Dictionary <string, string> StringDictionary;
+    for (GrmRule * r : rules) ...      for (int & x : s) x = 0;
+
+Sequence <T>
+  add (x), push (x), insertFirst (x), get (i), change (i, x), size (),
+  empty (), clear (), contains (x), last (), top (), pop (), s [i] (read and
+  write, also s [i] += ...); index out of range => "Assertion failed in
+  function Sequence (index out of range)" and abort (also get, last, pop)
+Dictionary <K, V>
+  store (k, v), get (k) (missing key => 0, nullptr, "", 0.0 - nothing is
+  inserted), contains (k), size (), empty (), clear (), d [k] (a missing key is
+  inserted with the value 0 - as std::map)
+  key: integer, char, bool, enum, pointer, std::string (not double)
+for (T x : seq),  for (T & x : seq)
+  the range is evaluated once, the number of elements is read in each pass,
+  break and continue; only Sequence
+
+Elements: numbers (also float, double), pointers, enums, bool, std::string;
+nested containers and objects by value are not supported (an element is an
+8-byte slot).
+
+Value semantics (as in C++, results identical to g++): assignment, initialization,
+a parameter by value, a return value, and assignment of a struct with a container
+member create a copy (RT_QCOPY, RT_DCOPY - std::string elements are shared, strings
+are not changed); a parameter by reference does not make a copy. Variables and
+elements are zeroed (0 = empty container, as with std::string); assignment of
+containers of different types => "Incompatible Sequence / Dictionary types".
+
+Front end: kinds of type StdSequence, StdDictionary (Type::elem, Type::key);
+Sequence <...> and Dictionary <...> are type names only if not declared otherwise;
+>> in  Sequence <Sequence <int>>  is split; methods with type checking
+(ContainerMethod), seq [i] / dict [k] are l-values; for (T x : ...) - a
+declaration with the RangeFor choice, COLON statement.
+
+Runtime library (common for glibc and the own library, allocation RT_CALLOC)
+  Sequence: header [count, capacity, elements], the array doubles in size;
+    RT_QADD, RT_QINSF, RT_QREF (address of an element, index check), RT_QSIZE,
+    RT_QCLEAR, RT_QPOP, RT_QCOPY, RT_QFIND (contains - numbers, std::string,
+    double, float)
+  Dictionary: hash table with open addressing (linear probing), header [count,
+    capacity 2^n, entries {used, key, value}, key kind], growth when 3/4 full;
+    hash - integers by bit mixing (splitmix), std::string FNV-1a; RT_DREF (address
+    of a value, also insertion), RT_DGET, RT_DHAS, RT_DSIZE, RT_DCLEAR, RT_DCOPY
+  changes get the address of the variable (an empty container is created at the
+  first insertion), reading gets the value.
+
+Tests: test_instr.cc - seq basic, dict basic, seq type, seq method, seq nested,
+dict key, seq other gen; tests/examples/sequence.cc, tests/examples/dictionary.cc -
+comparison with g++ and output -p (build-test.sh); 6000 / 2000 keys (table growth).
+
+Fixes: string (1, c) - only this form (string (n, c) => error), output -p
+string (1, c); empty initialization of a member  t ()  of a container.
+
+
+22. dynamic_cast
+================
+
+The virtual method table has, before its first slot ([VT - 8]), a pointer to the
+table of the parent polymorphic class, or 0:
+        dq      offset VT_Base          ; parent class
+VT_D:   dq      offset F_D_f            ; slot 0 ...
+(virtual calls are unchanged). With single inheritance the base is at the start
+of the object - dynamic_cast never moves the pointer, it only checks whether the
+real type of the object is the target class or derived from it:
+
+    dynamic_cast <T *> (p):  p == nullptr => nullptr;  vt := [p + vptr];
+                             repeat: vt == VT_T => p;  vt := [vt - 8];
+                             vt == 0 => nullptr
+    dynamic_cast <T &> (x):  the same with the address of x; failure =>
+                             "Assertion failed in function dynamic_cast
+                             (bad_cast)" and abort (no exceptions; g++ throws
+                             std::bad_cast)
+
+  - to a base (upcast) - without a runtime check; a non-polymorphic target => nullptr,
+  - tables are generated for all polymorphic classes in the chain (also for abstract
+    classes and for classes without objects); a class without its own virtual
+    methods has its own table (a copy of the base slots),
+  - front end: a source pointer to a polymorphic class (or an object for a
+    reference), a target pointer or reference to a class, otherwise an error
+    ("source class must be polymorphic", "pointer or reference to class expected");
+    dynamic_cast <T &> is an l-value; output -p.
+
+Tests: test_instr.cc - dyncast, dyncast poly, dyncast int; tests/examples/dyncast.cc
+(abstract base, a class without its own virtual methods, non-polymorphic target,
+a class without objects, nullptr, upcast, reference, selection from an array of
+Shape *) - comparison with g++ and output -p.
+
+std::string - added:
+  - string (p, n) - n characters from pointer p (RT_SFROMN), string (n, c) - n
+    characters c (RT_SREP); previously only string (1, c),
+  - direct initialization of a local variable  string s (p, n);  string s (3, '-');
+    (the declarator tells them apart by the symbol after "(": a type or ")" =>
+    function declaration, otherwise initialization - PeekIsTypeStart), output -p
+    string s=string (p, n),
+  - s.reserve (n) - no effect (strings do not change, the argument is evaluated).
+  Test: tests/examples/chars.cc.
+
+
+23. BUILDING .o OBJECTS AND PROGRAMS FROM SEVERAL FILES
+=======================================================
+
+    ./cmini/test_instr.bin -0 -c [-I cmini/ownheaders] a.c b.c        => a.o, b.o
+    ./cmini/test_instr.bin -0 -c -o x.o a.c                  => x.o
+    ./cmini/test_instr.bin -0 -c -S -o x.o a.c               => x.o a x.asm (text for the assembler)
+    ./cmini/test_instr.bin -0 [-o prog] a.c b.c c.o d.a -lz  => compiles the source
+          files (each separately, into temporary objects), then links with
+          gcc -no-pie ... -lm together with the other objects and libraries
+          (.o, .a, .so, -l..., -L...); without -o it runs the program ("main returned ...")
+    (instr.cc generator, glibc; one source file without -c and without other
+    inputs - unchanged)
+
+Symbols of an object (pasm -c, ELF64 object)
+  - PUBLIC: global functions (not static, not inline) and global variables
+    (not static, not constants - const has internal linkage in C++) - names
+    without decoration as in C (they can be called from C and vice versa, e.g.
+    extern "C"); methods, constructors and destructors defined outside the class:
+    T::f, T::T, T::~T,
+  - local: methods with a body in the class (the header is in each file), implicit
+    constructors and destructors, static functions and variables, static local
+    variables, vtables, strings, runtime library,
+  - EXTRN: functions without a body (another file, glibc), methods / constructors /
+    destructors defined elsewhere (T::f), extern variables (EXTRN x: QWORD -
+    access relative to RIP),
+  - main: the wrapper CMAIN ('main') only in the file with main; an object without
+    main is fine (the linker reports a missing main).
+
+Constructors and destructors of global objects: each object has CINIT and CFINI
+in the sections .init_array and .fini_array (glibc calls them before main and at
+termination, also at exit) - this also holds for a single file (previously calls
+from CMAIN and atexit). Assembler: segment INIT_ARRAY / FINI_ARRAY => section
+.init_array / .fini_array (SHT_INIT_ARRAY, SHT_FINI_ARRAY), see asm/README.txt.
+
+dynamic_cast across files: vtables are in each object separately, therefore
+[VT - 16] = class name; RT_DCAST compares the table address, and on a mismatch
+the class name (class names are unique in the program), then the parent class
+[VT - 8].
+
+Tests: tests/examples/multi (shapes.h, shapes.c, main.c - cparser; util.c - gcc,
+calls a function compiled by cparser): methods and constructors defined in
+another file, virtual methods, dynamic_cast of an object from another file, a
+global object with a constructor and destructor, extern int / Sequence, a static
+function of the same name in both files, a pointer to a function from another
+file - comparison with g++ (build-test.sh with LEXER=lexer: source files + util.o,
+also -c and linking of objects).
+
+
+24. instr0.cc - VARIANT OF instr.cc COMPILABLE BY cparser (SELF-HOSTING)
+========================================================================
+
+(History: from chapter 29 on, instr0.cc is merged with instr.cc and instr-list.cc
+into the single cmini/instr.cc; the switches -s and -a no longer exist.)
+
+Goal: cparser compiles itself. The first step is the code generator: instr0.cc
+is a copy of instr.cc in which the C++ features outside the cparser subset are
+replaced by what cparser supports. It generates the same code as instr.cc (the
+text for the assembler is byte-identical), and it is compiled by both g++ and cparser:
+
+    ./cmini/test_instr.bin -s ...                generator cmini/instr0.cc (compiled by g++)
+    ./cmini/test_instr.bin -0 -c -I cmini/ownheaders cmini/instr0.cc     cparser => instr0.o
+
+Interface instr0.h: runInstructions0, instructions0, InstrLink0 (Sequence <string>
+instead of std::vector); InstrOutputFile and InstrObjectFile are shared with
+instr.cc (when compiled by cparser - #ifdef __CPARSER__ - instr0.cc defines them
+itself). For g++ the classes are in an anonymous namespace (same names as in
+instr.cc); cparser does not know namespaces (#ifndef __CPARSER__). g++ takes
+Sequence / Dictionary from cmini/ownheaders/containers.h.
+
+Replacements (instr.cc => instr0.cc)
+  - std::map => Dictionary; instead of iterating a map (cparser does not have it)
+    a sorted list of keys in a Sequence (insertSortedStr / Type / Obj) - the output
+    order is the same as with std::map, also for pointers as keys,
+  - std::vector => Sequence; elements that are not a number, pointer or string are
+    pointers to structs: Variable *, LoopLabels *, ArgPlace *, OwnedMember * (instead
+    of pair), ObjectList * (instead of vector <vector <...>> and the values of
+    vtables); no copies are made - objects are only allocated (memory is not freed,
+    as with strings),
+  - ostringstream code / data => TextParts (Sequence <string> of parts, written
+    by fputs); program () assembles the whole text into TextParts,
+  - ifstream / ofstream => fopen, fread, fwrite (readFile, copyFile),
+    cout => printf; fflush (nullptr) before fork,
+  - raw strings R"(...)" of the runtime library => an array of lines terminated by
+    nullptr (a string constant has at most 255 characters in the lexer),
+  - RTL_FUNCTIONS (map) => array of pairs, rtlFunction (name),
+  - lambdas and std::function: code_this => struct ThisCode (kind: this on the
+    stack, this of a method, &obj, p) and method codeThis; slotAddr / handle of
+    Dictionary => methods contSlotAddr (f), contHandle (f); map of ops (op= => op)
+    => assignOp (switch),
+  - to_string => intStr (long), uintStr (unsigned long - bit images of double and
+    characters in arrays: g++ to_string from unsigned),
+  - initializers of members (bool libc = true;) => constructors,
+  - auto, min, max, ::Error, return buf (char array) => string (buf),
+    for (char c : s) => index, Expr tmp = *e => Expr tmp; tmp = *e,
+    a temporary Sequence <T> () as an argument => callCtor0.
+
+Compiler change: an element and a key of Sequence / Dictionary can also be long,
+unsigned, unsigned long, short (a type without int: sort NoSort with length or
+sign - previously "element must be number, pointer or string").
+
+Replacement headers cmini/ownheaders/: unistd.h (fork, pipe, dup2, read, execvp, ...),
+sys/wait.h (waitpid, WIFEXITED, ...), sys/stat.h (chmod), cstdint / stdint.h;
+cstdio gets fseek, ftell, ferror; cstdlib gets setenv, mkdtemp.
+
+Checks (build-test.sh)
+  - ./cmini/test_instr.bin -s: all tests as with -0 (also CPARSER_RTL=own),
+    programs tests/examples/*.cc with -s against tests/examples/expected,
+  - the text for the assembler from -s and -0 is identical (tests/examples/*.cc),
+  - LEXER=lexer: cparser compiles instr0.cc into an object (-c),
+  Test test_instr.cc: seq long.
+
+Not verified yet: instr0.o compiled by cparser cannot be linked with the rest
+compiled by g++ (C++ function names are decorated in g++, cparser does not
+decorate them) - this will be verified only when the whole cparser is compiled
+by cparser. On an error (Error) the destructor of TempDir is not called (g++ -
+exception); in cparser the temporary directory remains.
+
+Next steps of self-hosting: front end (decl.c: cond ? fn : NULL, expr.c:
+void inline f, ...), a driver without iostream and exceptions (Error => print
+and exit), compilation of all files by cparser (-c) and linking, and verification
+in three stages (cparser compiled by cparser compiles itself => identical text
+for the assembler).
+25. translate.c - TRANSLATION OF cmini TO C
+===========================================
+
+cmini = the subset of C++ handled by cparser (and instr0.cc): classes with
+single inheritance, constructors, destructors, virtual methods,
+dynamic_cast, references, default parameter values, new / delete,
+std::string, Sequence <T>, Dictionary <K, V>.  translate.c (C style like
+decl.c, compiles with both gcc and g++) reads the program with the same
+front-end (decl.c, expr.c, stat.c, lexer.c) and prints a program in C99
+that uses the runtime library cminirt.h / cminirt.c.
+
+    ./cmini/cmini.bin -C [-I cmini/ownheaders] [-D name[=value]] [-o output.c] file.cc
+    gcc -I cmini output.c cmini/cminirt.c
+
+    tests/build-translate.sh            tests/examples/*.cc => C => gcc (output compared with g++);
+                             cmini/instr0.cc => _build/cmini/instr0_tr.c, front-end compiled
+                             by gcc as C: same text for the assembler and output
+                             of programs as instr0.cc (g++), instr0.cc =>
+                             same instr0.o;
+                             c-mini compiling itself (test_instr_lexer.bin -0 => pasm):
+                             cmini-asm.bin (cmini/instr0_drv.c + front-end +
+                             instr0.cc) and translate-asm.bin give the same text
+                             for the assembler / objects / C as the version from g++,
+                             also on their own sources (fixed point)
+
+C-mini compiled by itself - limitations that required changes to the sources:
+  - structure initialization only with { ... }:  Object tmp = *p  =>  Object tmp; tmp = *p;
+  - a global variable's initializer must not contain the address of another variable
+    (StringDef.from, Std [], Out - set by InitTypes / main),
+  - functions with a variable number of parameters (va_list) => macros Fmt (...), PutF (...)
+    over snprintf (translate.c),
+  - scalar variables have an 8-byte slot: memcpy of 4 bytes into uint32_t leaves the upper
+    half undefined (instr0.cc fpBits => uint64_t u = 0),
+  - functions without a prototype in cmini/ownheaders/ have type int (strtoull => strtoul),
+  - pasm: dup beyond the 64 kB segment boundary (DupStart was 16-bit, fixed).
+
+Translation
+  - class => struct with all members (base members first),
+    typedef struct T T;  method T::f => T_f (T * this, ...), constructor
+    T_ctor (base, vptr, nested objects, initialization, body; returns this),
+    destructor T_dtor, new T (...) => T_new (...), delete p => T_delete (p),
+    copy of an object with containers => T_copy,
+  - virtual methods: vptr => struct T_vtbl (info for dynamic_cast, slots),
+    calls via T_f_virtual, pure virtual => cm_pure_virtual,
+  - std::string => cm_string (char *, the string is never changed, NULL = ""),
+    Sequence => cm_Seq (CM_SEQ_AT, CM_SEQ_ADD, ...), Dictionary => cm_Dict
+    (hash table; CM_DICT_REF, CM_DICT_GET, ...),
+  - reference => pointer, local objects with destructors: destructors run
+    at the end of a block, before return, break, continue; static local
+    objects and global objects: constructor before main (cm_global_init,
+    __attribute__ ((constructor))), destructors via atexit,
+  - const int X = 10 (global, static member) => enum (array size),
+    static member defined outside its class (T::x) => definition in that file,
+    elsewhere extern; const from a header => CM_UNUSED static,
+  - s [i] = c => cm_str_set (&s, i, c) (copy of the string, like RT_SSET),
+  - typedef in a class => global typedef, enum in a function stays local,
+  - declarations from the replacement headers cmini/ownheaders/ are not printed
+    => #include <...>.
+  Memory is not freed (strings, copies of containers).
+
+Changes made for the translation
+  - decl.c: typedef struct X X; / typedef enum X X; (lex.h for C) - the name
+    X is already a type, so Duplicated identifier is not reported,
+  - inp.h: NUL, TAB, CR, LF, CTRLZ defined again (lex.c, lexer.c, inp.c),
+    decl.c: #include <stdio.h>,
+  - front-end as C (gcc -x c): decl.h prototype Search (ScopePtr ...),
+    decl.c typedef mode_typ, expr.c static inline CheckNumeric,
+  - instr0.cc: interface according to instr0.h (InstrLink0 (char **, int, out),
+    runInstructions0 (int)), test_instr.cc calls InstrLink0 with an array.
+  - decl.c: a definition of a static member outside its class sets outdef.
+
+Translation of translate.c and the front-end to C (self)
+  decl.c, expr.c, stat.c, lexer.c and translate.c => C, gcc =>
+  translate-c.bin; gives the same outputs as cmini.bin -C (g++) - tests,
+  instr0.cc and its own source texts (fixed point). Changes:
+  - expr.c calc3:  c ? f : NULL  (function name => pointer to function),
+  - cmini/ownheaders/stdarg.h, cstdarg: type va_list (va_start, vsnprintf are
+    implicit functions; the generators instr*.cc do not have variadic parameters),
+  - cmini/ownheaders/cstdio, stdio.h: stdout as stderr (cparser_stdout ()),
+    translate.c converts cparser_stdout () / cparser_stderr () to stdout, stderr,
+  - translate.c: enum { A, B }; without a name (lexer.c LEVEL_...).
+
+Limitation
+  - macros are expanded at translation time (previously PASM_PATH from #ifndef
+    => constant, now pasm is called as a library).
+
+
+26. instr-list.cc - PROGRAM AS A LIST OF INSTRUCTIONS (asm/asmlist.h)
+=====================================================================
+
+(History: from chapter 29 on, the program is built as a list of instructions
+directly in cmini/instr.cc.)
+
+A variant of instr.cc that does not build text for the assembler, but a
+linked list of instructions (asm/asmlist.h, pure C) - analogous to
+x86::Builder from AsmJit:
+
+    instr.cc:       ins ("mov     rax, " + qptr ("rbp", off) + "  ; " + name);
+    instr-list.cc:  ins (iMov, gp (RAX), qword_ptr (RBP, off), name);
+
+  - instructions = keyword constants from asm/key.h (iMov, iPush, iCall, ...),
+    registers = the Register enum from asm/reg.h (RAX, R11, AL, ...),
+  - operands (names as in AsmJit): gp, xreg, imm, imm_hex (0...h),
+    qword_ptr, byte_ptr, any_ptr (without size - lea), any_ptr_idx,
+    qword_lab ([label]), alab (address of a label), jlab (jump / call target);
+    push / pop take a Register, arg_regs are arrays of Register,
+  - data: AsmData (db strings, dq offset, dq values, dup), comments and
+    runtime library RTL_... as text lines (AN_TEXT),
+  - one AsmProgram, cursors as sections: extrn / public (added at the end -
+    finishProgram), data (data_cur), code (program cursor); the program
+    skeleton startProgram () in run (),
+  - assembling with AsmAssemble: pasm reads the list of nodes directly (phase 2,
+    without instruction text); CPARSER_ASMLIST=text => AsmAssembleText (phase 1,
+    text line by line - for comparison); -o: AsmPrint => .asm, listing => .lst.
+
+Conversion: a script converted 389 of the 406 ins (...) calls (splitting the
+instruction text into mnemonic, operands qptr / bptr / mem / to_string / labels),
+17 by hand (mnemonics built from the suffixes sd / ss, add / sub).
+
+Verification (build-test.sh, instr-list.cc section):
+  - test_instr.bin -a: same tests as -0 (174 s LEXER=lexer), also with CPARSER_RTL=own,
+  - tests/examples/*.cc -a against tests/examples/expected, preproc.c,
+  - assembler text from -a (AsmPrint) byte-identical to -0 (also CPARSER_RTL=own) -
+    tests/examples/*.cc, tests/examples/multi -a,
+  - phase 2 == phase 1: program and listing (.lst) byte-identical (tests/examples/*.cc,
+    also CPARSER_RTL=own).
+Interface instr.h: runInstructionsList, InstrLinkList, instructionsList.
+
+Phase 2 (asm/asmlist.txt): pasm translates instructions and labels from the nodes
+directly (operand AsmOp => ExprRec), as well as directives, data and RTL_... lines
+from the node printout - for tests/examples/strings.cc 1444 nodes directly,
+1548 via text (almost all RTL).
+
+Next steps: optimizations over the list (push rax / pop rax, ...), RTL_... as
+nodes (then the runtime library could also be handled directly).
+
+
+27. 2026-11-04/05: c-mini SELF-HOSTING, _output, TESTS WITHOUT STORED REFERENCES
+================================================================================
+
+c-mini compiling itself (test_instr_lexer.bin -0 => pasm => ELF)
+  - _output/cmini-asm/cmini/cmini.bin: the c-mini compiler (cmini/instr0_drv.c +
+    front-end decl, expr, stat, lexer + generator instr0.cc + asm/libpasm.a)
+    compiled by itself gives the same text for the assembler and the same objects
+    as the same program from g++ - also on its own sources (fixed point); second
+    round (cmini.bin compiles itself) the same,
+  - cmini.bin -C compiled by c-mini gives the same C as cmini.bin -C from g++
+    (42 inputs: tests/examples/*.cc, own sources),
+  - check in build-translate.sh (section "c-mini sam sebou" => "c-mini self-hosting"),
+  - cmini/instr0_drv.c: driver moved from the heredoc in build-translate.sh,
+  - test_instr.cc: switch -S (with -c also the assembler text, x.o => x.asm).
+  Changes to the sources (c-mini limitations) - see the end of chapter 25:
+  structure initialization only with { ... }, no address in the initializer of a
+  global variable (InitTypes, Std () instead of an array), macros Fmt / PutF
+  instead of functions with va_list, uint64_t in fpBits (8-byte slot),
+  strtoul instead of strtoull.
+  Fix in the pasm assembler: dup beyond the 64 kB segment boundary (asm/oth.c,
+  DupStart was a 16-bit card).
+
+_output (vystup.sh) - directories per generator
+  cmini-asm, cmini-c, asm/examples; in each examples/ (test programs,
+  executables, outputs compared with the reference) and subdirectories cmini/,
+  asm/ with the sources of the compilers that the generator handles (a
+  file stays only if the result also compiles with gcc / nasm / clang / pasm);
+  Description in _output/README.txt.
+  cmini/ownheaders/time.h, ctime: time, clock (tests/examples/quicksort.cc, heapsort.c).
+
+Tests without stored references (the reference is created on every run)
+  - asm/tests/run.sh: 16/32 bit against the original version in Pascal
+    (../pascal-text/asm, fpc -Mtp; PASM_REF=...), x86-64 against the same programs
+    in nasm syntax (asm/tests/nasm/*.nasm); asm/tests/expected removed, outputs in
+    _build/asm; make test-asm (+ test-nasm, test-nasm64),
+
+
+28. 2026-11-06: ASSEMBLER AND FRONT-END OF cmini IN PURE C (.c)
+===============================================================
+
+Goal: bootstrap on a machine with only the TinyCC compiler; the .c extension
+says what is pure C.
+
+  - asm/*.cc => asm/*.c (pasm, libpasm.a): def.h typedef enum X X; for all enums
+    (also the local ones in expr.c, oth.c, inst.c, code.c), <stdbool.h>,
+    [[noreturn]] / [[maybe_unused]] => NORETURN / MAYBE_UNUSED (__attribute__,
+    gcc, clang, tcc), constants zero, st0, st1 in def.c initialized by a C99
+    initializer (not by a function call); compiled by gcc -std=c99 -pedantic
+    -Wall -Wextra without warnings, pasm.bin linked by gcc. The hand-written
+    asm/makefile (it shadowed the generated Makefile) removed.
+  - cmini: decl.cc, expr.cc, stat.cc, lexer.cc, translate.cc => .c;
+    the headers decl.h, lex.h, lexer.h, inp.h, out.h have extern "C" for g++
+    (test_instr.cc, instr*.cc and lex.cc stay C++);
+    cmini.bin -C is entirely in C (gcc). Neither cparser nor cmini.bin -C
+    defines __cplusplus, so they do not see extern "C" { }. Pure C99:
+    expr.c case CHR - a block around the declaration after the label.
+  - cecko-makefiles.py: program options <prog>_FLAGS (previously _CXXFLAGS) also
+    for .c sources (-DUSE_LEXER for lexer.c); a program made only of .c sources is
+    linked by $(CC); CXX is written to the Makefile only if there are C++ sources.
+  - cmini/win.cc (GUI from the original teaching example, win.h was missing)
+    removed. inp.cc, out.cc => inp.c, out.c (std::string => char *, output line
+    in a realloc buffer); ifc.h in C: const char * getInpText (void),
+    showOutLine (const char *), showError (const char *) - defined by
+    test_instr.cc (extern "C"). showError throws a C++ exception, which passes
+    through the frames of the front-end in C - the .c sources in cmini/ are
+    compiled with -fexceptions. (From chapter 34 on, longjmp is used instead of
+    an exception, without -fexceptions.)
+  - Remaining C++: instr1.cc .. instr5.cc (asmjit), test_instr.cc, lex.cc
+    (instr.cc - subset of c-mini, see chapter 29).
+  - Tests with unchanged results: build-test.sh, LEXER=lexer tests/build-test.sh,
+    build-translate.sh (also the fixed point and c-mini compiling itself),
+    make -C asm test test-asmlist test-nasm test-nasm64.
+
+
+29. 2026-11-06: SINGLE GENERATOR instr.cc (MERGED instr.cc, instr0.cc, instr-list.cc)
+=====================================================================================
+
+Previously three variants of the same generator (each about 6500 lines, with
+byte-identical assembler text): instr.cc (C++, text), instr0.cc (the c-mini
+subset - self-hosting and a path to C), instr-list.cc (C++, list of instructions
+asm/asmlist.h). Now the only cmini/instr.cc = instr0.cc + changes from instr-list.cc:
+
+  - written in the c-mini subset: compiled by g++ (test_instr.bin -0), by cparser
+    itself (self-hosting, build-translate.sh: cmini-asm.bin) and by cmini.bin -C
+    to C (_build/cmini/instr_tr.c - bootstrap with TinyCC),
+  - the program is built as a list of nodes of asm/asmlist.h, pasm reads the nodes
+    directly (phase 2); CPARSER_ASMLIST=text - via text (phase 1, for checking),
+  - cparser does not know function overloading: a single ins (k, a, b, c) with
+    default parameters nullptr, a comment after ; as a note (ins (...), "text"),
+  - cparser has its own memory model (a structure member = 8 bytes) and does not
+    pass structures by value: asm/asmlist.h has a new interface with pointers only -
+    AsmCreate / AsmDestroy, operands AsmPReg, AsmPImm, AsmPMem, ... (AsmOp * belongs
+    to the program, freed by AsmFree), AsmInsP (0 .. 3 operands, NULL = absent),
+    AsmDataP / AsmDataAdd (data item by item); AsmProgram has a member op_blocks,
+  - decl.h: storage class Register => Register_ (in C it collides with the type
+    Register from asm/reg.h - instr.cc reads both headers),
+  - interface instr.h (C and C++): runInstructions (int), instructions (),
+    InstrLink (char **, int, out), InstrOutputFile, InstrObjectFile; declarations
+    of instr1.cc .. instr5.cc (asmjit) only for C++,
+  - -o x: besides x and x.asm also the listing x.lst,
+  - driver cmini/instr0_drv.c => cmini/instr_drv.c.
+
+Removed: cmini/instr0.cc, instr-list.cc, instr0.h, instr0.c (a hand-written
+translation of instr0.cc to C from 2 Nov - never compiled anywhere, it lagged
+behind instr0.cc; replaced by instr_tr.c from cmini.bin -C), instr0_rtl.inc;
+the switches test_instr.bin -s and -a.
+
+Verification: before the replacement, the assembler text of the merged generator
+identical to the original instr.cc on tests/examples/*.cc (glibc and
+CPARSER_RTL=own), objects from c-mini sources; then
+build-test.sh (also LEXER=lexer: phase 1 == phase 2 on tests/examples/*.cc, glibc
+and own), build-translate.sh (instr_tr.c == instr.cc, c-mini compiling itself,
+fixed point), make -C asm test test-asmlist, vystup.sh.
+
+
+30. 2026-11-06: DIRECTORY tests/ - EXAMPLES, TESTS AND OUTPUTS FOR STUDENTS
+===========================================================================
+
+  - test programs tests/*.c => tests/examples/*.cc (also expected/,
+    cmini/ownheaders/ and multi/; relative #include ../../cmini/ownheaders/containers.h),
+  - build-test.sh, build-translate.sh => tests/ (make test, test-lexer,
+    test-translate; the scripts switch to the main directory by themselves),
+  - vystup.sh split into tests/01-asm.sh ... with the common part
+    tests/common.sh; tests/vystup.sh (make vystup) runs them all and writes
+    _output/README.txt; each script can be run separately,
+  - _output/cmini-translate => _output/cmini-c,
+  Paths updated in cecko-makefiles.py (Makefile).
+  The results of make vystup are the same as before; make test, test-lexer,
+  test-translate passed.
+
+
+31. 2026-11-06: instr.cc WITHOUT CLASSES, cmini/instr.c AND THE c-mini COMPILER ENTIRELY IN C
+=============================================================================================
+
+instr.cc without the class AsmText: the generator always had only one instance, so
+  - 46 class members => static global variables (prog, vars, depth, ...),
+  - 178 methods => static functions; prototypes at the beginning (functions are
+    called in any order), default parameter values only in the prototypes,
+  - constructor => initState () (before each translation: empties the containers,
+    frees the program from the previous run, also after an error), destructor =>
+    freeState (); runInstructions / InstrLink call them,
+  - renamed: link => linkProg (collides with POSIX link from unistd.h),
+    libc => use_libc,
+  - the pointer current (only for sizeof in constValue) removed.
+  Converted by a script; the assembler text, the listing .lst, programs, objects
+  from c-mini sources are byte-identical to the previous
+  version.
+
+cmini/instr.c - instr.cc compiled by cmini.bin -C to C (6191 lines, without the
+prefix AsmText_ and this, readable C). The file is kept:
+    make -C cmini instr.c          regenerates it (also automatically when instr.cc changes)
+    tests/build-translate.sh       checks that it is up to date
+translate.c: a program with <unistd.h> gets #define _POSIX_C_SOURCE 200809L
+(fork, mkdtemp, fileno, setenv also with -std=c99).
+
+cmini/cmini.bin - the c-mini compiler entirely in C: instr_drv.c, decl.c, expr.c,
+stat.c, lexer.c, instr.c, cminirt.c + asm/libpasm.a (assembler in C), linked by
+$(CC) - it can also be compiled by TinyCC. tests/build-translate.sh compiles it with
+gcc -std=c99 -pedantic (instr.c also with -Wall -Werror) and compares it with the
+generator from g++: same text for the assembler and output of the programs
+tests/examples/*.cc, same object from instr.cc.
+
+lex.cc => lex.c: the only C++ elements were casts in function form (SYMBOL (0),
+char (n) => (SYMBOL) 0, (char) n); gcc -std=c99 -pedantic -Wall without warnings.
+The helper functions of lex.c (Store, Number, Select, ...) are static - in C they
+are no longer distinguished by C++ name mangling, and Store collided with
+asm/def.c. The cmini front-end is thus entirely in C (lex.c and lexer.c); C++
+remains only in test_instr.cc, instr.cc (c-mini subset, the C version is
+cmini/instr.c) and instr1.cc .. instr5.cc (asmjit).
+
+32. 2026-11-07: MORE TRANSLATOR SOURCES IN _output (cmini-*)
+============================================================
+
+_output/<generator>/{cmini,asm} contains the translator sources that the
+generator translates (tests/common.sh: sources).  Diagnostics of all sources
+by all generators led to fixes in the sources and in the translators:
+
+Sources (common subset of C handled by cparser and cmini.bin -C)
+  - unsigned => unsigned int (decl.h New, expr.c, asm/code.c casts),
+  - typedef struct X Y; in advance and Y * in a struct member (decl.c REPLAY,
+    DEFERRED, translate.c SCOPE) instead of struct X * in the member,
+  - asm/expr.h: const AsmNode * (asmlist.h) instead of const struct AsmNode *,
+    cminirt.h: cm_ClassInfo likewise,
+  - asm/def.c: zero, st0, st1 set by Init (InitConst) - no designators
+    .typ = ... (C99), extern ExprRec (not const),
+  - asm/inst.c: sets NoSegSet, NameSet as functions (constant expression
+    with offsets in a variable initialization),
+  - asm/asmlist.c: long instead of long long (LP64),
+  - cmini/ownheaders/stdint.h, cstdint: INT8_MIN .. UINT64_MAX (cparser),
+  - instr.cc: #include <ctype.h> (isalnum), push / pop (Register r).
+
+Translator fixes
+  - translate.c PutQuoted: a character after an octal escape sequence ('\032'
+    was previously '\032'032).
+
+Status (make vystup): cmini-c translates all 9 asm files.  cminirt*.c are
+runtime libraries (not translator sources).  Remaining:
+  - cmini-asm (cparser): asm/code.c, expr.c, inst.c, oth.c, asmlist.c -
+    structs passed by value (ExprRec, ResultRec, AsmOp) are not supported
+    by cparser (solved in chapter 33).
+
+
+33. 2026-11-07: cparser - STRUCTS BY VALUE; ASSEMBLER pasm TRANSLATED BY cparser
+================================================================================
+
+Generator instr.cc: a struct as a value (parameter, function result,
+initialization, assignment) is represented in an expression by its address
+(in rax):
+  - parameter T p: the caller passes the address of the argument, the callee
+    copies the struct into its frame in the prologue (rep movsq); the frame
+    has room for the argument address (inptr_offsets) and its own copy,
+  - result T f (): the caller passes the address of a temporary place in its
+    frame as a hidden parameter after this (ret_obj "$ret"; this stays in rdi
+    because of virtual methods); return copies into it and returns it in rax;
+    temporary places (allocTemp) are allocated while the body is generated -
+    the prologue sub rsp, N is fixed at the end of the function (AsmRemove /
+    AsmSetCursor),
+  - T x = y;  T x = f ();  x = f ();  f ().x;  (void) s - copy from an address
+    (codeStructAddr: variable, *p, p->x and the result of a call),
+  - structs with std::string, containers or a destructor passed by value are
+    rejected (a bitwise copy would break the reference counts) - error
+    "Structures with std::string, containers or destructor as values ...",
+  - a struct result through a function pointer is not supported yet.
+  Own convention of cparser (structs have a different layout than in gcc - an
+  item is 8 bytes), works between files compiled by cparser.
+  Tests test_instr.cc: sval param, ret, chain, args (structs on the stack
+  after 6 registers), method, ptr, string (error) - values verified by g++.
+
+Other fixes (found while translating the assembler with cparser):
+  - instr.cc emitBytes: a db line is at most 140 characters - pasm reads at
+    most LineLen = 160 characters, a longer string constant (over about 120
+    characters) lost its end and its terminating zero (previously silently),
+  - instr.cc externLabel: labels LC_... must not differ only in letter case
+    (pasm does not distinguish them: Abort from asm and abort from glibc =>
+    LCX<n>),
+  - instr.cc: byte arrays initialized by a list (unsigned char b [] =
+    { 0x7F, 'E', ... }) - static and local; (void) s for a struct,
+  - front-end: Object.extern_decl - extern const char T []; in a header and
+    const char T [] = ... in a file => external linkage (previously const =
+    internal linkage as in C++, RegTable was missing when linking),
+  - decl.c output -p: strchr, strrchr, strstr, strpbrk, memchr without a
+    prototype in extern "C" (C++ has them overloaded in <cstring>), always
+    #include <cstring>,
+  - cmini/ownheaders/: string.h, cstring - strncpy, strcat, strncat, strchr,
+    strrchr, strstr; stdio.h, cstdio - getc, ungetc; new ctype.h, cctype
+    (without the declaration strrchr was implicitly int => the pointer was
+    truncated to 32 bits),
+  - asm/asmlist.c: TextFmt (...) => TextNum, TextStr, TextStr2 (cparser cannot
+    define a function with a variable number of parameters, calling one is
+    fine),
+  - asm/inst.c: InsB - (void) m1.
+
+Result: all 9 files asm/*.c are translated by cparser; pasm translated by
+cparser (tests/build-translate.sh: pasm-asm.bin, _output/cmini-asm/asm/pasm.bin)
+passes asm/tests/run.sh (11 ok, against the Pascal version and nasm) and gives
+the same results as pasm from gcc in nasmcmp.py and nasm64cmp.py (227 / 6
+known, 208 / 25 / 5 / 0).
+
+
+34. 2026-11-07: FRONT-END ERRORS OF cmini VIA longjmp INSTEAD OF C++ EXCEPTIONS
+===============================================================================
+
+The cmini front-end is in plain C and must be buildable by TinyCC, which does
+not generate .eh_frame. A C++ exception thrown from showError (test_instr.cc)
+and caught in test_instr.cc would terminate (std::terminate) through C frames
+without .eh_frame.
+  - test_instr.cc: showError stores the message (error_msg) and jumps by
+    longjmp (error_jump) to the setjmp in runFile, runFiles and in the test
+    loop (instead of three try / catch); "generators -1 .. -5 need asmjit" also
+    goes through showError.
+  - cmini/Makefile (cecko-makefiles.py): .c sources instead of -fexceptions
+    with -fno-asynchronous-unwind-tables - objects without .eh_frame as from
+    TinyCC.
+  - tests/build-test.sh: the front-end (inp, out, lex / lexer, expr, stat,
+    decl) is compiled by gcc as C without .eh_frame (previously g++ as C++);
+    g++ only for test_instr.cc and instr*.cc.
+  - Verified: the old version (throw) with the front-end built this way ends
+    with "terminate called ... Aborted" on an erroneous program; the new one
+    prints the error and returns 1. build-test.sh (lex.c, LEXER=lexer,
+    ASMJIT=system), build-translate.sh, tests/02, 03, 13 without errors.
+  - longjmp skips the destructors of C++ frames between showError and setjmp
+    (memory leak, as with error ()); showError is called only from the
+    front-end in C, the generators with asmjit do not call it.
+
+
+35. 2026-11-07: BOOTSTRAP OF c-mini VIA TinyCC AND chibicc
+==========================================================
+
+tests/build-tcc.sh (make test-tcc; TCC=/opt/tinycc/bin/tcc, CHIBICC=chibicc):
+  - TinyCC (0.9.28rc) compiles cmini.bin (instr_drv.c, front-end, instr.c,
+    cminirt.c) and the assembler pasm (asm/*.c, library made with tcc -ar)
+    without changing the sources (only the warnings "function might return no
+    value" in asm/code.c, expr.c, oth.c).
+  - cmini from tcc: tests/examples (16 programs, plus objcopy.c from chapter
+    36) - the text for the assembler is the same as from cmini built by gcc,
+    the output = the reference.
+  - self-translation without gcc: cmini built by tcc translates its sources
+    file by file (-c), the objects are linked by tcc => stage 2; stage 2 the
+    same => stage 3; the text for the assembler of stages 2 and 3 is the same
+    (fixed point) and the same as from cmini built by gcc.
+  - chibicc: cmini.bin also (it looks for headers in ./include - it is run
+    outside the project root, -I/usr/include/chibicc; links with gcc); outputs
+    are the same.
+  - Fix in instr.cc: EXTRN only for the used external variables (label_objs) -
+    the object had an undefined symbol for every extern declaration (DisplayArray
+    from decl.h has no definition); GNU ld ignores unused symbols, tcc rejects
+    them.  cmini/instr.c regenerated (make -C cmini instr.c).
+  - Linking of programs from cmini calls gcc (CPARSER_CC); the test links the
+    stages directly with tcc.  cmini.bin (instr_drv.c) translates only one
+    source - a program of several files: -c for each file and the linker
+    separately.
+
+
+36. 2026-11-07: OBJECTS WITH DESTRUCTOR BY VALUE AND SLICING IN cmini
+=====================================================================
+
+cmini (tests/examples/objcopy.cc):
+  - instr.cc: an object with a destructor passed by value (parameter, T x = y)
+    - copy slot by slot (default copy member by member) when the class has no
+    std::string, containers or its own copy constructor (checkStructCopy,
+    hasCopyCtor); the copy of a parameter is destroyed in the function epilogue
+    (also on return), T x = y at the end of the block; T x = y for a class with
+    a constructor is a copy (not an error). A function result that is an object
+    with a destructor remains an error (temporary objects).
+  - instr.cc: assignment base = derived (slicing) restores the vptr of the
+    target according to its type.
+  - translate.c: parameters with a destructor in the scope of the function body
+    (AddDtorObj), slicing (x = * (Base *) & (d), x.vptr = &Base_vtable, x) - C99.
+  - objcopy added to build-test.sh, build-translate.sh, tests/common.sh,
+    build-tcc.sh; cmini/instr.c regenerated.
+37. 2026-11-08: cmini - SHARED FUNCTIONS OF translate.c AND instr.cc (sem.c)
+============================================================================
+
+Helper functions over the declaration tree (decl.h) that translate.c
+(translation to C) and instr.cc (x86-64 generator) each had separately are
+now in a new file cmini/sem.c - plain C as a front end (gcc, tcc, chibicc,
+c-mini itself), with the declarations in decl.h:
+  - SkipParens (SkipPar, skipParens), IsSequence, IsDictionary (isSeq, isDict;
+    isStr / isCont => IsStdString / IsContainer from expr.c), IsStringKey (KeyKind,
+    dictKind), ArrayElem (elemType), ElemClass, IsEnumConst, IsField (the condition
+    repeated 8 times in instr.cc), IsStaticMember, IsCtorDecl, IsDtorDecl,
+    CalleeType, CallReturnsRef; IsPolymorphic (expr.c) instead of polymorphic in
+    instr.cc, declaration in decl.h;
+  - NeedsCtor (cls, zero_fields), NeedsDtor (cls, zero_fields) - zero_fields: also
+    for strings and containers in fields (instr.cc), translate.c without them;
+    the result is stored in struct Type (need_ctor, need_ctor_z, need_dtor,
+    need_dtor_z);
+  - virtual method table: VtCount, VtGet (VtSlot - name, decl, intro, impl,
+    impl_cls), VtIndex - stored in struct Type (vt, vt_count, vt_done);
+    translate.c fills its slots from it (ComputeSlots + its own rule for the
+    inherited virtual destructor), instr.cc uses it instead of vtable /
+    vtableSlot / virtualDtorSlot.
+sem.c is listed in cecko-makefiles.py (FRONT_END, cmini.bin -C, cmini.bin) and
+in the scripts tests/02-cmini-asm.sh, build-test.sh, build-translate.sh
+(including self-translation of translate.c to C), build-tcc.sh. instr.c
+regenerated.
+Lines: translate.c 3595 => 3479, instr.cc 7349 => 7214, sem.c 206.
+Check: the x86-64 generator instr.cc gives byte-identical objects before and
+after the change (26 files - tests/examples, instr.cc, translate.c, front end);
+make test, test-lexer, test-translate (including the fixed point), test-tcc
+(tcc stage 2 and 3, chibicc), test-asm: all OK.
+Not unified (different purpose): constValue (instr.cc computes the value) and
+IsConstExpr (translate.c - constant expression in C), output functions, file
+reading, copying objects with containers (HasContainers / collectContMembers).
+
+
+38. 2026-11-10: .eh_frame IN THE pasm GENERATOR
+===============================================
+
+instr-pasm.cc: a_func_begin remembers the start of the function and the frame
+size; a_ret, after ret, generates the end (label) - for a function with a
+return. After the code, the EH_FRAME segment is generated: CIE (version 1,
+"z", CFA = rsp + 8, return address at CFA - 8) and an FDE for each function
+(CIE pointer, absolute address of the function start via R_X86_64_64, range
+as the difference of labels, CFA = rbp + 16 and saved rbp, rbx, r12 .. r15
+after the frame). asm/code.c: segment EH_FRAME => section .eh_frame (PROGBITS,
+SHF_ALLOC, alignment 8).
+
+Verification: readelf --debug-dump=frames (CIE/FDE with the correct offsets);
+a C++ exception thrown in an external function passes through one or two
+generated functions and is caught in C++ main; make -C asm test: all OK;
+GEN=pasm sh test-nasm.sh: 38 OK, 0 FAIL.
+
+
+39. 2026-11-10: FIXES WHEN CLOSING .eh_frame (cmini-c)
+======================================================
+
+instr-pasm.cc: the struct with the start and end of the function and the frame
+size (PasmFuncInfo) is moved outside the class - the translator could not
+handle structs declared in the class body (previously "unknown type name
+FuncInfo").
+
+a_ret stores the end of the function at every return, the last one counts -
+the FDE covers the whole function, including several returns (verified with an
+exception through a function with an early return and a call that throws only
+in the second part).
+
+tests/03-cmini-c.sh: when linking cmini.bin -C from cmini/*.c translated to C,
+the object sem.c was missing (IsCtorDecl, ElemClass, NeedsCtor, VtIndex, ...);
+it was added to the object list - cmini/cmini.bin -C now builds and is verified
+(same C as from the g++ version).
+
+Verification (make vystup): cmini-c 20/20.
+A C++ exception thrown in an external function passes through two generated
+functions and is caught in main (g++, -no-pie).
+
+
+40. 2026-11-10: GNU as GENERATOR (instr-as.cc) - .eh_frame from .cfi
+====================================================================
+
+New backend instr-as.cc (GasModule, like instr-nasm.cc) that writes text for
+the system GNU as: .intel_syntax noprefix, memory [rip + label], external
+variable via @GOTPCREL, calls via @PLT, sections .data / .rodata / .text,
+directives .p2align, .quad, .byte, .ascii, .zero (instead of NASM times).
+
+.eh_frame is not created by hand as in instr-pasm.cc, but by GNU as
+pseudo-instructions: .cfi_startproc at the start of the function,
+.cfi_def_cfa_offset 16 and .cfi_offset rbp, -16 after push rbp,
+.cfi_def_cfa_register rbp after mov rbp, rsp, .cfi_offset rbx/r12 .. r15,
+-(frame + 24 .. 56) after the pushes, in the epilogue after leave
+.cfi_def_cfa rsp, 8 and .cfi_restore, at the end .cfi_endproc. The state
+therefore changes after every step of the prologue - the unwinder knows the
+frame even inside the prologue (pasm describes only the state after the
+prologue). The object is PIE (gcc without -no-pie).
+
+Wiring: instr-asm.h (as_compile, as_test), cecko-makefiles.py (instr-as.cc,
+test-as, test-eh-frame), test-nasm.sh GEN=as, tests/common.sh keeps *.s files
+in _output.
+
+Verification: make test-as 38 OK, 0 FAIL; make test-eh-frame 2 OK (pasm and as:
+2 FDE, CFA rbp + 16, an exception thrown in an external function passes through
+both functions, including an early return). Other paths unchanged (make
+test-nasm, test-pasm, test-asmjit, test-asm64).
+41. 2026-11-11: COMPILER FOR ToaruOS — TOOLS IN toaruos-tools
+===================================================================
+
+Taken over from an earlier tree of the same tools: a standalone part
+of the ToaruOS work that does not depend on containers. QEMU is driven over the
+serial line instead of rootless podman, which does not start on this machine
+(§1.3, §1.4 in the other tree — that one stays
+outside this tree). It is not the source text of this tree's compiler, but
+tools, images and measured results; details are in
+toaruos-tools/README.md.
+
+The tools/ directory is not covered by the Makefile: cecko-makefiles.py has an
+explicit list of directories (asm, cmini), so the generator created
+nothing new and make subdirs and make test are unchanged.
+
+_preklad/ — compiler for ToaruOS (previously existed only as a tar)
+-------------------------------------------------------------------
+cmini-src.tar.gz was stored three times over (img/, push/ and a second copy of
+the tree). It was unpacked into toaruos-tools/_preklad/, because this is
+NOT a foreign library (that goes in _library/, e.g. _library/asmjit) but our own
+compiler, frozen in a form that can be built inside the guest: `sh build.sh` is
+enough — gcc from `msk install build-essential`, no make, no g++, no C++ sources.
+The tar is now generated from _preklad/ by the script mkpkg.sh (deterministically:
+sorted entries, owner 0:0, mtime epoch, gzip -n). Verified by unpacking and
+`diff -r` against the original tar: ONE file differs (README-toaru.txt — the
+section "Kde je zdroj" was added, i.e. "Where is the source"); the rest is
+byte-for-byte the same, the tar differs only in its wrapper.
+
+Regression check.sh (no QEMU, no network): ./check.sh => 21 OK, 0 failed
+------------------------------------------------------------------------
+(from chapter 42 on there are 25 checks — section T1b was added above `-T` in
+_preklad/)
+  T1 _preklad is built with plain gcc (cmini.bin, 429 304 B)
+  T2 cmini.bin compiles pokus.c and the result equals gcc (s=15)
+  T3 the images in probe/ and push/ satisfy the loader: ET_EXEC, >=1 PT_LOAD, no
+     PT_LOAD below 0x3F000000, no PT_INTERP / PT_DYNAMIC
+  T4 mkpkg.sh => tar; mkshare.sh => ext2 without 64bit / metadata_csum / dir_index
+     (ext2.ko in 2.3.2 handles only 32bit ext2 without htree), content visible
+     via debugfs
+  T5 toaru-vm.sh without a running VM: help, status, rejection of send
+  T6 the VM is not started by itself — QEMU holds a write lock on img/share.img
+
+The T3 rule was first written wrongly ("exactly 1 PT_LOAD") and the test then
+failed on the prober: gcc links the R / RE / RW segments separately, so the
+probe*.elf files have PT_LOADs 2..3. The loader condition is >= 1 PT_LOAD
+(README §3b); what matters is the address, not the count.
+
+A fix that the transfer uncovered: push/probe1.elf and push/probe2.elf were at
+address 0x400000, i.e. the address that causes SIGSEGV in the guest before the
+first syscall (measured 2026-11-10, README §5 point 1) — next to the working *b
+variants, so the next mkshare.sh would deploy an image that cannot run. The
+original files are now in probe/counterexample/ (they are exactly the contrasting
+proofs; the address is the only difference from the running sources), and push/
+contains images newly built by probe/build.sh at 0x3F000000. These are not the
+same bytes that ran — gcc may differ; the verified originals stay in
+probe/*b.elf, so the format check (T3) does not replace a repeated run in the
+guest.
+
+toaru-vm.sh: kills only its own processes
+-----------------------------------------
+The transferred work/qemu.pid and work/holder.pid were not kept: a PID from
+another boot may have been recycled to another process, and `./toaru-vm.sh stop`
+would kill it. The script now stores, for each PID, also /proc/PID/cmdline in
+work/*.cmd; `stop` kills only a process whose cmdline matches, and a foreign
+process with the same PID is left alone.
+
+What this tree cannot do yet (watch §2b and §5b in the tools/ README)
+---------------------------------------------------------------------
+(This paragraph applied at the end of chapter 41; the first two points were
+closed by chapter 42 — `-T` has been transferred into `asm/code.c` and into
+`_preklad/`.)
+The ToaruOS target (`pasm -e -T`, base 0x3F000000) is in the second tree:
+asm/prod.cc, asm/pasm.cc, asm/def.cc. This tree has no asm/prod.{c,cc} at all,
+and its only base is asm/code.c:716 `#define ElfBase64 0x00400000`. Consequences:
+
+  * the finished push/toaru64.bin (262 B) is here and check.sh checks it, but
+    probe/toaru64.asm cannot be regenerated here — -T is missing;
+  * _preklad/asm/ is the same state without -T, so even a compiler built inside
+    the guest does not yet produce a ToaruOS image — it emits an ELF at 0x400000,
+    which crashes;
+  * also belonging here are the gaps of cmini.bin -C (§6 README tools/):
+    [[noreturn]], [[maybe_unused]], the missing `typedef enum X X;`.
+
+What next: transfer -T (asm/prod.cc) into this tree too — then the path
+c-mini => pasm => ELF for ToaruOS is closed directly on the host. (Done in
+chapter 42.)
+
+42. 2026-11-11: -T (ToaruOS TARGET) TRANSFERRED INTO THIS TREE TOO
+==================================================================
+
+Task: `pasm -e -T` (ELF64 with base 0x3F000000 instead of 0x400000) had so far
+existed only in the second tree, where image production
+is split into asm/prod.cc. This tree has the assembler mostly in plain C
+(asm/libpasm.a, chapter 29) and has no prod.{c,cc} at all.
+
+Decision: transfer the BEHAVIOUR, not the file split. A new file would need a
+change to the list of sources in cecko-makefiles.py (and thus to the generated
+Makefiles), whereas -T needs only what is already in the Makefile:
+
+  asm/code.c:739    #define ElfBase64Toaru  0x3F000000
+                    in the comment and the measurement: at 0x400000 SIGSEGV
+                    before the first syscall; 0x3F000000 is accepted by their
+                    link.ld and by the static ld.so as well
+  asm/code.c:823    if (toaru && ! Elf64) Abort (ToaruUse64);
+                    ElfBase = (toaru && Elf64) ? ElfBase64Toaru : (Elf64 ? ... : ...)
+  asm/def.h:272     extern bool toaru;   + ToaruUse64 (347) added to the list of errors
+  asm/def.c:74      bool toaru;   + message "ToaruOS target requires USE64
+                    segments" (def.c:664)
+  asm/pasmlib.h:43  #define PASM_TOARU  32   (flag for PasmAssemble,
+                    PasmAssembleText and PasmAssembleList — used by both pasm and cmini)
+  asm/pasmlib.c:39  toaru is also set from the environment PASM_TARGET=toaru — a
+                    program without arguments (cmini => PasmAssembleList) does not
+                    get -T
+  asm/pasm.c:91     case 'T', help; -T makes sense only with -e (OMF and ET_REL have
+                    no base either), otherwise Usage => return value 2
+
+The Linux base (0x400000 for ELF64, 0x08048000 for ELF32) does not change; -T
+changes ONLY the address — the format stays ELF64 ET_EXEC without PT_INTERP and
+PT_DYNAMIC — i.e. the loader requirements that were measured (chapter 41, §3b of
+README tools/).
+
+Test make test-toaru (new in test-asm)
+--------------------------------------
+Four assertions, all of which pass:
+
+  * `pasm -e -T toaru64.asm` => image BYTE FOR BYTE identical to
+    toaruos-tools/push/toaru64.bin, i.e. to the one that really ran inside
+    ToaruOS on 2026-11-10. The image from probe/toaru64.asm can thus be
+    regenerated in this tree, and the result is the one verified when run in the
+    guest;
+  * `pasm -e` without -T => lowest LOAD still 0x0000000000400000;
+  * `-T` without `-e` => help and return value 2;
+  * `-T` with `USE32` (asm/tests/hello32.asm) => error "ToaruOS target requires
+    USE64 segments".
+
+Rest of the regression: `make -C asm test` => "all tests passed";
+`make test-nasm` (nasmcmp.py) => OK 230 BAD 3 (of which 6 are known), exit 0, i.e.
+no UNEXPECTED difference against nasm; `make test-nasm64` => OK 209 EQUIVALENT 25
+KNOWN 4 ERRORS 0. Before and after the change, md5 sums of all outputs from
+asm/tests were also collected — identical, so the Linux path did not move.
+
+Package side for the guest: _preklad/
+-------------------------------------
+As long as the image was made on the host, the absence of -T did not matter. If
+we want the image inside the guest, a package without -T produces an ELF at
+0x400000, which crashes. Therefore:
+
+  * asm/{def.c,def.h,pasmlib.c,pasmlib.h,pasm.c} copied from this tree — BEFORE
+    the change they were byte-identical, so the rewrite brought nothing except -T;
+  * asm/code.c could not be copied whole (this tree also has the .eh_frame section
+    and a longer comment), so it got only two pieces: the definition of
+    ElfBase64Toaru and the base selection in OpenElf; .eh_frame is not in the
+    package;
+  * build.sh has a step 3, so besides cmini.bin it builds pasm.bin too — inside
+    the guest then `./pasm.bin -e -T my.asm` is enough;
+  * mkpkg.sh leaves pasm.bin and obj/ out of the package; the tar is still
+    deterministic: push/cmini-src.tar.gz 399 063 B, 110 entries, md5
+    efb60ce13996ee8bbb2276e5455182bf (the number is a state, not a checksum — it
+    changes with every change in _preklad/; the current one is printed by
+    ./mkpkg.sh; two runs in a row give the same tar);
+  * check.sh has a new section T1b: build _preklad => pasm.bin, `-e -T` must give
+    the same image as push/toaru64.bin, `-T` without `-e` => 2, without -T =>
+    0x400000. The regression now reports 25 OK, 0 failed, 1 skipped (VM start).
+
+What remains unverified: RUNNING inside ToaruOS. Byte equality is proven on Linux;
+that gcc 10.3 from `msk install build-essential` builds pasm.bin and that the
+guest runs its image has not yet been repeated in the guest by anyone. Further,
+_preklad/ lacks .eh_frame, and the gaps of cmini.bin -C (§6 README tools/) apply:
+[[noreturn]], [[maybe_unused]], the missing `typedef enum X X;`.
+
+
+43. 2026-11-11: ASSEMBLER pasm - WINDOWS: RUNNABLE PE (-w) AND COFF x64 OBJECT (-m)
+===================================================================================
+
+    pasm -w prog.asm   =>  prog.exe   PE32 (USE32) / PE32+ (USE64), imports from
+                                      DLLs directly in the image (JMP [IAT] thunks, .idata)
+    pasm -m prog.asm   =>  prog.obj   COFF x64 object for link / mingw
+
+Both are variants of the existing ELF outputs (-w like -e: addresses substituted
+directly, fixed ImageBase 400000h; -m like -c: the same relocations, a different
+writing), so a new section in asm/code.c and switches in pasm.c / pasmlib
+(PASM_PE, PASM_COFF) sufficed. The import is written as
+EXTRN X: NEAR 'msvcrt.dll!printf'  (without "dll!" kernel32.dll), and __imp_name is
+an IAT entry — just as with the linker, so the same source can be assembled both
+with -w and -m. Details in asm/README.txt (WINDOWS ...).
+
+Tests: make -C asm test, section 3 — tests/win64.asm (-m == nasm -f
+win64 + linker: instructions, data, imports; -w: imports), tests/win32.asm
+(PE32); under wine a run of win64 (-w), win64 (-m) and nasm with the same output
+and exit code 35, win32 with code 7. _output/asm/examples: win64.exe, win64.obj,
+win32.exe and the output under wine (tests/01-asm.sh).
+
+Fix in cmini (found in the process): tests/02-cmini-asm.sh — compiling the sources
+asm/*.c with c-mini (cmini/test_instr_lexer.bin) ended with "Assertion failed in
+function Sequence (index out of range)" — likewise with older pasm sources, so the
+bug was in cmini, not in asm. Cause: the data have C layout (char
+1, short 2, int 4 bytes, arrays without gaps), but staticInit in cmini/instr.cc
+still put every scalar and every array element into its own 8-byte slot (step
+typeCount, offset member_offsets / 8). const char RegTable [None + 1][4 + 1]
+(asm/reg.h, def.c) has 375 bytes = 47 slots, but the initialization wanted 75 =>
+out of range. While there were 31 registers (without x86-64), the table was just
+silently written to wrong places. Likewise int a [5] = { ... }, short a [3], and
+structs with char / int members failed.
+
+Now: staticInit computes the offset in bytes (array element typeBytes, member
+offset from member_offsets); a scalar is written byte by byte by staticBytes into
+the places it occupies (char, short, int, float, long, double; bool => 0 / 1);
+addresses (char *, std::string, function pointers) use staticOffset as a whole,
+aligned slot "label offset". cmini/instr.c regenerated (make -C cmini). Verified:
+a test program with arrays int / short / long / float / char [n][m] /
+unsigned char, structs with char, int, short, double, float, bool and const char *
+— the output of test_instr_lexer.bin and cmini.bin is identical to gcc; pasm
+compiled by c-mini passes asm/tests/run.sh in full (including the Windows section
+under wine).
+
+
+44. 2026-11-11: toaruos-tools - GENERATED FILES IN _build, _preklad => guest-src
+======================================================================================
+
+Downloaded and generated files are in toaruos-tools/_build/ (cecko-files.py
+does not back them up, unlike other _build directories); the sources stay outside:
+
+    before                              now
+    img/toaruos-2.3.2.iso (downloaded)  _build/download/toaruos-2.3.2.iso
+    img/share.img (mkshare.sh)          _build/share.img
+    push/ (mkpkg.sh, probe/build.sh)    _build/push/
+    work/out.log (toaru-vm.sh)          _build/work/
+    probe/probe1.elf, probe2.elf        _build/probe/  (probe/build.sh)
+    _preklad/asm/pasm.bin, libpasm.a    _build/guest-src-prebuilt/asm/
+    _preklad/                           guest-src/  (compiler sources built inside
+                                        the ToaruOS guest - nothing generated, no _)
+    push/toaru64.bin (reference)        probe/toaru64.bin (byte-identical; next to
+                                        the verified probe1b.elf, probe2b.elf)
+    _preklad/nova-generovat/            guest-src/regenerate/
+    guest-src/ (manual snapshot)        guest/ (5 own files) + _build/guest-src/
+                                        (mkguest.sh: copies of asm/, cmini/,
+                                        cmini/ownheaders/ from the tree (in the
+                                        package include/) + guest/, always current;
+                                        old snapshot in _build/guest-src-2026-11-11/)
+
+Changed: check.sh, mkpkg.sh (package without pre-built pasm.bin and libpasm.a,
+the LEAN option removed — 235 556 B, 108 entries), mkshare.sh, toaru-vm.sh,
+probe/build.sh, cecko-makefiles.py and asm/Makefile (make test-toaru compares
+with probe/toaru64.bin), toaruos-tools/README.md (overview + §0a),
+guest-src/README-toaru.txt. Chapters 41 and 42 above describe the state at the
+time of their creation (_preklad/, push/).
+
+Verified: toaruos-tools/check.sh 25 OK, 0 failed, 1 skipped (VM start);
+make -C asm test-toaru OK; probe/build.sh and mkpkg.sh write to _build/.
+
+Addendum (same day): guest-src is now generated. The snapshot had only 5 own
+files (build.sh, pokus.c, README-toaru.txt, regenerate/), the rest were copies of
+the tree, 19 of them outdated. The own files are now in toaruos-tools/guest/;
+the package is assembled by the new mkguest.sh into _build/guest-src/ (_build, not
+_import — it is derived from our tree, not foreign code); mkpkg.sh calls it
+itself, check.sh T1 does too. Verified: check.sh 27 OK; in the guest (QEMU) the
+package from the current tree is built, and the pasm.bin in it makes working
+-e -T and -c (+ gcc). Unresolved and older than the move: cmini.bin built in the
+guest crashes (Segmentation fault) when compiling pokus.c — likewise from the old
+snapshot; on Linux the same sources work.
+
+
+45. 2026-11-11: pasm FOR ToaruOS - .o AND RUNNABLE PROGRAMS VERIFIED IN THE GUEST
+=================================================================================
+
+Verified directly in QEMU (ISO 2.3.2, gcc 10.3 from msk install build-essential),
+in detail in toaruos-tools/README.md §5c:
+
+  - pasm -c (ELF64 object): libc64.o, sse64.o from asm/tests — in the guest
+    gcc x.o -o x, run and output identical to Linux. Nothing special is needed
+    for .o.
+  - pasm -e -T: data before code — write works, but open on a path below e_entry
+    returns an error (kernel, PTR_INRANGE). Fix in asm/code.c (and guest-src/asm):
+    if a segment lies below the entry point, a JMP start is inserted after the
+    header and e_entry = 0x3F000078. probe/toaru64.asm (code first) is unchanged —
+    byte-identical with the image that ran on 2026-11-10. New probe/openpos.asm.
+  - pasm and cmini built IN THE GUEST (guest-src, sh build.sh) could not be
+    compiled: gcc in ToaruOS predefines the macro toaru = 1, and "bool toaru;"
+    from chapter 42 expanded to "bool 1;". The variable was renamed to ToaruTarget.
+    Then pasm.bin in the guest compiled openpos (-e -T) and libc64, sse64 (-c + gcc),
+    and everything runs.
+  - toaru-vm.sh: stop did not kill the FIFO holder (the cmdline was saved before
+    the process had started sleep) — it is now saved only after QEMU has started.
+
+Tests: make test-toaru (now 5 checks, incl. e_entry = JMP), toaruos-tools/
+check.sh T1c. Summary of everything that succeeded in ToaruOS (also from
+2026-11-10) and what did not: toaruos-tools/README.md, section "Shrnuti: co
+se v ToaruOS povedlo" ("Summary: what succeeded in ToaruOS"). While verifying, I
+accidentally assembled probe/toaru64.asm directly in probe/ (pasm writes next to
+the source) — the result was byte-identical with the original (md5 1d460b30...,
+and the copy in the other tree); the file was restored, including its date.
+
+
+46. 2026-11-11: cmini -T - PROGRAMS IN C WITH ToaruOS SYSCALLS
+==============================================================
+
+    cmini/cmini.bin -T -o prog.bin prog.c      (or PASM_TARGET=toaru, without -I cmini/ownheaders)
+
+  - cmini/instr_drv.c: switch -T => InstrToaru (cmini/instr.h); instr.cc
+    toaruTarget () = InstrToaru, or the environment PASM_TARGET=toaru (the same
+    thing pasm reads).
+  - A standalone program with its own runtime library (as CPARSER_RTL=own),
+    pasm -e with PASM_TOARU (image from 0x3F000000, JMP start before the data —
+    chapter 45). With -c (object for the guest's gcc and libc) unchanged.
+  - RTL_TOARU (instr.cc): 11 groups which, when printing RTL_CODE, replace the
+    lines with syscalls (textLinesToaru; if not all 11 match => compiler error):
+    write 1 => 4, exit 60 => 0, time 201 => gettimeofday 6, brk 12 => sbrk 10
+    (increment by pages, returns the old end), getpid 39 => 9, kill 62 => 37.
+    The numbers come from /usr/include/syscall_nums.h on the host, the behaviour
+    of sbrk and the start of the heap from the source of kernel v2.3.2
+    (kernel/sys/syscall.c, kernel/misc/elf64.c), and measurement.
+  - ToaruOS does NOT zero pages from sbrk (calloc (300000, 1): 126 108 nonzero
+    bytes); Linux brk does, and the cmini library relies on that => the ToaruOS
+    version zeroes new pages (rep stosb).
+
+Verified in the guest (QEMU, toaruos-tools/guest-run.sh): toaruos-tools/
+probe/toaruc.c (list of 20 000 elements, calloc 300 000, time) and tests/examples
+dama, jezdec, avl, classes, strings, defaults, chars, dtors — output byte-identical
+with the same program on Linux (CPARSER_RTL=own). Without a VM: toaruos-tools/
+check.sh T2b (28 OK). Details in toaruos-tools/README.md §5d. Programs are
+compiled on the host — cmini.bin built in the guest still crashes (chapter 44).
+
+
+47. 2026-11-11: tests/15-toaruos.sh - QEMU WINDOW WITH ToaruOS AND COMPILED PROGRAMS
+====================================================================================
+
+    sh tests/15-toaruos.sh             compile, run in QEMU without a window, then the QEMU WINDOW
+    TOARU_GUI=0 sh tests/15-toaruos.sh without a window (as tests/vystup.sh runs it)
+
+  1. tests/examples (16 programs; floats and pointers need sqrt, qsort from glibc)
+     are compiled by cmini.bin -T into _output/toaruos/examples: p.asm, p.lst, p.bin.
+  2. If qemu-system-x86_64 and the ISO (toaruos-tools/_build/download) are
+     present: ToaruOS runs without a window (toaru-vm.sh with its own WORK and an
+     empty disk), the programs are served via python3 -m http.server and fetched,
+     and the output INSIDE ToaruOS => p.out; the pattern is the same program with
+     its own library on Linux (CPARSER_RTL=own) — this verifies ToaruOS, not the
+     library. Result: output = pattern for 15 of 16. objcopy differs even on Linux:
+     printf of the own library reads only 5 arguments from registers (print has 6),
+     and %f is missing as well (dictionary, dyncast, sequence therefore differ from
+     tests/examples/expected even on Linux).
+  3. Run separately with graphics (DISPLAY): QEMU window (-display gtk) with the
+     ToaruOS desktop. On the serial line, login does not run in graphics mode, so
+     it is controlled by keyboard via the QEMU monitor (socket, sendkey): Esc closes
+     the welcome, Ctrl+Alt+T opens a terminal (user local), and into it type
+         fetch http://10.0.2.2:8015/run.sh -o /tmp/run.sh; sh /tmp/run.sh
+     run.sh (in _output/toaruos/examples) downloads the programs to /tmp/prog, lists
+     them and runs classes.bin; then the student runs on their own (cd /tmp/prog;
+     ./dama.bin). Closing the window ends the script (the HTTP server and the
+     working directory are cleaned up too). Verified with TOARU_DISPLAY=none and a
+     screenshot via the monitor (screendump).
+
+Changed in toaruos-tools/toaru-vm.sh: the QEMU cmdline was saved right after
+& (while still a bash subprocess), so stop did not recognise QEMU as its own and
+left it running (an orphaned VM from the first run of the test); it is now saved
+only after exec. QEMU also once ignored SIGTERM — stop sends SIGKILL after 3 s.
+tests/vystup.sh runs the scripts with TOARU_GUI=0.
+
+
+48. 2026-11-11: cmini COMPILER DIRECTLY IN ToaruOS (LIBC DIFFERENCES OF ToaruOS)
+================================================================================
+
+cmini.bin built in the guest (package mkguest.sh / mkpkg.sh, sh build.sh, gcc 10.3
+from msk install build-essential) crashed in the libc mode and on "compile and
+run" (chapter 44). Causes — four differences of the ToaruOS 2.3.2 libc against
+glibc, each measured by a small program with the guest's gcc:
+
+  - fflush (NULL) => Segmentation fault. cmini/instr.cc (runTool, execute) before
+    fork: fflush (stdout); fflush (stderr);
+  - printf ("%-7s", "init_array") => "init_ar": a width on %s truncates the string
+    (in C the width is only a minimum; numbers %5d are correct). asm/asmlist.c
+    printed the first column with "%-7s " => text "init_ar segment" (and phase 2
+    reads directives from the text) => section .data.init_ar instead of
+    .init_array => constructors of global objects were not called. New TextPad
+    (padding with spaces) instead of %-8s / %-7s.
+  - dprintf is missing => linking of every program (RTL_LIBC_EXTERNS) failed.
+    RT_ASSERT, RT_PURE: fflush (stdout) and write (2, ...) + strlen; the text of
+    the messages is the same ("Assertion failed in function f"). At the same time
+    fflush (NULL) was removed there.
+  - .fini_array is not called at exit (not even for a program from gcc), atexit is
+    (in reverse order). CINIT in libc mode registers atexit (CFINI); the fini_array
+    segment is not generated; order as before (CFINI registered before main =>
+    runs after the handlers from main).
+  - printf ("%f") without default precision (2.5 instead of 2.500000) — not fixed,
+    libc.
+
+Result in the guest (toaruos-tools/guest-cmini.sh): cmini.bin compiles all
+18 programs from tests/examples (-I cmini/ownheaders, ToaruOS libc), 14 have output
+identical with the pattern (even btree with 764 lines, classes with constructors
+and dtors with destructors of global objects); floats, pointers, sequence,
+dictionary differ only in %f. Modes -o, compile and run (main returned N), -T and
+assert work. On Linux, no change in outputs (regression below). Details in
+toaruos-tools/README.md §5e.
+
+
+49. 2026-11-11: LINKER IN asm/code.c - STATIC LINKING WITH THE ToaruOS libc ON THE HOST
+=======================================================================================
+
+    toaruos-tools/mklibc.sh                    crt0.o crti.o crtn.o libc.a from the ISO
+    PASM_LIBDIR=.../_build/toaru-lib asm/pasm.bin -x prog.asm   => prog.bin
+    cmini/cmini.bin -L .../_build/toaru-lib -I cmini/ownheaders -o prog.bin prog.c
+    sh tests/16-toaruos-libc.sh                      _output/toaruos-libc
+
+A program for ToaruOS linked already on the host — inside ToaruOS neither gcc
+(package build-essential) nor ld.so is needed, the basic system from the ISO is
+enough.
+  - libc: the ISO contains in the ramdisk (fat.img => ramdisk.igz => tar)
+    /lib/crt0.o, crti.o, crtn.o and the static libc.a (166 objects, incl. sqrt and
+    qsort).
+  - asm/code.c, section LINKER (LinkToaru; pasmlib.h PasmLink, pasm -x, cmini -L
+    => instr.cc linkToaru instead of gcc): ELF64 objects + archives (it reads them
+    itself — libc.a has two members math.o), takes members as long as it resolves
+    undefined symbols; relocations 64, PC32, PLT32, 32, 32S, PC64, GOTPCREL(X) and
+    REX_GOTPCRELX (own GOT); symbols __init_array_start / end,
+    _GLOBAL_OFFSET_TABLE_, __bss_start, _edata, _end; output: a single PT_LOAD from
+    0x3F000000: header, .text (crt0 first => _start = 0x3F000080), .init, .fini,
+    .rodata, .data, the constructor array (first libc — _libc_init from .ctors
+    prepares stdio — then the program), GOT, .bss.
+  - Found: a program from GNU ld (-static -Ttext-segment=0x3F000000) hung in
+    ToaruOS — .rodata in the first segment below .text, the kernel refuses pointers
+    below e_entry (chapter 45), and write in libc repeats the error; ld -N (text
+    first) and our linker both run. The static /lib/ld.so of ToaruOS also has _start
+    at the beginning.
+  - Start without ld.so: crt0 => pre_main (libc.a) => constructor array, _init,
+    main, exit (atexit — destructors of cmini, chapter 48).
+  - tests/16-toaruos-libc.sh: 18 programs from tests/examples (cmini -L, including
+    floats and pointers) and asm/tests libc64, sse64 (pasm -x) in a clean ToaruOS
+    in QEMU: 15 identical with the pattern, 5 only printf %f of the ToaruOS libc.
+    tests/15 and 16 start the VM up to three times (ToaruOS occasionally hangs at
+    startup).
+
+
+50. 2026-11-11: cmini AND pasm FOR ToaruOS BUILT ON THE HOST (tests/15, 16)
+===========================================================================
+
+    toaruos-tools/mkcross.sh   => _build/push/cecko-toaru.tar.gz (+ cmini-src)
+
+Cross-compilation: host gcc with the ToaruOS headers (mklibc.sh pulls also
+/usr/include out of the ISO), -nostdinc, without __linux__, with __toaru__ / toaru,
+-fno-pie -fno-stack-protector -fcf-protection=none (implicit declarations are only
+a warning — the ToaruOS headers do not declare e.g. chmod), linking with the new
+mode pasm -k (linker only, asm/pasm.c) against the ToaruOS libc.a. Sources: cmini
+and pasm from mkguest.sh. Result (cmini.bin 390 kB, pasm.bin 176 kB, cminirt.o)
+runs in a clean ToaruOS — without gcc and without ld.so: cmini -T, cmini -L /lib
+(libc and crt from /lib of every ToaruOS, pasm linker), pasm -x.
+
+tests/15-toaruos.sh and 16-toaruos-libc.sh (common part tests/toaruos-common.sh)
+send into the running VM, besides the examples, cecko-toaru.tar.gz (=> /tmp/cecko,
+README.txt with instructions) and the source cmini-src.tar.gz (=> /tmp/src; the
+guest compiles it with gcc from msk install build-essential — chapters 44, 48;
+network), and verify 3 steps inside the guest: cmini -T dama.c, cmini -L /lib
+classes.c, pasm -x libc64.asm — all identical with the pattern
+(_output/toaruos*/cecko/guest-*.out; test 15: output = pattern 19, 16: 19 + 5 only
+%f). In the window (test 15), run.sh downloads them and prints the instructions;
+verified also manually in the terminal of the window (cmini -T jezdec.c => O.K.).
+The archives are not copied into _output — a second HTTP server from
+toaruos-tools/_build/push serves them.
+
+
+51. 2026-11-11: WALLPAPERS FOR ToaruOS FROM GitHub (get-wallpapers.sh, fetch-tls)
+=================================================================================
+
+toaruos-tools/guest-scripts/get-wallpapers.sh — in the package
+cecko-toaru.tar.gz (mkcross.sh), in ToaruOS /tmp/cecko/get-wallpapers.sh: it
+downloads hanging.jpg (v2.2.0), nagoya.jpg and flowers.jpg (v2.1.0) from
+raw.githubusercontent.com into /usr/share/wallpapers. The base system's fetch can
+only do HTTP ("no tls backend"), and GitHub redirects to HTTPS => first
+echo y | msk install fetch-tls (msk over HTTP, confirmation from the pipe), then
+fetch -o ... https://...; sizes identical with GitHub. tests/15 and 16
+(tests/toaruos-common.sh) run the script after the compilers and print
+"wallpapers ... 3 / 3" (TOARU_WALLPAPERS=0 turns it off; without network the test
+does not get worse). In the window of test 15 the run.sh help reads: sudo sh
+/tmp/cecko/get-wallpapers.sh, password local — verified in the window (user local).
+
+
+52. 2026-11-14: include/ -> cmini/ownheaders/; test 02 - cmini-pasm-ownlib and cmini-pasm-libc
+==============================================================================================
+
+The include/ directory in the root (simplified glibc headers for the cparser
+preprocessor, containers.h for g++) has been moved to cmini/ownheaders/. Reason:
+only cparser reads these headers; g++, chibicc and TinyCC get the path through
+the -I / -iquote switches and nothing is overridden (chibicc used to look for
+./include in the working directory).
+
+  - references: -I / -iquote in tests/*.sh, cecko-makefiles.py (Makefiles
+    regenerated; cmini/Makefile), cmini/instr.cc
+    (#include "ownheaders/containers.h"), tests/examples/*.cc and
+    shapes.h (relative paths), documentation. cmini/instr.c regenerated -
+    byte-for-byte identical.
+  - toaruos-tools: the package (_build/guest-src, mkguest.sh, mkcross.sh)
+    still carries the headers under the name include/ - they are copied from
+    cmini/ownheaders/, so the scripts running inside the package (guest-cmini.sh,
+    check.sh, guest/*) did not change. /usr/include is not changed.
+
+Test tests/02-cmini-asm.sh now has two program variants:
+  - cmini-pasm-libc: examples/ - default CPARSER_RTL: pasm -c, gcc -no-pie, glibc
+    (22 runnable, as before);
+  - cmini-pasm-ownlib: examples-ownlib/ - CPARSER_RTL=own: own runtime library in
+    cmini/instr.cc (RTL_DATA, RTL_CODE), pasm -e, standalone ELF64 without gcc and
+    glibc. The test checks that the ELF has no DT_NEEDED (readelf -d). Programs:
+    dama, jezdec, avl, classes, strings, defaults, chars, dtors.
+  - Before the run, cmini is built (make -s -C cmini), just as tests/01-asm.sh
+    builds asm. In total 30 of 30 runnable programs match the pattern (22 + 8).
+
+Verification: make all, make test, make test-lexer test-translate,
+make test-tcc (TinyCC and chibicc, without error), tests/01-asm.sh,
+tests/02-cmini-asm.sh, tests/03-cmini-c.sh.
+sh tests/vystup.sh: all identical except objcopy (39 of 40; the output differs
+in the counts of live objects and copies,
+objcopy.c does not use the moved header; the cause was not verified).
+Without QEMU and without the ToaruOS ISO (toaruos, toaruos-libc) only
+translation, as vystup.sh reports.
+
+Not covered: the TinyCC-compiled cmini.bin still links glibc (cminirt.c uses
+calloc, printf). A variant without libc in TinyCC would require that the runtime
+part of cmini (cminirt.c) also works without glibc - that is a separate step.
+
+Note: 02-cmini-asm.sh initially gave 21 matches out of 22 runnable; after the
+changes 22 of 22 (libc variant). The cause of the change was not verified.
+
+
+53. 2026-11-14: tests/examples/*.c -> *.cc; pasm help text
+==========================================================
+
+The examples in tests/examples/ (20 files: avl, btree, chars, classes, dama,
+defaults, dictionary, dtors, dyncast, floats, heapsort, intmodel, jezdec,
+objcopy, pointers, preproc, quicksort, sequence, strings, veze) have the
+extension .cc: they contain C++ constructs (classes, new, virtual, dynamic_cast,
+::) which gcc -x c does not accept, and cmini accepts them as C-mini (a subset of
+C++, as instr.cc is). Outputs of the generators (C, .asm) remain .c. The
+directory tests/examples/multi/ (main.c, shapes.c, util.c - util.c is gcc) and
+tests/examples/include/ are unchanged. Program names and expected/*.txt stay the
+same. Older chapters give file names without the extension or with .c - they
+correspond to today's .cc files.
+
+Updated references: tests/*.sh (common.sh src_of, build-*.sh, 02, 03, 12, 13, 15,
+16, toaruos-common.sh), dump-samples.sh (src=../tests/examples/...cc),
+toaruos-tools (mkcross, guest-*.sh, en/*), documentation.
+
+Verification: make test, test-lexer, test-translate, test-tcc,
+tests/01-asm.sh, 02-cmini-asm.sh (30/30), 03-cmini-c.sh (20/20), tests/vystup.sh
+(the only difference remains objcopy 39/40, as in chapter 52).
+
+asm/pasm.c: the help text (Usage) is reorganized: -e -l -c -T -x -w -m -o -i.
+Behavior unchanged; without switches pasm now does -e (the default; previously
+-o -l). The test asm/tests/run.sh has an explicit -o -l for "error" to keep its
+former meaning.
+
+
+54. 2026-11-14: cmini.bin = translate.bin + generator (switch -C); -v, -h, usage
+================================================================================
+
+cmini/translate.bin no longer exists: one program cmini.bin has two modes (usage
+in cmini.bin -h):
+
+  - cmini.bin -C [-I] [-iquote] [-D] [-o out.c] file.cc - translation to C
+    (translate.c), without -o to stdout; previously translate.bin;
+  - cmini.bin [-v] [-I] [-iquote] [-D] [-o prog] [-c obj.o] [-T] [-L dir] file.cc
+    - generator instr.cc, assembler pasm (default mode, previously cmini.bin);
+    -v prints the assembler listing (prog.lst) to stdout, -C combined with
+    -v/-c/-T/-L is rejected.
+
+Sources: translate.c has the I/O and API (TrStart, TrTranslate, TrIncludeDir,
+TrDefine) for cmini.bin; main and the options are in instr_drv.c (its own I/O
+removed). Makefile: cmini.bin = instr_drv.c translate.c front-end instr.c
+cminirt.c libpasm.a. instr.c is not regenerated at every make (cycle cmini.bin ->
+instr.c -> cmini.bin): regenerate with `make -C cmini regen-instr` (cmini.bin -C
+instr.cc => instr.c; result identical to the earlier translate.bin, verified byte
+by byte).
+
+References: tests and scripts call ./cmini/cmini.bin -C (tests/02, 03,
+build-translate, build-tcc - tcc builds cmini.bin, guest/regenerate).
+tests/02: self-translation of cmini.bin (pasm) => cmini.bin -C translate.c
+identical to the gcc version.
+tests/build-translate: ref.bin (g++), new.bin (C), translate-c.bin (C) - they
+contain translate.c.
+tests/build-tcc: CMINI_SRC contains translate.c.
+
+Verification: make all, make test, test-lexer, test-translate (42 OK), test-tcc
+(10 OK), tests/01-asm, 02-cmini-asm (30 of 30 identical; runnable 29,
+since translate.bin no longer exists), 03-cmini-c (20/20).
+
+
+55. 2026-11-14: cmini - bug in instr.cc (depends on ASLR) and switch -S (saving the .asm)
+=========================================================================================
+
+Symptom: cmini.bin -c instr-pasm.cc occasionally (about 1 run in 10) failed with
+"pasm: prog.asm(10465,1) Error: Value is out of range". The text path
+(CPARSER_ASMLIST=text) failed too (1 in 40); -C (translation to C) was
+deterministic. The results depended on ASLR (2 of 20 with ASLR, 0 of 20 with
+setarch -R).
+
+Cause: use after free (valgrind: Invalid read in structBytes). In the function
+structBytes (instr.cc) there stood
+    vptr_offsets [type] = vptr_offsets [type->base];
+Dictionary (cminirt.c) rehashes and frees the old value arrays when a new key is
+inserted. C does not guarantee the evaluation order of both sides of an
+assignment: the left-hand reference (a pointer into the value array) was computed
+earlier, inserting the key type->base freed the array, the write went into freed
+memory, and the actual value stayed uninitialized (random). It then appeared as
+the offset in "mov r11, [rdi+offset]" (vtable) and pasm rejected it.
+Fix: the value from the base is first read into a local variable (base_off).
+Verified: 0 of 60 runs failed (previously about 10 %), valgrind without errors.
+Other assignments with two references into one Dictionary in instr.cc do not
+exist (the write takes a value, not a second reference). Caution: the same
+pattern (dict [a] = dict [b] with key insertion) applies to Dictionary in general.
+
+Switch -S file.asm (cmini.bin, without -C): saves the generated text for the
+assembler (AsmPrint), also when the assembler fails; works with or without -c and
+-o. -o x also saves x.asm (as before). -S cannot be combined with -C. Global
+InstrAsmFile (instr.h, instr.cc), saveAsm.
+Bootstrap: instr.c is generated by cmini.bin -C from the old state (make
+regen-instr) - when changing instr.cc, first regenerate instr.c with the binary
+that still works.
+
+Tests: tests/02 - verification of -S (dama); tests/03 - the same through
+cmini.bin -C and gcc.
+Results: make all, make test, test-lexer, test-translate (42), test-tcc (10),
+01 (exit 0), 02 (30 of 30 + -S OK), 03 (20 of 20).
+
+
+56. 2026-11-14: cmini (pasm) - constants with |, &, ^, <<, >>, ~, !; structs with std::string values; pointer to an array in an initializer
+===========================================================================================================================================
+
+Added to cmini (instr.cc) so that sources using these features can also be
+compiled in pasm mode (until now only -C).
+
+  - constValue: operators | & ^ << >> ~ ! (previously only + - * / % and unary -).
+    Usage: static const int CALLER = (1 << rax) | (1 << rcx) | ... (enumeration
+    constants).
+  - structs passed by value with owned members (std::string, Sequence, Dictionary):
+    - copy of a parameter into the frame, T x = y, returning by value: after the
+      byte copy the owned members are added (incOwned: RT_SINC / RT_QCOPY /
+      RT_DCOPY), as in assignment;
+    - T x = f () (the call result = temporary object): after the copy the
+      temporary is released (decOwned); temporary results in other expressions
+      (e.g. f ().s) are not released yet (memory leak, not an output error);
+    - only these are rejected: a user copy constructor (checkStructCopy), and for
+      function results a user destructor or a nested class with a destructor
+      (checkStructVal).
+    Example: tests/test_instr.cc "sval string" (previously an error, now returns 1).
+  - static initialization of a pointer with the address of a global / static
+    array or variable: static char * argv [] = { prog, nullptr };  char * p = &g;
+    (vars [obj]->label).
+
+Fixed earlier: use after free (valgrind), see chapter 55 - the same mechanism must
+not remain in any other write to a Dictionary.
+
+Verification: valgrind without errors on the examples (s1-s4: return, parameter,
+copy, assignment); test_instr "sval string" changed to the positive case; make
+test, test-lexer, test-translate, test-tcc OK.
+
+
+57. 2026-11-14: cmini - releasing temporary struct objects (call results with owned members)
+============================================================================================
+
+Until now the result of a call returning a struct with std::string / containers
+(sret) was used, and its owned members were never released (leak). Now:
+  - codeCall: an sret temporary with owned members is registered in pending_temps
+    (only inside a function);
+  - releaseTemps (mark) releases the temporaries from position mark (decOwned, RAX
+    is preserved):
+    * expression and declaration (codeStat SIM, DECL), initialization (codeFor),
+      return (codeReturn),
+    * condition (codeCond: if, while, do, for, ?:), right operand of && and || only
+      when it is evaluated,
+    * branches of ?: separately;
+  - T x = f () no longer needs special code (releaseTemps after the copy).
+Limitation: the release uses RT_* calls; if a value were in xmm0 (double) in a
+branch of ?:, it would not be preserved (so far this has not occurred).
+
+Verification: a test with 300 iterations (expression, condition, argument, string
+array field): valgrind without errors and without leaks, result 182 = expected.
+Regression: make all, test, test-lexer, test-translate, test-tcc;
+tests/02 (30), tests/03 (20).
+
+
+58. 2026-11-14: tests/17 - cmini (TinyCC) built for ToaruOS and run in the guest
+================================================================================
+
+New test tests/17 (ISO ToaruOS 2.3.2 downloaded from the GitHub release
+klange/toaruos, md5 0043dba9..., ToaruOS libc via mklibc.sh; the VM runs without
+a window, like test 15).
+
+Route:
+  1. mktcc.sh: TinyCC builds cmini (instr_drv, translate, front-end, instr.c,
+     cminirt.c) and pasm (asm/*.c) against the ToaruOS headers (-I
+     _build/toaru-include) and a fixed stdint.h (toaruos-tools/tcc/include/
+     stdint.h - TinyCC has no __GNUC__, the ToaruOS stdint.h would not cope);
+     pasm -k => cmini-tcc.bin (static, ToaruOS libc). Verified in ToaruOS: dama -T
+     (O.K.), classes -L -c + pasm -k (runs fine).
+  2. Packing of a source bundle (cmini-tcc.bin, pasm.bin, headers, TinyCC objects:
+     cminirt.o, cminirt-host.o, ffi-stub.o, instr-asm64-toaru.o, pasm lib; sources
+     asm/*.h, cmini/ownheaders, compat, examples)
+     and build.sh (explicit lines: ESH in ToaruOS has no loops and $? is not
+     reliable).
+  3. VM: the boot script downloads the bundle and runs build.sh.
+  4. Compile classes.cc / dama.cc in ToaruOS with --pasm with the compiler from
+     step 3 => pasm -k => run: ERROR (see below).
+
+Fixes needed for this (all in the repo):
+  - mkcross.sh: the cmini objects now include translate.c (after translate.bin
+    was merged);
+  - decl.c: empty enum list enum X { };
+
+Limitations and known failures:
+  - ERROR: a binary linked from cmini objects (also on the host) generates, for
+    classes.cc with --pasm, the text "mov     rsp, " in the function prologue
+    (it should be "mov rbp, rsp", line 145 of classes.asm); pasm reports "Error"
+    and the object is not created. The same binary with --c (C) is fine (dama OK),
+    and the gcc build with --pasm is fine. Source: the prologue calls
+    a_mov_rr (rbp, rsp) from instr-asm.cc:3825 (virtual call); isolated cmini tests
+    (enum, virtual method, static array of names, (Register)(RAX + r)) are correct.
+    The cause is not known yet; mixing gcc and cmini objects at the level of
+    individual files did not succeed (linker errors for classes).
+  - Side finding: objcopy in -T mode (ToaruOS) gives garbage in the third column
+    (-736 instead of 12); not investigated (the Linux and -L versions are fine).
+
+Test status: examples (classes, dama) FAIL for
+the reason above.
+
+
+59. 2026-11-14: cmini - bug in passing structs by value (System V); moving shared code to sem.c
+===============================================================================================
+
+CAUSE of the "mov rsp, " error (classes.asm, line 145): cmini passed structs by
+value DIFFERENTLY from gcc - the caller sent the ADDRESS of the struct and the
+callee copied it. Functions outside the compiled unit (libpasm, gcc, other .c
+files of pasm) did not call it this way => AsmOp (40 B) arrived corrupted (the
+prologue called a_mov_rr (rbp, rsp) with swapped/empty operands). Verified: an
+isolated test with an external function (gcc) gave 144 instead of 238; after the
+fix 238 (same as gcc).
+
+FIX (cmini/instr.cc): a single System V convention for both the caller and the
+callee:
+  - classifyArgs (types, fp): one classifier for this, the hidden result (sret),
+    and the parameters; a struct passed by value up to 16 B = 1-2 INTEGER registers
+    (qword by qword), larger = stack (whole, qword 0 lowest), scalars and double as
+    before; a struct with float members = error;
+  - passArgs (caller) and codeFunction (callee) use this classification; struct
+    parameters on the stack are read directly from the argument area (vars[par] =
+    [rbp+16+8k]), in registers they are stored in a local variable; incOwned /
+    release of parameters stays;
+  - the struct result stays sret (pointer in RDI, returned in RAX) - for external
+    functions returning structs up to 16 B (returned in RAX:RDX) this is not
+    supported (silent mismatch; do not do this).
+Note: with the previous fix (only external calls) the matching between cmini files
+failed (AsmError etc. in pasm have no body in the same unit) - hence the single
+convention.
+
+VERIFICATION: isolated tests (external calls with 40 B structs, sret 40 B, mixed
+double/structs, virtual calls, this, rn/rg/op2/vt); pasm.bin built by cmini:
+asm/tests/run.sh 14 OK; the compiler built by cmini (pasm): classes.asm BYTE-FOR-BYTE
+identical to the gcc version, classes.o 11848 B identical; test 02 30/30, test 03
+20/20, make test, test-lexer, test-translate, test-tcc OK.
+ToaruOS (test 17): the compiler built by cmini compiles classes and dama in ToaruOS
+(output = reference).
+
+MOVED to sem.c (shared stateless predicates, usable from translate.c and instr.cc):
+  from instr.cc:    isIntegralType, isUnsignedType, scalarSize, isStructVal, isZeroInit,
+                    fpKind, hasFloatMember, hasUserDtor, hasCopyCtor
+  from translate.c: IsInClass, BaseHasField (strcmp), VT, ET, IsCharPtrT, PtrClass
+  prototypes in decl.h (extern "C" block). Stay in their files: functions with their
+  own state (struct_sizes, vars, GetCls / CLS cache, pending_temps ...) and code
+  generation. Further candidates: HasContainers, VptrRoot (they use the GetCls cache
+  of translate.c, and that cache would have to move to sem.c - CLS is in translate.c).
+
+Window (test 17, like test 15): when DISPLAY (or WAYLAND_DISPLAY) and TOARU_GUI!=0 are
+set, after the results the test starts QEMU with a window (TOARU_DISPLAY, default
+gtk), types into the ToaruOS terminal a command that downloads a helper script:
+it builds the compiler in ToaruOS and shows the output for classes and dama.
+Closing the window ends the test. Verified with TOARU_DISPLAY=none (screenshot
+from the QEMU monitor: output of classes, dama and the message DONE); with a real
+gtk window I did not try (no X server on the machine).
+
+
+60. 2026-11-14: tests/16 - QEMU window with ToaruOS; tests/vystup.sh without a window (TOARU_GUI=0)
+===================================================================================================
+
+tests/16-toaruos-libc.sh: same as test 15 (chapter 47), it has a QEMU window with
+ToaruOS. With DISPLAY (or WAYLAND_DISPLAY) and TOARU_GUI!=0, after the run without
+a window a VM with a desktop is started (without bootmode=headless). Through the
+QEMU monitor (unix socket, sendkey) a command is typed into the terminal that
+downloads run.sh and runs the programs that passed during the run without a
+window. The user closes the window and the test then ends. Variables:
+TOARU_DISPLAY (gtk, sdl, none ...), TOARU_WAIT (40 s for the desktop to start).
+run.sh is created in examples/ on every run.
+Verified with TOARU_DISPLAY=none (screenshot from the QEMU monitor: ToaruOS
+desktop, program output in the terminal). With a real gtk window I did not try
+(no X server on the machine).
+
+tests/vystup.sh runs all tests/NN-*.sh, i.e. also 15, 16 and 17 (glob
+tests/[0-9][0-9]-*.sh). Until now it did not set TOARU_GUI, so with DISPLAY it
+would open QEMU windows and the script would wait for them to be closed. Now it
+sets TOARU_GUI=0 (exported). The header of tests/vystup.sh and _output/README.txt
+list tests/01 .. tests/17.
+
+
+61. 2026-11-14: probe/toaru64 - no reference image; kontext.md; regression after moving include/
+================================================================================================
+
+PROBE: make test-toaru (asm/Makefile, generator cecko-makefiles.py) and check.sh
+T1b compared bytes with toaruos-tools/probe/toaru64.bin, which DOES NOT EXIST
+in the repository - the test failed on cmp. Now only the LOAD address is checked:
+0x3F000000 with -T (test-toaru and T1b), 0x400000 without -T. The probe/ source
+files remain: openpos.asm and toaruc.c are used by check.sh T1c, T2b and
+guest-run.sh, and probe/counterexample/ documents the address behavior. Removing
+probe/ completely would require rewriting these checks. The directory probe/ is
+KEPT (the user's decision).
+
+docs/claude/kontext.md: chapter 61; tests/vystup.sh runs all tests/NN-*.sh (01 ..
+17) with TOARU_GUI=0; check.sh and make test-toaru now give 20 OK (the
+documentation previously said 28 OK, an outdated figure).
+
+REGRESSION (2026-11-14, after the changes above):
+  make all                                   rc=0
+  make test (build-test.sh)                  rc=0
+  make test-lexer test-translate test-tcc   rc=0
+  make test-asm                              rc=0 (nasmcmp: 227 OK, 6 BAD = the known 6)
+  make -C asm test-asmlist                   rc=0
+  toaruos-tools/check.sh               rc=0: 20 OK, 0 failed, 1 skipped (QEMU)
+  sh tests/vystup.sh                         rc=0; no ERROR. Apart from the
+                                             reference (known differences):
+                                             cmini-c 20/21 (quicksort, heapsort:
+                                             random data, they check themselves;
+                                             objcopy deviation), toaruos: reference
+                                             19 (16 runnable), toaruos-libc 19/20
+                                             (printf %f and objcopy).
+
+62. 2026-11-14: cmini - cout, cerr and endl (cout << a << b << endl;)
+=====================================================================
+
+cmini writes output like C++ iostream: cout << "text" << number << float_number
+<< endl; cerr works the same way (to stderr). Only endl is supported (no other
+manipulators), cin is not supported.
+
+The translation is in cmini/expr.c (front-end, shared by instr.cc and translate.c):
+  - primary: an unknown identifier cout, cerr, endl (also std::cout, std::cerr,
+    std::endl) is a MARK (IDENT without an object); a declared variable with the
+    same name takes precedence;
+  - shift_expr: mark + << => StreamOut: each item is converted to a libc call:
+      string, char *, std::string  => printf ("%s", s)
+      char                         => printf ("%c", (int) c)
+      float, double                => printf ("%g", (double) x)     (as cout: precision 6)
+      unsigned integers            => printf ("%lu", (unsigned long) x)
+      signed integers              => printf ("%ld", (long) x)     (bool: 1 / 0 as cout)
+      endl                         => printf ("\n")
+    cerr: dprintf (2, fmt, x); before each write to cerr, fflush (0) is called,
+    because in C++ cerr is tied to cout (cerr.tie) - the output order matches g++.
+  - the result is a comma-separated chain of calls (type void); cout without << is
+    an error.
+  - the calls are stored as IDENT + FCE (ImplicitFunction printf / dprintf /
+    fflush), no new nodes and no changes in instr.cc / translate.c: both
+    generators already know these nodes.
+
+Limitation: glibc mode (default cmini, -L, translation to C with -C) - cout and
+cerr. In CPARSER_RTL=own (own library, no glibc) cout works (printf is in the own
+library), cerr reports "Undefined function: fflush" (fflush is not in that
+library). -T (ToaruOS) translates cout; running on ToaruOS is not verified yet (the
+ToaruOS binary crashes when run on Linux).
+
+Test: tests/examples/cout.cc (pattern expected/cout.txt is the g++ output with
+iostream, 2>&1); it is run by tests/02-cmini-asm.sh (asm) and tests/03-cmini-c.sh
+(C) separately from PROGRAMS; tests/common.sh copies its pattern into $T/exp.
+Regression (2026-11-14): make test rc=0; make test-lexer test-translate test-tcc
+test 02: 31 of 31 programs identical (including cout); test 03: no
+deviations from the pattern (21 of 22 executables reported - one binary has no
+pattern, no program differs).
+Verified: cout.cc and two helper programs (std::string expression, std::endl, bool,
+char, unsigned long, short, 2.0/3, 1e6, 1e-5, shift << inside parentheses,
+"cout << endl << 1" at the start) - matching g++ for asm (cmini -o) and C (cmini -C
++ gcc).
+
+
+63. 2026-11-16: x86-64 generators share the pasm instruction list for as, nasm and asmjit; .cfi in the list
+===========================================================================================================
+
+Until now every output of the x86-64 generator (instr-asm.cc, class AsmModule with
+~55 virtual methods a_mov_rr, a_load, a_push ...) had its own implementation:
+instr-nasm.cc (NASM text), instr-as.cc (GNU as text, its own state machine for .cfi),
+instr-pasm.cc (pasm instruction list, its own prologue events and hand-assembled
+.eh_frame bytes), instr-asmjit.cc (calls to asmjit), instr-asm64.cc (its own encoding).
+The new basis is the pasm instruction list (../asm/asmlist.h) and the other outputs
+are created from it:
+
+   instr-asm.cc AsmModule  =>  instr-pasm.cc PasmModule (the only implementation of a_...)  =>  AsmProgram
+        --pasm    pasm library (.o, .lst, .asm); .eh_frame from AN_CFI nodes
+        --as      instr-as.cc: GNU as text, AN_CFI nodes => .cfi_... (as builds .eh_frame itself)
+        --nasm    instr-as.cc (ListText, nasm = true) + instr-nasm.cc: NASM text, CFI is left out
+        --asmjit  instr-asmjit.cc: nodes => x86::Assembler::emit (x86::Inst::kId..., operands),
+                  jcc / setcc via j / set; data and address fixes as before
+        --asm64   unchanged (own encoding over AsmModule)
+
+1. ../asm/asmlist.h, asmlist.c: new node kind AN_CFI (items cfi, cfi_reg, value) -
+   AsmCfi (p, ASM_CFI_OFFSET, RBX, -24), and the others: STARTPROC, ENDPROC,
+   DEF_CFA_OFFSET, DEF_CFA_REGISTER, DEF_CFA, OFFSET, RESTORE, REMEMBER_STATE,
+   RESTORE_STATE; AsmCfiName, AsmCfiText (".cfi_offset rbx, -24"), AsmRegName. pasm (the
+   text output and the reading of nodes) takes it as a comment "; .cfi_..." - the pasm
+   library does not change; asmlist.c stays C for cmini.
+2. instr-pasm.cc PasmModule: prologue and epilogue insert AN_CFI nodes right after the
+   instructions (one shared state machine - before it was separate in instr-as.cc and
+   instr-pasm.cc):
+      push rbp              .cfi_def_cfa_offset 16, .cfi_offset rbp, -16
+      mov rbp, rsp          .cfi_def_cfa_register rbp
+      push rbx .. r15       .cfi_offset rbx, -(frame + 24) ...
+      leave                 before: .cfi_remember_state; after: .cfi_def_cfa rsp, 8, .cfi_restore ...
+      ret                   .cfi_restore_state (code after ret belongs again to the function body)
+   .cfi_startproc before the function label, .cfi_endproc before the next function and at
+   the end of the code.
+   GNU as got remember_state / restore_state too (before it ended with .cfi_endproc at
+   the first ret), pasm FDE now runs to the end of the function (before to the last ret).
+   emit_eh_frame (only --pasm): general DWARF encoder from the nodes - at the place of a
+   group of nodes (after an instruction) a label EHL<n>, DW_CFA_advance_loc4 with the
+   difference of the labels, and the bytes of the rules (def_cfa_offset 0x0E,
+   def_cfa_register 0x0D, def_cfa 0x0C, offset 0x80 | reg, restore 0xC0 | reg,
+   remember 0x0A, restore 0x0B; DWARF registers).
+3. instr-list.h: AsmListNames (label names for the outputs: name in the source / for the
+   linker, functions from the library, undefined labels, data labels, main),
+   AsmListPrinter (output from the list), list_compile (instr-pasm.cc), list_text
+   (instr-as.cc).
+4. instr-as.cc ListText - printing the list for GNU as and NASM:
+   - names from the source (NASM with $), anonymous label .L5 (as) and ..@L5 (NASM - not
+     local to the previous label, so the same names work in code and data)
+   - segment data / code => .section .data / .text; align => .balign (align); public =>
+     .globl (global); extrn => extern (NASM)
+   - call X (library function) => call X@PLT (call $X wrt ..plt); lea r, [X] =>
+     mov r, QWORD PTR [rip + X@GOTPCREL] (mov r, [rel $X wrt ..got]); [label] =>
+     [rip + label] ([rel label])
+   - db 'text', 10 => .ascii "text" / .byte 10; n dup (0) => .zero n (times n db 0)
+5. instr-asmjit.cc AsmJitList: code (segment code) and then data (forward references from
+   .text to .data); functions from the library and undefined labels via asm_extern_symbol
+   (call: mov r11, address; call r11); compatibility macros for asmjit 1.4 .. 1.25 were kept.
+
+Size: instr-as.cc 392 => 346 lines (including NASM printing), instr-nasm.cc 355 => 33,
+instr-asmjit.cc 585 => 553, instr-pasm.cc 820 => 907 (CFI, names), instr-list.h 48; the
+various a_... implementations (3 x ~55 methods) were removed. The output of compiled
+programs does not change (same instructions as pasm - before they could differ in small
+details, e.g. xor r32 for zero).
+
+Regression (2026-11-16): make all; make test 162 passed; make test-asm rc=0;
+make test-bootstrap rc=0; tests/02-cmini-asm.sh (31 outputs = reference) and
+tests/03-cmini-c.sh (21 = reference) without errors.
+
+
+64. 2026-11-16: asm64 reads the pasm instruction list
+=====================================================
+
+Continuation of chapter 63: the last own implementation of AsmModule (instr-asm64.cc,
+Asm64Module - ~55 methods a_... with its own encoding) is replaced by a reader of the
+common pasm instruction list, the same as instr-asmjit.cc:
+
+   instr-asm.cc AsmModule  =>  instr-pasm.cc PasmModule (the only implementation of a_...)  =>  AsmProgram
+        --pasm, --as, --nasm, --asmjit   unchanged (chapter 63)
+        --asm64   instr-asm64.cc Asm64List: nodes => own encoding into memory, running main
+
+1. instr-asm64.cc Asm64List (AsmListPrinter, list_compile):
+   - code segment => code, data segment => data; labels (AN_LABEL, also the name at AN_DATA)
+     into a dictionary by name from the list; db / dw / dd / dq with numbers, strings,
+     n dup (v), dq offset label (fixed up after placement) and align; AN_TEXT and AN_CFI
+     are skipped
+   - encoding by instruction and operand kind (register 8 / 16 / 32 / 64 bits, xmm, memory
+     with size, constant, label): [66 / F2 / F3] [REX] opcode ModRM [SIB] [displacement]
+     [constant]; spl .. dil with REX; [label] => [rip + disp32]; jumps and calls rel32;
+     ALU add / or / and / sub / xor / cmp (r/m, r; r, r/m; 80 / 81 /n), mov (also r64,
+     imm64), movsx / movzx / movsxd, lea, imul (2 and 3 operands), test, inc / dec,
+     neg / not / div / idiv, sal / sar / shr (imm, cl), btc, cqo, push / pop, leave, ret,
+     jcc, setcc, SSE2 movq, addsd .. divsd, cvtsi2sd, cvttsd2si, cvtsd2ss, cvtss2sd,
+     ucomisd, xorpd
+   - functions from the library and labels without definition (cminirt, libc)
+     via asm_extern_symbol: call / jmp => mov r11, address; call / jmp r11, lea r, [X] =>
+     mov r, address, dq offset X => address
+   - Fixup.label is AsmLabel * (not string): cmini.bin -C (make test-bootstrap) takes only
+     the structure, without strings, as the Sequence element
+   - placement, fixes, the asm64 dump option and running main as before; decode_c_string was
+     dropped (strings are already bytes in the list)
+   - the code is now the same as pasm (instructions of the list); before it differed in
+     small details (functions aligned to 16 bytes, strings at the end of the data)
+
+Size: instr-asm64.cc 635 => 787 lines (reading the list instead of a_... over AsmModule).
+
+Regression (2026-11-16): make test-all - test-asm64 53 OK, test-asmjit 53, test-as 53,
+test-nasm 53, test-pasm 53.
+
+
+65. 2026-11-16: cmini - generator instr.c written by hand in C (no instr.cc); shared util.c and sem.c
+=====================================================================================================
+
+The pasm code generator of the c-mini translator used to be cmini/instr.cc (a subset of c-mini
+in C++: std::string, Sequence, Dictionary), and cmini/instr.c was generated from it to produce
+cmini.bin -C (cminirt macros CM_SEQ_ADD, CM_DICT_GET ...; cmini.bin itself did not compile that
+generated instr.c). Now cmini/instr.c is hand-written plain C and instr.cc has been removed - the
+c-mini translator is entirely in C with no generated files.
+
+1. cmini/instr.c (instr.cc converted function by function, same order and comments):
+   - std::string => char * (never NULL, "" = empty; strings are not changed, Cat, Str, IntStr ...
+     allocate new ones and never free them - the generator runs once per translation),
+     Sequence => Seq (long values: numbers, pointers, strings), Dictionary => Dict (number / pointer
+     key) and SDict... (string key); missing key: Get 0, GetStr "" (as std::map); copies of a
+     Sequence passed by value via SeqCopy.
+   - references long &, bool & ... => pointers; default parameter values are always passed
+     (ins0 .. ins3 instead of ins (k, a = nullptr, ...)); classes Variable, LoopLabels, TempDir =>
+     structs with Variable_new, LoopLabels_new, TempDir_new / TempDir_free (called on every path
+     from run and linkAndRun).
+   - subset of c-mini: struct members of type long or pointer (c-mini: 8-byte member), no function
+     pointers, no structs by value; global initialization only with a constant (static char * x = ""
+     - not (char *) ""); NewObject (IDENT_TYP) via newObj (name into a buffer of IDENT_SIZE);
+     _POSIX_C_SOURCE for mkdtemp, fileno, setenv.
+   - compiled by gcc -std=c99 -pedantic -Wall -Werror, by tcc, and by cmini.bin (self-compilation).
+2. instr.h: C declarations inside extern "C" (test_instr.cc and instr1-5.cc are C++);
+   test_instr.bin and test_instr_lexer.bin link instr.c compiled as C.
+3. cmini/util.c, util.h - helper functions shared by instr.c and translate.c: MemAlloc, Str, StrN,
+   Cat, Cat3, Cat4, CatChar, StrEq (NULL is not equal to anything), StrEmpty, SubStr, StrFind,
+   StrFindChar, StrRFind, IntStr, UIntStr, Seq..., Dict..., SDict..., ReadFile (whole file,
+   NULL = cannot open, optionally without null bytes). translate.c: PMAP (own hash table) => Dict
+   (PGet / PSet remain thin wrappers), Eq => StrEq, ReadWholeFile => ReadFile.
+4. sem.c (shared predicates, prototypes in decl.h): BaseIsPolymorphic, VptrHere (a class introduces
+   a pointer to the virtual method table), VptrRoot, IsConstInit (const with an initializer) - earlier
+   these were separate in instr.c (structBytes, codeVtables, constValue) and translate.c (GetCls
+   vptr_here, VptrRoot, IsIntConstObj). HasContainers stayed in translate.c (instr.c needs member
+   offsets - collectContMembers, not the predicate).
+5. Build and tests: cecko-makefiles.py (GENERATORS = instr.c, FRONT_END + util.c; the regen-instr
+   rule was removed), tests/build-test.sh (instr.c and util.c compiled by gcc as C),
+   tests/build-translate.sh (the check that instr.c is up to date was dropped; the reference is
+   cmini.bin built by gcc instead of g++ with instr.cc; the translator is entirely C99), build-tcc.sh,
+   02-cmini-asm.sh, 03-cmini-c.sh (including util.c), win/build.ps1,
+   toaruos-tools (mkguest.sh, en/mkguest.sh, mkcross.sh, mktcc.sh, guest/build.sh).
+6. Test suites (cecko-makefiles.py): make test-quick (usual, 47 s: make all, test, test-asm,
+   test-translate, test-tcc, test-pasm) and make test-all (complete: test-quick, test-lexer,
+   test-bootstrap, other tests, tests/vystup.sh, toaruos-tools/check.sh).
+   So that test-all detects failures: tests/common.sh - a report on "output differs from the
+   reference", and FAIL lines in 02 / 03 set FAILED=1, and finish exits with $FAILED (always 0 so
+   far); tests/vystup.sh prints "CHYBA v <scripts>" and exits 1 (always 0 so far).
+
+Verification of the translation: a corpus of 93 .asm outputs (tests/examples - object, own library,
+ToaruOS; sources cmini, asm) produced by cmini.bin with instr.cc and with instr.c is
+byte-identical (only the heapsort and quicksort runs differ - srand (time)).
+
+Size: instr.cc 7801 lines => instr.c 7951 and util.c 373 (the earlier generated instr.c had 6856 lines).
+
+Regression (2026-11-16): make test-quick 47 s (test 162 passed, test-asm, test-translate, test-tcc
+stage 2/3 fixpoint, pasm 53 OK). make test-all 23 min: test-lexer 181 passed, test-bootstrap 48 OK,
+nasm / as / asm64 / pasm 53 OK; tests/vystup.sh: nasm / as / pasm, cmini-asm 31, cmini-c 21,
+toaruos 20 (after masking objcopy), toaruos-libc 19; toaruos-tools/check.sh 20 OK.
+A new exit-code check revealed objcopy in 15-toaruos: the 6th argument of printf is not in the own
+library (a random value, even in the sample on Linux) => it is compared without it ([a b ?]).

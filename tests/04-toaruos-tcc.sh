@@ -1,0 +1,69 @@
+#!/bin/sh
+# 04-toaruos-tcc.sh - _output/toaruos-tcc/: cmini a pasm v ToaruOS (bez gcc, v bezici VM)
+#
+# CESTA (kroky 1-2 na hostiteli, 3-4 v bezici VM ToaruOS 2.3.2; funkce cecko_* v toaruos-common.sh):
+#   1. mkcross.sh (toaruos-tools): cmini.bin, pasm.bin a cminirt.o pro ToaruOS
+#      + zdroje cmini; balik se posle do VM pres HTTP
+#   2. VM ToaruOS: balik se rozbali v /tmp/cecko a cmini / pasm se prelozi a spusti:
+#        guest-cmini-T  cmini -T dama.c (vlastni behova knihovna)
+#        guest-cmini-L  cmini -L /lib classes.c (libc ToaruOS)
+#        guest-pasm-x   pasm -x libc64.asm (assembler + linker)
+#   3. vystupy programu se porovnaji se vzory tests/examples/expected (dama, classes)
+#      a s vystupem libc64 slinkovaneho na hostiteli (pasm -c, gcc)
+#   4. VM se zastavi; vystupy: _output/toaruos-tcc/{guest-*.out,guest.log}
+#
+# Vyzaduje qemu-system-x86_64, ISO ToaruOS (toaruos-tools/_build/download) a
+# toaru-vm.sh. Bez nich se test jen preskoci (vypise se proc). TOARU_PORT (8017).
+# POZOR: jeden NN-*.sh se nesmi spustit dvakrat soucasne (sdileji _output a _build/vystup).
+
+HERE=$(cd "$(dirname "$0")" && pwd)   # common.sh changes the directory, so remember the script's own
+. "$HERE/common.sh"
+. "$HERE/toaruos-common.sh"
+begin toaruos-tcc
+
+TOOLS=$TOP/toaruos-tools
+ISO=$TOOLS/_build/download/toaruos-2.3.2.iso
+PORT=${TOARU_PORT:-8017}
+D=$V/toaruos-tcc; mkdir -p $D
+
+if ! { command -v qemu-system-x86_64 > /dev/null && [ -f "$ISO" ] && command -v python3 > /dev/null; }
+then
+   echo "  toaruos-tcc: chybi qemu-system-x86_64 nebo $ISO - preskoceno" >&2
+   finish
+fi
+
+# ------------------------------------------------------------- hostitel: prekladace a balik
+cecko_prepare $PORT
+$CECKO_OK || { echo "  toaruos-tcc: mkcross.sh selhal ($T/mkcross.log)" >&2; cecko_stop; finish; }
+
+# ------------------------------------------------------------- VM
+WORKV=$T/vm; mkdir -p $WORKV
+truncate -s 1M $WORKV/share.img
+VM="env WORK=$WORKV SHARE=$WORKV/share.img ISO=$ISO $TOOLS/toaru-vm.sh"
+up=false
+for attempt in 1 2 3; do
+   $VM start > /dev/null
+   for i in $(seq 1 90); do
+      $VM log 3 2> /dev/null | grep -q 'root@livecd' && { up=true; break; }
+      sleep 1
+   done
+   $up && break
+   $VM stop > /dev/null
+done
+if ! $up
+then
+   echo "  toaruos-tcc: VM nenastartovala ($WORKV)" >&2
+   cecko_stop
+   finish
+fi
+
+# ------------------------------------------------------------- v ToaruOS: prelozeni a beh
+cecko_guest $D
+$VM log 1000000 > $D/guest.log
+cp $T/cecko.log $D/guest.log 2> /dev/null
+cecko_stop
+$VM stop > /dev/null
+
+report toaruos-tcc "cmini a pasm v ToaruOS: programy prelozene v ToaruOS, vystup = vzor"
+[ -n "$CECKO_WALL" ] && echo "$CECKO_WALL"
+finish

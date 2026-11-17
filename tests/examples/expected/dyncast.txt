@@ -1,0 +1,9 @@
+circle  circle 1 colored 0 square 0 never 0
+shape   circle 0 colored 0 square 1 never 0 a 2.0
+circle  circle 1 colored 1 square 0 never 0 color 7 r 1.0
+circle  circle 1 colored 0 square 0 never 0
+circles 3 area 9.0
+nullptr 1
+up circle same circle
+plain 1
+reference 5.0 circle

@@ -1,0 +1,8 @@
+abcd
+bool 1 0 r=8
+shift 16 12
+pole 18446744073709551615 -5
+0.666667 1e+06 1e-05
+chyba: 4
+
+konec
