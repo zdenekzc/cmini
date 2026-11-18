@@ -1,7 +1,6 @@
 /* main-code.cc - translator list.t => list.hpp, list.cpp */
 
 #include <stdlib.h>
-#include <iostream>
 
 #include "str.h"
 #include "inf.h"
@@ -13,18 +12,18 @@ OPEN_NAMESPACE
 
 static void usage ()
 {
-   cerr << "Usage: " << get_prog_name () << " [options]... input-file" << endl;
-   cerr << endl;
-   cerr << "A program for translation of .t files to .hpp and .cpp" << endl;
-   cerr << endl;
-   cerr << "Options:" << endl;
-   cerr << "  -h, --header FILENAME       header file name (default: input base name + .hpp)" << endl;
-   cerr << "  -c, --code FILENAME         code file name (default: input base name + .cpp)" << endl;
-   cerr << "  --output-dir DIR            output directory" << endl;
-   cerr << "  --no-debug                  disable debug messages" << endl;
-   cerr << "  --no-warn                   disable warnings" << endl;
-   cerr << "  --help                      show this help" << endl;
-   cerr << endl;
+   err_putln ("Usage: " + get_prog_name () + " [options]... input-file");
+   err_putln ("");
+   err_putln ("A program for translation of .t files to .hpp and .cpp");
+   err_putln ("");
+   err_putln ("Options:");
+   err_putln ("  -h, --header FILENAME       header file name (default: input base name + .hpp)");
+   err_putln ("  -c, --code FILENAME         code file name (default: input base name + .cpp)");
+   err_putln ("  --output-dir DIR            output directory");
+   err_putln ("  --no-debug                  disable debug messages");
+   err_putln ("  --no-warn                   disable warnings");
+   err_putln ("  --help                      show this help");
+   err_putln ("");
 }
 
 /* ---------------------------------------------------------------------- */

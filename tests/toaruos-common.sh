@@ -37,6 +37,49 @@ cecko_prepare ()
    fi
 }
 
+cstencils_ref ()   # cstencils_ref <adresar> - referencni vystup na hostiteli (g++): <adresar>/out/list.hpp, list.cpp
+{
+   local d=$1 u objs=""
+   mkdir -p $d/obj $d/out
+   for u in utils/inf utils/str utils/conv utils/envio utils/textio elem fact field flexible stencil code main-code
+   do
+      b=$(echo $u | tr / _)
+      g++ -std=c++17 -w -I $TOP/cstencils -I $TOP/cstencils/utils -c $TOP/cstencils/$u.cc -o $d/obj/$b.o || return 1
+      objs="$objs $d/obj/$b.o"
+   done
+   g++ $objs -o $d/code || return 1
+   (cd $d/out && $d/code --output-dir $d/out $TOP/cstencils/example/list.t > /dev/null 2>&1)
+}
+
+cecko_cstencils ()   # cecko_cstencils <adresar> - cstencils prelozeny cmini v ToaruOS (-L /lib), beh na example/list.t
+{
+   # vystup se porovnava podle CRC32 (nastroj crc32 v ToaruOS = zlib) a velikosti: konzole
+   # v prenosu zahazuje prazdne radky, proto se soubory necitaji celé
+   $CECKO_OK || return
+   G=$1
+   if cstencils_ref $T/cst-ref
+   then
+      for f in list.hpp list.cpp
+      do
+         python3 -c "import sys,zlib; d=open(sys.argv[1],'rb').read(); print('%08x %d' % (zlib.crc32(d) & 0xffffffff, len(d)))" \
+            $T/cst-ref/out/$f > $T/exp/cst-$(echo $f | tr . -).txt
+      done
+   fi
+   echo "RC=0" > $T/exp/cst-rc.txt
+   # cmini v ToaruOS: unity.cc (jeden zdroj = jeden program), libc ToaruOS z /lib, pasm linker
+   cecko_run cst-build "cd /extras/tmp; rm -rf cst; cp -r /extras/cstencils cst; cd cst" "/extras/tmp/cecko/bin/cmini.bin -L /lib -I /extras/tmp/cecko/include -I . -I utils -o /extras/tmp/code-cst unity.cc; ls -l /extras/tmp/code-cst"
+   cecko_run cst-run "cd /extras/tmp" "rm -rf out; mkdir -p out; ./code-cst --output-dir /extras/tmp/out /extras/tmp/cst/example/list.t; echo RC=\$?; echo ==HPP==; crc32 out/list.hpp; wc -c out/list.hpp; echo ==CPP==; crc32 out/list.cpp; wc -c out/list.cpp; echo ==END-CST=="
+   $VM log 1000000 > $T/cst-guest.log
+   awk -v b="==BEG-cst-run-$RUN==" -v e="==END-cst-run-$RUN==" '$0==b{f=1;next} $0==e{f=0} f && !/^root@/' \
+      $T/cst-guest.log | tr -d '\r' > $G/cst-run.txt
+   grep -a '^RC=' $G/cst-run.txt | head -1 > $G/cst-rc.out
+   sed -n '/^==HPP==$/,/^==CPP==$/p' $G/cst-run.txt | sed '1d;$d' | awk '{print $1}' | paste -sd' ' > $G/cst-list-hpp.out
+   sed -n '/^==CPP==$/,/^==END-CST==$/p' $G/cst-run.txt | sed '1d;$d' | awk '{print $1}' | paste -sd' ' > $G/cst-list-cpp.out
+   check $G/cst-rc.out cst-rc
+   check $G/cst-list-hpp.out cst-list-hpp
+   check $G/cst-list-cpp.out cst-list-cpp
+}
+
 cecko_run ()   # cecko_run <jmeno> <prikazy pred behem> <program> - jeden test v hostovi
 {
    $VM send "$2; echo ==BEG-$1-$RUN==; $3; echo; echo ==END-$1-$RUN=="
@@ -60,6 +103,7 @@ cecko_guest ()
    cecko_run guest-cmini-T  "$c; bin/cmini.bin -T -o /tmp/g1 tests/examples/dama.cc" /tmp/g1
    cecko_run guest-cmini-L  "$c; bin/cmini.bin -L /lib -I include -o /tmp/g2 tests/examples/classes.cc" /tmp/g2
    cecko_run guest-pasm-x   "$c; cp tests/libc64.asm /tmp/g3.asm; bin/pasm.bin -x /tmp/g3.asm" /tmp/g3.bin
+   cecko_cstencils $G
    $VM log 1000000 > $T/cecko.log
    for p in guest-cmini-T guest-cmini-L guest-pasm-x; do
       # echo pred koncovou znackou => posledni prazdny radek pryc

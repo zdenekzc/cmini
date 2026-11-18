@@ -7,6 +7,7 @@
 #   ramdisk.tgz   ramdisk.igz ze ISO se vsim pod /extras; z _build/push/ se pridaji
 #                 rozbalene adresare /extras/cmini-toaru (z cecko-toaru.tar.gz) a
 #                 /extras/cmini-src (z cmini-src.tar.gz); archivy se nekopiruji
+#                 a /extras/cstencils (zdroje generatoru + unity.cc pro cmini)
 #   kernel.mb     kernel z ISO, v multiboot hlavicce vypnuty pozadavek na VBE (QEMU
 #                 multiboot loader by jinak odmitl "multiboot knows VBE")
 #
@@ -47,6 +48,25 @@ for f in "$PUSH"/*; do
         *) cp -a "$f" "$WORK/ramdisk/extras/" ;;
     esac
 done
+# /extras/cstencils: sources of the stencil generator (without rtl/) and unity.cc,
+# one translation unit for cmini (cmini -o makes one program from one source file)
+rm -rf "$WORK/ramdisk/extras/cstencils"
+(cd "$TOP" && tar --exclude='cstencils/rtl' -cf - cstencils) | tar -xf - -C "$WORK/ramdisk/extras"
+cat > "$WORK/ramdisk/extras/cstencils/unity.cc" <<'UNITY'
+/* unity.cc - cstencils as one translation unit (cmini: one source file = one program) */
+#include "utils/inf.cc"
+#include "utils/str.cc"
+#include "utils/conv.cc"
+#include "utils/envio.cc"
+#include "utils/textio.cc"
+#include "elem.cc"
+#include "fact.cc"
+#include "field.cc"
+#include "flexible.cc"
+#include "stencil.cc"
+#include "code.cc"
+#include "main-code.cc"
+UNITY
 # /extras/cmini-toaru: programs (bin/, lib/, include/) from cecko-toaru.tar.gz (top dir cecko/ dropped)
 mkdir -p "$WORK/ramdisk/extras/cmini-toaru"
 tar -xzf "$PUSH/cecko-toaru.tar.gz" --strip-components=1 -C "$WORK/ramdisk/extras/cmini-toaru"

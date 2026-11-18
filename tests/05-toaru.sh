@@ -9,9 +9,12 @@
 #        guest-cmini-T  cmini -T dama.c (vlastni behova knihovna)
 #        guest-cmini-L  cmini -L /lib classes.c (libc ToaruOS)
 #        guest-pasm-x   pasm -x libc64.asm (assembler + linker)
+#        cst-build      cmini -L /lib unity.cc: cstencils (/extras/cstencils) v ToaruOS
+#        cst-run        code-cst --output-dir out example/list.t (list.hpp, list.cpp)
 #   3. vystupy programu se porovnaji se vzory tests/examples/expected (dama, classes)
-#      a s vystupem libc64 slinkovaneho na hostiteli (pasm -c, gcc)
-#   4. VM se zastavi; vystupy: _output/toaruos-tcc/{guest-*.out,guest.log}
+#      a s vystupem libc64 slinkovaneho na hostiteli (pasm -c, gcc);
+#      list.hpp a list.cpp z ToaruOS se porovnaji (CRC32 a velikost) s g++ buildem na hostiteli
+#   4. VM se zastavi; vystupy: _output/toaruos-tcc/{guest-*.out,cst-*.out,guest.log}
 #
 # Vyzaduje qemu-system-x86_64, ISO ToaruOS (_import/) a
 # toaru-vm.sh. Bez nich se test jen preskoci (vypise se proc).
