@@ -1448,9 +1448,7 @@ bool isCustomSubitem (EnvInput & io)
 
    return name == "import" ||
           name == "include" ||
-          name == "include_dir" ||
-          name == "module_dir" ||
-          name == "load_module";
+          name == "include_dir";
 }
 
 bool customSubitem (EnvInput & io, Element * elem)
@@ -1489,23 +1487,6 @@ bool customSubitem (EnvInput & io, Element * elem)
       io.checkSeparator (';');
       result = true;
    }
-   else if (name == "module_dir")
-   {
-      io.getToken ();
-      string directory = io.readString ();
-      addModuleDirectory (directory); // global
-      io.checkSeparator (';');
-      result = true;
-   }
-   else if (name == "load_module")
-   {
-      io.getToken ();
-      string param = io.readString ();
-      loadModule (param); // global
-      io.checkSeparator (';');
-      result = true;
-   }
-
    return result;
 }
 

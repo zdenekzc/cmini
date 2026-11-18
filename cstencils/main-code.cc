@@ -1,13 +1,97 @@
+/* main-code.cc - translator list.t => list.hpp, list.cpp */
 
-/* main-code.cc */
+#include <getopt.h>
+#include <stdlib.h>
+#include <cstddef>
+#include <iostream>
 
 #include "str.h"
 #include "ioexception.h"
 #include "inf.h"
-#include "opt.h"
 #include "code.h"
 
 OPEN_NAMESPACE
+
+/* ---------------------------------------------------------------------- */
+
+static void usage ()
+{
+   cerr << "Usage: " << get_prog_name () << " [options]... input-file" << endl;
+   cerr << endl;
+   cerr << "A program for translation of .t files to .hpp and .cpp" << endl;
+   cerr << endl;
+   cerr << "Options:" << endl;
+   cerr << "  -h, --header FILENAME       header file name (default: input base name + .hpp)" << endl;
+   cerr << "  -c, --code FILENAME         code file name (default: input base name + .cpp)" << endl;
+   cerr << "  --output-dir DIR            output directory" << endl;
+   cerr << "  --no-debug                  disable debug messages" << endl;
+   cerr << "  --no-warn                   disable warnings" << endl;
+   cerr << "  --help                      show this help" << endl;
+   cerr << endl;
+}
+
+/* ---------------------------------------------------------------------- */
+
+static void read_options (int argc, char ** argv, Project * prj)
+{
+   static struct option long_options [] =
+   { {"header",     required_argument, NULL, 'h'},
+     {"code",       required_argument, NULL, 'c'},
+     {"output-dir", required_argument, NULL, 'o'},
+     {"no-debug",   no_argument,       NULL, 'd'},
+     {"no-warn",    no_argument,       NULL, 'w'},
+     {"help",       no_argument,       NULL, 'H'},
+     {NULL, 0, NULL, 0} };
+
+   int c;
+   while ((c = getopt_long (argc, argv, "h:c:", long_options, NULL)) != -1)
+   {
+      switch (c)
+      {
+         case 'h':
+            if (prj->header_name != "")
+               error ("Header filename already defined");
+            prj->header_name = optarg;
+            break;
+
+         case 'c':
+            if (prj->code_name != "")
+               error ("Code filename already defined");
+            prj->code_name = optarg;
+            break;
+
+         case 'o':
+            if (prj->output_directory != "")
+               error ("Output directory already defined");
+            prj->output_directory = optarg;
+            break;
+
+         case 'd':
+            disable_debug_messages ();
+            break;
+
+         case 'w':
+            disable_warnings ();
+            break;
+
+         case 'H':
+            usage ();
+            exit (0);
+
+         default:
+            usage ();
+            error ("Bad option");
+      }
+   }
+
+   if (optind >= argc)
+      error ("Missing input filename");
+
+   if (optind < argc-1)
+      error ("Too many input filenames");
+
+   prj->inp_name = argv [optind];
+}
 
 /* ---------------------------------------------------------------------- */
 
@@ -31,7 +115,7 @@ extern "C" int main (int argc, char * argv [])
       code_init ();
 
       Project * project = new Project;
-      read_options (argc, argv, project, false); // last parameter - allow only subset of command line options
+      read_options (argc, argv, project);
 
       // without -h and -c: <base>.hpp and <base>.cpp from the input name (list.t => list.hpp, list.cpp)
       if (project->header_name == "" && project->code_name == "")

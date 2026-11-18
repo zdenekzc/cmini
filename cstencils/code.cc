@@ -10,7 +10,6 @@
 #include "conv.h"
 
 #include "flexible.h"
-#include "opt.h"
 
 #include "stencil.h"
 
