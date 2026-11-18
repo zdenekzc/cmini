@@ -107,7 +107,7 @@ prints `main returned N`). Its output is compared with `tests/examples/expected/
 Build everything (creates `asm/pasm.bin`, `asm/libpasm.a`, `cmini/cmini.bin`, ...):
 
 ```sh
-python3 cecko-makefiles.py      # generates Makefile (once, or after adding files)
+python3 cmini-makefiles.py      # generates Makefile (once, or after adding files)
 make
 ```
 

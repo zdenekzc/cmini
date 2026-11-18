@@ -147,7 +147,7 @@ in ToaruOS (`-I include`) are not changed. `guest/regenerate/gen*.sh` read trees
 
 ## 0a. Layout of the directory (2026-11-11)
 
-Downloaded files are in `_import/` (in the cecko tree; `cecko-files.py` does not back it up, and
+Downloaded files are in `_import/` (in the cecko tree; `cmini-files.py` does not back it up, and
 `make clean` does not delete it). Generated files are in `_build/` (it can be deleted at any time).
 Moved: `img/toaruos-2.3.2.iso` => `_import/`, `img/share.img` => `_build/`,
 `push/` => `_build/push/`, `work/` => `_build/work/`, `probe/probe1.elf`,
@@ -229,7 +229,7 @@ Originally the ToaruOS target was not in this tree — §2b ("`pasm -e -T`") and
 described in the earlier development tree `cecko`, where the image production is split
 into `asm/prod.cc`. This tree has the assembler mostly in C and has no `prod.{c,cc}`,
 so the BEHAVIOR was transferred, not the file split: -T got by with the files
-that were already in the Makefile (the list of sources in `cecko-makefiles.py` did not change).
+that were already in the Makefile (the list of sources in `cmini-makefiles.py` did not change).
 Where -T touches:
 
 ```
@@ -627,10 +627,10 @@ If those three attributes were wrapped in a macro and `typedef enum X X;` added,
 assembler cecko => C would be one step closer.
 
 So far `asm/*` is compiled by `g++` according to a hand-written `makefile`;
-the generated `asm/Makefile` does not fit the script `python3 cecko-makefiles.py` —
+the generated `asm/Makefile` does not fit the script `python3 cmini-makefiles.py` —
 it reports it itself `SKIP asm/Makefile (the directory has a hand-written makefile)`,
 because GNU make prefers the smaller `makefile`. The sources `prod.c` /
 `prod.cc` are therefore written where they are really used: `asm/makefile`
-(`LIBSRC`), `cecko-makefiles.py` (in case someone deleted the hand-written one),
+(`LIBSRC`), `cmini-makefiles.py` (in case someone deleted the hand-written one),
 `tests/build-translate.sh` and `tests/02-cmini-asm.sh` (the path "assembler
 translated by c-mini").
