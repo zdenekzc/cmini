@@ -1,4 +1,4 @@
-# toaruos-common.sh - spolecna cast testu ToaruOS (tests/04-toaruos-tcc.sh):
+# toaruos-common.sh - spolecna cast testu ToaruOS (tests/05-toaru.sh):
 #   do bezici VM s ToaruOS posle krome prikladu i PREKLADACE a ZDROJE
 #   (output.sh ho samostatne nespousti - jmeno nezacina cislem)
 #

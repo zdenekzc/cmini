@@ -410,7 +410,7 @@ def source_modules (base_dir) :
            "$(MAKE) test-lexer",
            "VYSTUP_TOARU=0 sh tests/output.sh", phony = True)
    # ToaruOS v QEMU (test 04 a check.sh) - jen po zmene cmini, asm nebo toaruos-tools
-   d.rule ("test-toaru-all", "all", "sh tests/04-toaruos-tcc.sh", "toaruos-tools/check.sh", phony = True)
+   d.rule ("test-toaru-all", "all", "sh tests/05-toaru.sh", "toaruos-tools/check.sh", phony = True)
 
    d.clean_dir ("$(top_srcdir)/_build", "$(top_srcdir)/_output")  # vystupy testu, tests/output.sh
 

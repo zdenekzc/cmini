@@ -8,7 +8,8 @@
 #   a) 01-asm          asm/tests/*.asm - assembler pasm
 #   b) 02-cmini-asm    c-mini => pasm (cmini/instr.c): priklady, asm, cmini (sam sebou)
 #   c) 03-cmini-c      totez pres C (cmini/translate.c)
-#   d) 04-toaruos-tcc  cmini a pasm v ToaruOS (VM, bez okna); bez QEMU/ISO se preskoci
+#   d) 04-cstencils    cstencils prelozeny cmini (glibc, pasm) = g++ build
+#   e) 05-toaru         cmini a pasm v ToaruOS (VM, bez okna); bez QEMU/ISO se preskoci
 #
 # Adresar se nezalohuje - kdykoli se vytvori znovu.
 
@@ -32,14 +33,14 @@ chyby=""
 for s in tests/[0-9][0-9]-*.sh
 do
    case "${VYSTUP_TOARU:-1}:$s" in
-      0:tests/04-toaruos*) echo "  (vynechano: $s - VYSTUP_TOARU=0)"; continue ;;
+      0:tests/05-toaru*) echo "  (vynechano: $s - VYSTUP_TOARU=0)"; continue ;;
    esac
    sh $s || { echo "  CHYBA  $s"; chyby="$chyby $(basename $s .sh)"; }
 done
 
 cat > $TOP/_output/README.txt <<'EOT'
 Vznikle soubory - vytvari tests/output.sh (make vystup) pomoci skriptu
-tests/01-asm.sh, 02-cmini-asm.sh, 03-cmini-c.sh, 04-toaruos-tcc.sh (kazdy lze
+tests/01-asm.sh, 02-cmini-asm.sh, 03-cmini-c.sh, 04-cstencils.sh, 05-toaru.sh (kazdy lze
 spustit i samostatne - prepise jen svuj podadresar); adresar se nezalohuje,
 kdykoli se vytvori znovu.
 
@@ -66,7 +67,7 @@ cmini-asm/        c-mini (cmini/instr.c): text pro assembler pasm (.asm),
 cmini-c/          c-mini => C (cmini/translate.c), behova knihovna cmini/cminirt.c
                   cmini/cmini.bin -C - translate.c prelozeny sam sebou;
                                     na svych zdrojich da stejny C (pevny bod)
-toaruos-tcc/      cmini a pasm v ToaruOS (tests/04-toaruos-tcc.sh): programy
+toaruos-tcc/      cmini a pasm v ToaruOS (tests/05-toaru.sh): programy
                   prelozene v ToaruOS, vystup se porovna se vzorem
 EOT
 

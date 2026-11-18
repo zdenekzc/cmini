@@ -1,5 +1,5 @@
 #!/bin/sh
-# 04-toaruos-tcc.sh - _output/toaruos-tcc/: cmini a pasm v ToaruOS (bez gcc, v bezici VM)
+# 05-toaru.sh - _output/toaruos-tcc/: cmini a pasm v ToaruOS (bez gcc, v bezici VM)
 #
 # CESTA (kroky 1-2 na hostiteli, 3-4 v bezici VM ToaruOS 2.3.2; funkce cecko_* v toaruos-common.sh):
 #   1. mkcross.sh (toaruos-tools): cmini.bin, pasm.bin a cminirt.o pro ToaruOS
