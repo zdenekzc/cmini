@@ -1,0 +1,52 @@
+# cmini-tests.sh - tests of cmini and cstencils inside ToaruOS (the same steps as tests/05-toaru.sh)
+#
+#   in the terminal of ToaruOS:   esh /extras/tests/cmini-tests.sh
+#
+# Everything is built in /extras/tmp (visible in the file browser). Expected values are
+# printed next to the results; no test runs by itself, read the output.
+
+echo "== 1. copy the tools (cmini, pasm, cminirt.o, include) to /extras/tmp/cecko"
+mkdir -p /extras/tmp
+cd /extras/tmp
+rm -rf cecko
+cp -r /extras/cmini-toaru cecko
+cd /extras/tmp/cecko
+export PASM_LIBDIR=/lib
+
+echo "== 2. cmini -T (own library, ToaruOS syscalls): dama.cc => run it (expected: tests/examples/expected/dama.txt)"
+bin/cmini.bin -T -o /tmp/g1 tests/examples/dama.cc
+/tmp/g1
+echo "RC=$?"
+
+echo "== 3. cmini -L /lib (ToaruOS libc, pasm linker): classes.cc => run it (expected: tests/examples/expected/classes.txt)"
+bin/cmini.bin -L /lib -I include -o /tmp/g2 tests/examples/classes.cc
+/tmp/g2
+echo "RC=$?"
+
+echo "== 4. pasm -x (assembler + linker): libc64.asm => run it"
+cp tests/libc64.asm /tmp/g3.asm
+bin/pasm.bin -x /tmp/g3.asm
+/tmp/g3.bin
+echo "RC=$?"
+
+echo "== 5. cstencils: copy /extras/cstencils to /extras/tmp/cst and build it with cmini -L /lib (unity.cc)"
+cd /extras/tmp
+rm -rf cst
+cp -r /extras/cstencils cst
+cd /extras/tmp/cst
+/extras/tmp/cecko/bin/cmini.bin -L /lib -I /extras/tmp/cecko/include -I . -I utils -o /extras/tmp/code-cst unity.cc
+ls -l /extras/tmp/code-cst
+
+echo "== 6. run code-cst on example/list.t => /extras/tmp/out/list.hpp, list.cpp"
+cd /extras/tmp
+rm -rf out
+mkdir -p out
+./code-cst --output-dir /extras/tmp/out /extras/tmp/cst/example/list.t
+echo "RC=$?"
+
+echo "== 7. checksums of the results (crc32 and size); expected: list.hpp 32d55fd9 4086, list.cpp 06cb6bfd 14847"
+crc32 out/list.hpp
+wc -c out/list.hpp
+crc32 out/list.cpp
+wc -c out/list.cpp
+echo "== done"

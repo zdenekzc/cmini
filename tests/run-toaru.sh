@@ -10,8 +10,9 @@
 #   3. QEMU with a window and the desktop (START=live in toaru-vm.sh).
 #
 # Needs a graphical display (DISPLAY or WAYLAND_DISPLAY). The tools are in
-# /extras of the ramdisk: in the terminal of ToaruOS use /extras/cmini-toaru/
-# (the test tests/05-toaru.sh copies it to /tmp/cecko).
+# /extras of the ramdisk (/extras/cmini-toaru, /extras/cmini-src, /extras/cstencils).
+# The tests of cmini and cstencils (the steps of tests/05-toaru.sh) are in the ToaruOS
+# terminal:   esh /extras/tests/cmini-tests.sh   (the results go to /extras/tmp).
 #
 # Stop the VM:  WORK=toaruos-tools/_build/vm-run toaruos-tools/toaru-vm.sh stop
 
@@ -41,19 +42,21 @@ if [ ! -f "$ISO" ]; then
    mv "$ISO.part" "$ISO"
 fi
 
-# 2) tools and ramdisk
-if [ ! -f "$INITRD" ] || [ ! -f "$KERNEL" ]; then
+# 2) tools and ramdisk (the ramdisk is rebuilt on every run: its /extras payload changes)
+if [ ! -f "$TOOLS/_build/push/cecko-toaru.tar.gz" ]; then
    echo "== building the tools for ToaruOS (mkcross.sh) ..."
    "$TOOLS/mkcross.sh" > "$TOOLS/_build/mkcross.log" 2>&1 || die "mkcross.sh failed (see $TOOLS/_build/mkcross.log)"
-   echo "== building the ramdisk (mkramdisk.sh) ..."
-   "$TOOLS/mkramdisk.sh" > "$TOOLS/_build/mkramdisk.log" 2>&1 || die "mkramdisk.sh failed (see $TOOLS/_build/mkramdisk.log)"
 fi
+echo "== building the ramdisk (mkramdisk.sh) ..."
+"$TOOLS/mkramdisk.sh" > "$TOOLS/_build/mkramdisk.log" 2>&1 || die "mkramdisk.sh failed (see $TOOLS/_build/mkramdisk.log)"
 
 # 3) the VM with the desktop
 mkdir -p "$WORK"
-[ -f "$WORK/share.img" ] || truncate -s 1M "$WORK/share.img"
 echo "== starting ToaruOS in a QEMU window (desktop) ..."
-env WORK="$WORK" SHARE="$WORK/share.img" INITRD="$INITRD" KERNEL="$KERNEL" START=live \
+env WORK="$WORK" INITRD="$INITRD" KERNEL="$KERNEL" START=live \
     "$TOOLS/toaru-vm.sh" start
 echo "The window shows the desktop after about 15 s. The VM keeps running after this"
-echo "script ends. Stop it with:  WORK=$WORK $TOOLS/toaru-vm.sh stop"
+echo "script ends."
+echo "In the ToaruOS terminal run the cmini and cstencils tests with:"
+echo "    esh /extras/tests/cmini-tests.sh"
+echo "Stop the VM with:  WORK=$WORK $TOOLS/toaru-vm.sh stop"

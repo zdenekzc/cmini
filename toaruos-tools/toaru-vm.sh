@@ -7,10 +7,9 @@
 #   ./toaru-vm.sh status           # running? + log size
 #   ./toaru-vm.sh stop             # kills QEMU and the FIFO holder
 #
-# The only way out of the machine: the serial line (log) or the network. The shared
-# disk is one-way — ata.ko does not flush its write-back cache (reason in README.md).
+# The only way out of the machine: the serial line (log) or the network.
 #
-# Optional: ISO=/path SHARE=/path ./toaru-vm.sh start
+# Optional: ISO=/path ./toaru-vm.sh start
 set -u
 
 DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -18,7 +17,6 @@ ISO=${ISO:-${DIR}/../_import/toaruos-2.3.2.iso}
 # Boot bez ISO: INITRD (ramdisk.tgz) + KERNEL (kernel.mb), viz mkramdisk.sh
 INITRD=${INITRD:-}
 KERNEL=${KERNEL:-${DIR}/_build/kernel.mb}
-SHARE=${SHARE:-${DIR}/_build/share.img}
 WORK=${WORK:-${DIR}/_build/work}
 RAM=${RAM:-1024}
 SMP=${SMP:-2}
@@ -74,7 +72,6 @@ do_start() {
     else
         [[ -f "$ISO" ]] || die "missing ISO: $ISO (rename it or use ISO=/path)"
     fi
-    [[ -f "$SHARE" ]] || die "missing disk image: $SHARE"
     command -v qemu-system-x86_64 >/dev/null || die "missing qemu-system-x86_64"
     running && die "QEMU is already running (pid $(cat "${PIDF}")) — ./toaru-vm.sh stop"
 
@@ -122,8 +119,6 @@ do_start() {
     qemu-system-x86_64 "${accel[@]}" \
         -M pc -m "$RAM" -smp "$SMP" \
         "${bootsrc[@]}" -vga std "${sound[@]}" \
-        -drive format=raw,if=none,id=share,file="$SHARE" \
-        -device ide-hd,drive=share,bus=ide.0,unit=0 \
         -netdev user,id=n0 -device e1000,netdev=n0 \
         "${bootmode[@]}" \
         -fw_cfg name=opt/org.toaruos.gettyargs,string='-a root /dev/ttyS1 115200 linux' \

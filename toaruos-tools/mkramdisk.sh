@@ -7,7 +7,8 @@
 #   ramdisk.tgz   ramdisk.igz ze ISO se vsim pod /extras; z _build/push/ se pridaji
 #                 rozbalene adresare /extras/cmini-toaru (z cecko-toaru.tar.gz) a
 #                 /extras/cmini-src (z cmini-src.tar.gz); archivy se nekopiruji
-#                 a /extras/cstencils (zdroje generatoru + unity.cc pro cmini)
+#                 a /extras/cstencils (zdroje generatoru + unity.cc pro cmini),
+#                 /extras/tests/cmini-tests.sh (kroky testu pro terminal ToaruOS)
 #   kernel.mb     kernel z ISO, v multiboot hlavicce vypnuty pozadavek na VBE (QEMU
 #                 multiboot loader by jinak odmitl "multiboot knows VBE")
 #
@@ -48,6 +49,9 @@ for f in "$PUSH"/*; do
         *) cp -a "$f" "$WORK/ramdisk/extras/" ;;
     esac
 done
+# /extras/tests/cmini-tests.sh: the steps of tests/05-toaru.sh for the ToaruOS terminal
+mkdir -p "$WORK/ramdisk/extras/tests"
+cp "$DIR/guest/cmini-tests.sh" "$WORK/ramdisk/extras/tests/cmini-tests.sh"
 # /extras/cstencils: sources of the stencil generator (without rtl/) and unity.cc,
 # one translation unit for cmini (cmini -o makes one program from one source file)
 rm -rf "$WORK/ramdisk/extras/cstencils"

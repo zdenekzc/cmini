@@ -62,8 +62,7 @@ KEEP_VM=0
 if [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ] && [ "${TOARU_GUI:-1}" != 0 ]; then KEEP_VM=1; fi
 if [ "$KEEP_VM" = 1 ]; then WORKV=$TOOLS/_build/vm-keep; else WORKV=$T/vm; fi
 mkdir -p $WORKV
-truncate -s 1M $WORKV/share.img
-VM="env WORK=$WORKV SHARE=$WORKV/share.img INITRD=$TOOLS/_build/ramdisk.tgz KERNEL=$TOOLS/_build/kernel.mb $TOOLS/toaru-vm.sh"
+VM="env WORK=$WORKV INITRD=$TOOLS/_build/ramdisk.tgz KERNEL=$TOOLS/_build/kernel.mb $TOOLS/toaru-vm.sh"
 up=false
 for attempt in 1 2 3; do
    $VM start > /dev/null
