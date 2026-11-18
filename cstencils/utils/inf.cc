@@ -48,7 +48,6 @@
 #include <iostream>
 
 #include "str.h"
-#include "conv.h"
 #include "ioexception.h"
 
 OPEN_NAMESPACE

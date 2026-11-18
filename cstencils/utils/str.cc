@@ -2,7 +2,6 @@
 /* str.cc */
 
 #include "str.h"
-// #include "conv.h"
 
 #if 0
    #include "inf.h" // only for test_normalize_path

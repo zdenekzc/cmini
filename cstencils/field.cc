@@ -3,8 +3,8 @@
 
 #include "field.h"
 #include "elem.h"
-#include "conv.h"
 
+#include "str.h"
 #include "code.h" // ReadNormalField
 
 OPEN_NAMESPACE

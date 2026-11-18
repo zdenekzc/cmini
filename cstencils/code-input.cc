@@ -8,8 +8,6 @@ bool readInnerField (EnvInput & io);
 bool readInnerElement (EnvInput & io);
 Element * readCompleteElement (EnvInput & io, Element * top, string name);
 
-bool customSubitem (EnvInput & io, Element * elem);
-
 /***************************** CREATE ELEMENT *****************************/
 
 Class * searchClassInProgModule (Module * prog_module, string name)
@@ -396,11 +394,7 @@ void Element::readElement (EnvInput & io)
 
 void Element::readSubitem (EnvInput & io)
 {
-   if (customSubitem (io, this))
-   {
-      // nothing
-   }
-   else if (readInnerField (io))
+   if (readInnerField (io))
    {
       // nothing
    }
@@ -1091,10 +1085,6 @@ void Class::readMember (EnvInput & io, Access & acs, int grp)
       io.checkSeparator (':');
       acs = PublicAccess;
    }
-   else if (customSubitem (io, this))
-   {
-      // nothing
-   }
    else if (readInnerField (io))
    {
       // nothing
@@ -1302,203 +1292,13 @@ void List::readSource (EnvInput & io)
    setNames (); // default identifiers
 }
 
-/******************************** FILE IO *********************************/
-
-Element * readFile (string file_name, Element * target)
-{
-   Project * prj = currentProject (target);
-
-   file_name = prj->input.translatePath (file_name);
-   file_name = prj->input.incl_directories.lookupInclFile (file_name);
-
-   if (file_name == "")
-      prj->input.error ("Cannot open: " + file_name);
-
-   // add this file name to used file list
-    prj->input.used_files.addUsedFile (file_name);
-
-   Project * result = new Project;
-
-   // open file
-   EnvInput & io = result->input;
-   io.opt.atDirectives = true;
-
-   io.symbols.copyFrom (prj->input.symbols);
-   io.incl_directories.copyFrom (prj->input.incl_directories);
-   // io.variables.CopyFrom (prj->variables);
-
-   io.open (file_name);
-
-   #if 0
-   if (io.symbols.isDefinedSymbol ("GTK2"))
-      debug ("reading " + file_name + " WITH GTK2");
-   else
-      debug ("reading " + file_name + " without GTK2");
-   #endif
-
-   // read first token
-   io.getToken ();
-
-   if (io.isEof ())
-      io.error ("Empty file");
-
-   while (! io.isEof ())
-   {
-       if (customSubitem (io, result))
-       {
-          // nothing
-       }
-       else
-       {
-          readCompleteElement (io, result, "");
-       }
-   }
-
-   #if 0
-   if (io.symbols.isDefinedSymbol ("GTK2"))
-      debug ("finished reading " + file_name + " WITH GTK2");
-   else
-      debug ("finished reading " + file_name + " without GTK2");
-   #endif
-
-   prj->input.symbols.copyFrom (io.symbols);
-   prj->input.incl_directories.copyFrom (io.incl_directories);
-   prj->input.used_files.copyFrom (io.used_files);
-
-   return result;
-}
-
-/*************************** IMPORT and INCLUDE ***************************/
-
-static void join (Element * target, Element * source)
-{
-   assert (target != NULL);
-   assert (source != NULL);
-
-   Element * elem = source->getFirstElem ();
-   while (elem != NULL)
-   {
-      Element * next = elem->getNextElem ();
-
-      elem->removeElem ();
-      target->insertLastElem (elem);
-
-      elem = next;
-   }
-}
-
-static void join_before (Element * target, Element * source)
-{
-   assert (target != NULL);
-   assert (source != NULL);
-
-   bool before_module = target->toModule () != NULL;
-
-   Element * elem = source->getFirstElem ();
-   while (elem != NULL)
-   {
-      Element * next = elem->getNextElem ();
-
-      elem->removeElem ();
-
-      // %%
-      if (before_module)
-      {
-         target->insertPrevElem (elem);
-      }
-      else
-      {
-         // into project
-         target->insertLastElem (elem);
-      }
-
-      elem = next;
-   }
-}
-
-static void include (Element * target, Element * sub)
-{
-   // store
-   join (target, sub);
-}
-
-static void mark_as_imported (Element * sub)
-{
-   sub->imported = true;
-
-   Element * elem = sub->getFirstElem ();
-   while (elem != NULL)
-   {
-      mark_as_imported (elem);
-      elem = elem->getNextElem ();
-   }
-}
-
-static void import (Element * target, Element * sub)
-{
-   mark_as_imported (sub);
-   join_before (target, sub); // store
-}
-
 /* ---------------------------------------------------------------------- */
-
-bool isCustomSubitem (EnvInput & io)
-{
-   string name = io.tokenTxt;
-
-   return name == "import" ||
-          name == "include" ||
-          name == "include_dir";
-}
-
-bool customSubitem (EnvInput & io, Element * elem)
-{
-   bool result = false;
-   string name = io.tokenTxt;
-
-   if (name == "import")
-   {
-      // io.Warning ("import");
-      io.getToken ();
-      string file_name = io.readString ();
-      io.checkSeparator (';');
-      // debug ("import " + file_name);
-      Element * sub = readFile (file_name, elem);
-      import (elem, sub);
-      result = true;
-   }
-   else if (name == "include")
-   {
-      io.getToken ();
-      string file_name = io.readString ();
-      io.checkSeparator (';');
-      // io.Include (file_name);
-      // debug ("include " + file_name);
-      Element * sub = readFile (file_name, elem);
-      include (elem, sub);
-      result = true;
-   }
-   else if (name == "include_dir")
-   {
-      io.getToken ();
-      string directory = io.readString ();
-      directory = io.translatePath (directory);
-      io.incl_directories.addInclDir (directory);
-      io.checkSeparator (';');
-      result = true;
-   }
-   return result;
-}
 
 //******************************* READ MODULE ******************************/
 
 void Module::readSubitem (EnvInput & io)
 {
-   if (customSubitem (io, this))
-   {
-      // nothing
-   }
-   else if (readInnerField (io))
+   if (readInnerField (io))
    {
       // nothing
    }
@@ -1514,28 +1314,6 @@ void Module::readSubitem (EnvInput & io)
       if (io.isSeparator (';'))
          io.checkSeparator (';');
    }
-   #if 0
-   else if (io.isIdent ("import") /* || io.IsIdent ("use") */) // !? compatibility with previous version
-   {
-      io.getToken ();
-      string fileName = io.readString ();
-      fileName = io.getEnv()->lookupInclFile (fileName);
-      // NO IncludeFile (intf, fileName);
-      if (io.isSeparator (';'))
-         io.checkSeparator (';');
-
-      // !?
-      EnvInput tmp;
-      tmp.setEnv (io.getEnv ());
-      tmp.open (fileName); // !? search path
-      tmp.getToken (); // first token
-      Module * m = new Module;
-      m->imported = true;
-      this->insertPrevElem (m); // !?
-      m->readSource (tmp);
-      tmp.checkEnd ();
-   }
-   #endif
    else if (io.isIdent ("idecl")) // !? compatibility with previous version
    {
       io.getToken ();
@@ -1648,10 +1426,7 @@ void Project::readSource (EnvInput & io)
 
    while (! io.isEof ())
    {
-      if (isCustomSubitem (io))
-         customSubitem (io, this);
-      else
-         readSubitem (io);
+      readSubitem (io);
    }
 }
 

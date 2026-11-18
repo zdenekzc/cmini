@@ -5,7 +5,6 @@
 
 #include "ioexception.h"
 #include "str.h" // const lf, ...
-#include "conv.h" // template functions StrToNum, NumToStr
 #include "inf.h" // function info
 
 #include <string.h>  // function memcpy
