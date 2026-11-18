@@ -7,6 +7,7 @@
 
 #include "inf.h"
 #include "str.h"
+#include "conv.h" // IntToStr
 
 #include "flexible.h"
 
@@ -96,7 +97,7 @@ void Project::getTypeSpec (string type, TypeKind & kind, Type * & spec )
    else if (type == "string")
       kind = string_type;
 
-   else if (hasSuffix (type, '*'))
+   else if (hasSuffixChar (type, '*'))
    {
       kind = pointer_type;
 
@@ -225,7 +226,7 @@ string Project::initValue (string type, bool construct)
          {
             if (! warning_table.contains (type))
             {
-               warning_table.add (type);
+               warning_table.store (type, true);
                warning ("cannot find initialization value for " + type);
             }
          }
@@ -519,7 +520,7 @@ void Module::completeProg ()
       {
          if (! symbols.contains (item->name))
          {
-            symbols.add (item->name);
+            symbols.store (item->name, true);
 
             if (export_symbols)
                defineSymbol (intf, item->name, symbol_group); // add into header file

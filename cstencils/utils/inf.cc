@@ -7,6 +7,7 @@
 
 #ifdef USE_TRACE
    #include <execinfo.h> // function backtrace
+   #include <exception> // set_terminate (jen g++)
 #endif
 
 #ifdef USE_DEMANGLE
@@ -44,13 +45,45 @@
 
 #include <malloc.h>
 #include <signal.h>
-#include <stdexcept>
-#include <iostream>
+#include <cstdlib> // exit
+#include <cstdio> // fputs, stderr
 
 #include "str.h"
-#include "ioexception.h"
+#include "conv.h"
 
 OPEN_NAMESPACE
+
+/* ---------------------------------------------------------------------- */
+
+// chyby bez vyjimek (inf.h)
+jmp_buf error_jump;
+bool    error_jump_ready = false;
+
+string last_error_msg = "";
+string last_error_file_name = "";
+int    last_error_line = 0;
+int    last_error_column = 0;
+bool   last_error_shown = false;
+
+void raise_error (string msg, string file_name, int line, int column, bool shown)
+{
+   last_error_msg = msg;
+   last_error_file_name = file_name;
+   last_error_line = line;
+   last_error_column = column;
+   last_error_shown = shown;
+
+   if (error_jump_ready)
+   {
+      error_jump_ready = false; // chyba pri zpracovani chyby => exit
+      longjmp (error_jump, 1);
+   }
+
+   // bez bodu navratu: vypsat a ukoncit
+   if (! shown)
+      show_error (msg, file_name, line, column);
+   exit (1);
+}
 
 /* ---------------------------------------------------------------------- */
 
@@ -64,6 +97,8 @@ static int error_count = 0; // number of errors and aborts
 
 static bool debug_flag = true;
 static bool warning_flag = true;
+static bool info_flag = true;    // cecko: disable_info_messages (cmm/import.cc)
+static bool error_flag = true;   // cecko: disable_error_messages - chyby zachytava volajici (setjmp)
 
 static bool error_trace_flag = false;
 static bool abort_trace_flag = true;
@@ -95,6 +130,26 @@ void disable_debug_messages ()
 }
 
 /* ---------------------------------------------------------------------- */
+
+void enable_info_messages ()
+{
+   info_flag = true;
+}
+
+void disable_info_messages ()
+{
+   info_flag = false;
+}
+
+void enable_error_messages ()
+{
+   error_flag = true;
+}
+
+void disable_error_messages ()
+{
+   error_flag = false;
+}
 
 void enable_warnings ()
 {
@@ -270,9 +325,9 @@ static void initialize_bfd (string binary_file_name)
 
   void * minisyms = NULL;
 
-  symcount = bfd_read_minisymbols (abfd, false, & minisyms, & size);
+  symcount = bfd_read_minisymbols (abfd, FALSE, & minisyms, & size);
   if (symcount == 0)
-    symcount = bfd_read_minisymbols (abfd, true /* dynamic */, & minisyms, & size);
+    symcount = bfd_read_minisymbols (abfd, TRUE /* dynamic */, & minisyms, & size);
 
   if (symcount < 0)
      ready = false;
@@ -333,10 +388,23 @@ string demangle (string txt)
 
 /* ---------------------------------------------------------------------- */
 
+void err_put (string txt)
+{
+   fputs (txt.c_str (), stderr);
+}
+
+void err_putln (string txt)
+{
+   fputs (txt.c_str (), stderr);
+   fputs ("\n", stderr);
+}
+
+/* ---------------------------------------------------------------------- */
+
 void trace ()
 {
    #ifdef USE_STACKTRACE
-      cerr << "<C++23 stacktrace>" << endl;
+      err_putln ("<C++23 stacktrace>");
       auto st = std::stacktrace::current ();
 
       for (const auto & entry : st)
@@ -344,10 +412,10 @@ void trace ()
           string filename = entry.source_file ();
           if (filename.empty ()) filename = "<unknown>";
 
-          cerr << filename << ":" << entry.source_line ()
-               << ": " << demangle(entry.description ()) << endl;
+          err_putln (filename + ":" + IntToStr (entry.source_line ()) +
+                     ": " + demangle(entry.description ()));
       }
-      cerr << "<end of C++23 stacktrace>" << endl;
+      err_putln ("<end of C++23 stacktrace>");
    #endif
 
    #ifdef USE_TRACE
@@ -360,7 +428,7 @@ void trace ()
       table_len = backtrace (table, table_max);
 
       #ifndef USE_BFD
-         cerr << "<backtrace>" << endl;
+         err_putln ("<backtrace>");
          char * * text_table;
          text_table = backtrace_symbols (table, table_len);
 
@@ -396,18 +464,18 @@ void trace ()
 
             txt = demangle (txt);
 
-            cerr << txt;
+            err_put (txt);
             // cerr << " ... " << text_table [i];
-            cerr << endl;
+            err_putln ("");
          }
 
          free (text_table);
-         cerr << "<end of backtrace>" << endl;
+         err_putln ("<end of backtrace>");
       #endif // not USE_BFD
 
       #if 0
-         cerr << endl;
-         cerr << "<simple bfd backtrace>" << endl;
+         err_putln ("");
+         err_putln ("<simple bfd backtrace>");
 
          bfd_init ();
 
@@ -432,22 +500,22 @@ void trace ()
 
                   cleanup_bfd ();
 
-                  cerr << ans << ": ";
-                  cerr << demangle (CharsToStr (info.dli_sname));
-                  cerr << endl;
+                  err_put (ans + ": ");
+                  err_put (demangle (CharsToStr (info.dli_sname)));
+                  err_putln ("");
                }
             }
             else
             {
-               cerr << "<unknown address>" << endl;
+               err_putln ("<unknown address>");
             }
          }
-         cerr << "<end of simple bfd backtrace>" << endl;
+         err_putln ("<end of simple bfd backtrace>");
       #endif
 
       #ifdef USE_BFD
-         cerr << endl;
-         cerr << "<bfd backtrace>" << endl;
+         err_putln ("");
+         err_putln ("<bfd backtrace>");
 
          string func_table [table_max]; // function name
          string file_table [table_max]; // file name
@@ -517,14 +585,14 @@ void trace ()
          for (size_t i = 0; i < table_len; i++)
          {
             if (line_table[i] != "")
-               cerr << line_table[i] << ": ";
-            cerr << demangle (func_table[i]);
-            cerr << endl;
+               err_put (line_table[i] + ": ");
+            err_put (demangle (func_table[i]));
+            err_putln ("");
          }
-         cerr << "<end of bfd backtrace>" << endl;
+         err_putln ("<end of bfd backtrace>");
       #endif // USE_BFD
 
-      cerr << endl;
+      err_putln ("");
    #endif // USE_TRACE
 }
 
@@ -555,7 +623,7 @@ void show_position (string msg, string file_name, int line, int column)
 
    txt = txt + msg;
 
-   std::cerr << txt << endl;
+   err_putln (txt);
 }
 
 void show_message (MessageLevel level,
@@ -631,7 +699,7 @@ void throw_message (MessageLevel level,
          trace (); // show stack trace (before throwing exception)
       }
 
-      throw IOErrorException (msg, file_name, line, column);
+      raise_error (msg, file_name, line, column, true); // zprava uz byla vypsana (message)
    }
 
    if (level == abortLevel)
@@ -642,7 +710,7 @@ void throw_message (MessageLevel level,
          trace (); // show stack trace (before throwing exception)
       }
 
-      throw IOAbortException (msg, file_name, line, column);
+      raise_error (msg, file_name, line, column, true); // zprava uz byla vypsana (message)
    }
 }
 
@@ -662,6 +730,16 @@ void message (MessageLevel level,
    else if (level == debugLevel)
    {
       if (! debug_flag)
+         silent = true;
+   }
+   else if (level == infoLevel)
+   {
+      if (! info_flag)
+         silent = true;
+   }
+   else if (level == errorLevel)
+   {
+      if (! error_flag)
          silent = true;
    }
 
@@ -709,7 +787,7 @@ void error (string msg, string file_name, int line, int column)
    message (errorLevel, msg, file_name, line, column);
 }
 
-void abort (string msg, string file_name, int line, int column)
+void abort_msg (string msg, string file_name, int line, int column)
 {
    message (abortLevel, msg, file_name, line, column);
 }
@@ -741,7 +819,7 @@ void __assert_fail (const char * assertion,
                     unsigned int line,
                     const char * function)
 {
-   abort ("function: " + charsToStr (function) +
+   abort_msg ("function: " + charsToStr (function) +
           ", assertion failed: " + charsToStr (assertion),
           file, line, 0);
 }
@@ -820,7 +898,7 @@ void fpe_handler (int signum)
       trace ();
    }
    // raise (SIGTERM);
-   throw IOException ("Signal FPE, arithmetic exception");
+   raise_error ("Signal FPE, arithmetic exception", "", 0, 0, abort_trace_flag);
    // siglongjmp (ide_recovery_point, 1);
 }
 
@@ -832,7 +910,7 @@ void segv_handler (int signum)
       trace ();
    }
    // raise (SIGTERM);
-   throw IOException ("Signal SEGV, segmentation fault");
+   raise_error ("Signal SEGV, segmentation fault", "", 0, 0, abort_trace_flag);
    // siglongjmp (ide_recovery_point, 1);
 }
 
@@ -844,7 +922,7 @@ void abort_handler (int signum)
       trace ();
    }
    // raise (SIGTERM);
-   throw IOException ("Signal ABORT");
+   raise_error ("Signal ABORT", "", 0, 0, abort_trace_flag);
    // siglongjmp (ide_recovery_point, 1);
 }
 

@@ -3,14 +3,13 @@
 
 #include "textio.h"
 
-#include "ioexception.h"
 #include "str.h" // const lf, ...
+#include "conv.h" // StrToLong, IntToStr, ...
 #include "dictionary.h"
 #include "inf.h" // function info
 
 #include <string.h> // function memcpy
-#include <fstream>
-#include <iostream>
+#include <cstdio> // fopen, fread, fwrite, fclose
 
 #define DUPL_INPUT
 #define DUPL_DIRECTIVES
@@ -21,6 +20,7 @@ OPEN_NAMESPACE
 /******************************* FILE NAMES *******************************/
 
 // global variables
+
 static Dictionary <string, int> FileNameDict;
 static Dictionary <int, string> FileNumberDict;
 static int last_index = 0;
@@ -365,6 +365,9 @@ void TextStorage::put_chars (char c, int len)
       last->len += step;
       assert (last->len <= last->max);
    }
+
+   if (len > 0)
+      byte_count = byte_count + len;   // cecko: chybelo (length () nesouhlasila s textem)
 }
 
 /* ---------------------------------------------------------------------- */
@@ -393,7 +396,7 @@ string TextStorage::to_string ()
    item = first;
    while (item != NULL)
    {
-      result.append (item->buf, item->len);
+      result += bufToStr (item->buf, item->len);
       item = item->next;
    }
 
@@ -429,13 +432,13 @@ string TextStorage::inc_string ()
    item = output;
    if (item != NULL)
    {
-      result.append (&item->buf [out_pos], item->len - out_pos);
+      result += bufToStr (&item->buf [out_pos], item->len - out_pos);
       // & is important, otherwise same repeated characters are added
       item = item->next;
    }
    while (item != NULL)
    {
-      result.append (item->buf, item->len);
+      result += bufToStr (item->buf, item->len);
       item = item->next;
    }
 
@@ -445,70 +448,110 @@ string TextStorage::inc_string ()
    return result;
 }
 
+/* text od pozice pos do konce - z ulozeneho textu se odebere (bloky za pozici se uvolni) */
+string TextStorage::cut_from (int pos)
+{
+   string result = "";
+   if (pos < 0 || pos >= byte_count)
+      return result;
+
+   // blok s pozici pos
+   int start = 0;
+   TextBlock * item = first;
+   while (item != NULL && start + item->len <= pos)
+   {
+      start = start + item->len;
+      item = item->next;
+   }
+   if (item == NULL)
+      return result;
+
+   int offset = pos - start;
+   result = bufToStr (&item->buf [offset], item->len - offset);
+   TextBlock * rest = item->next;
+   while (rest != NULL)
+   {
+      result += bufToStr (rest->buf, rest->len);
+      rest = rest->next;
+   }
+
+   // zkratit: blok s pozici, dalsi bloky do seznamu volnych
+   rest = item->next;
+   item->len = offset;
+   item->next = NULL;
+   last = item;
+   while (rest != NULL)
+   {
+      TextBlock * next = rest->next;
+      rest->len = 0;
+      rest->next = NULL;
+      if (last_free == NULL) first_free = rest; else last_free->next = rest;
+      last_free = rest;
+      rest = next;
+   }
+   byte_count = pos;
+   output = NULL;   // inc_string od zacatku
+   out_pos = 0;
+   return result;
+}
+
 /* ---------------------------------------------------------------------- */
 
 void TextStorage::write (const string file_name)
 {
-   ofstream f (file_name.c_str ());
-   if (! f.good ())
+   FILE * f = fopen (file_name.c_str (), "wb");
+   if (f == NULL)
+   {
       error ("Cannot open file for writing: " + file_name); // simple error form inf.h
+      return;
+   }
 
+   bool ok = true;
    TextBlock * item = first;
    while (item != NULL)
    {
-      f.write (item->buf, item->len);
+      if (item->len > 0 && fwrite (item->buf, 1, item->len, f) != (size_t) item->len)
+         ok = false;
       item = item->next;
    }
 
-   f.close ();
-   if (! f.good ())
+   if (fclose (f) != 0)
+      ok = false;
+   if (! ok)
       error ("error writing file: " + file_name); // simple error form inf.h
 }
 
 /* ---------------------------------------------------------------------- */
 
 bool TextStorage::compare (const string file_name)
+// true => soubor existuje a ma stejny obsah (stejna delka i data)
 {
    bool equal = false;
 
-   ifstream f (file_name.c_str ());
-   if (f.good ())
+   FILE * f = fopen (file_name.c_str (), "rb");
+   if (f != NULL)
    {
-      f.seekg (0, ifstream::end);
-      streamsize file_size = f.tellg (); // MANDRAKE 9.0 (int)
-      f.seekg (0, ifstream::beg);
+      equal = true;
+      char data [TextBlock::max];
 
-      // calculate length
-      streamsize text_size = 0;
       TextBlock * item = first;
-      while (item != NULL)
+      while (equal && item != NULL)
       {
-         text_size = text_size + item->len;
+         int len = item->len;
+         assert (len <= TextBlock::max);
+         if (len > 0)
+         {
+            size_t count = fread (data, 1, len, f);
+            if (count != (size_t) len || memcmp (data, item->buf, len) != 0)
+               equal = false;
+         }
          item = item->next;
       }
 
-      if (file_size >= 0 && file_size == text_size)
-      {
-         equal = true;
-         item = first;
-         char data [TextBlock::max];
+      if (equal && fread (data, 1, 1, f) != 0)
+         equal = false; // soubor je delsi
 
-         while (equal && item != NULL)
-         {
-            int len = item->len;
-            assert (len <= TextBlock::max);
-            if (len >= 0)
-            {
-               f.read (data, len);
-               streamsize count = f.gcount ();
-               if (count != len || memcmp (data, item->buf, len) != 0)
-                  equal = false;
-            }
-            item = item->next;
-         }
-      }
-
-      f.close ();
+      fclose (f);
    }
 
    return equal;
@@ -655,11 +698,13 @@ InputQueue::InputQueue () :
 /******************************* CHAR INPUT *******************************/
 
 CharInput::CharInput ():
-   inpStream (NULL),
+   inpFile (NULL),
+   inpText (""),
+   inpTextPos (0),
+   inpTextMode (false),
    bufPos (0),
    bufLen (0),
    // ignore buf
-   releaseStream (false),
 
    fileInx (0),
    linePos (0),
@@ -687,18 +732,14 @@ CharInput::CharInput ():
 
 CharInput::~CharInput ()
 {
-   if (releaseStream && inpStream != NULL)
-   {
-      delete inpStream;
-      inpStream = NULL;
-   }
+   closeInput ();
 }
 
 void CharInput::Init ()
 {
    bufPos = 0;
    bufLen = 0;
-   // do not change already initialized inpStream, fileName and releaseStream
+   // do not change already initialized inpFile, inpText and fileName
 
    inpCh = 0;
    prevCh = 0;
@@ -729,52 +770,61 @@ void CharInput::setFileName (const string file_name)
 
 /* ---------------------------------------------------------------------- */
 
-void CharInput::openStream (istream & stream)
+void CharInput::closeInput ()
 {
-   inpStream = & stream;
-   assert (inpStream != NULL);
-   Init ();
+   if (inpFile != NULL)
+   {
+      fclose (inpFile);
+      inpFile = NULL;
+   }
+   inpText = "";
+   inpTextPos = 0;
+   inpTextMode = false;
 }
 
 void CharInput::openString (string text)
 {
-   istringstream * tmp = new istringstream (text);
-   releaseStream = true;
-   openStream (*tmp);
+   closeInput ();
+   inpText = text;
+   inpTextPos = 0;
+   inpTextMode = true;
+   Init ();
 }
 
 void CharInput::open (string name)
 {
    setFileName (name);
+   closeInput ();
 
-   ifstream * tmp = new ifstream;
-   tmp->open (name.c_str ());
+   inpFile = fopen (name.c_str (), "rb");
 
-   if (!tmp->good ())
-   {
+   if (inpFile == NULL)
       error ("Cannot open " + name);
-      delete tmp;
-   }
    else
-   {
-      releaseStream = true;
-      openStream (*tmp);
-   }
+      Init ();
 }
 
 /* ---------------------------------------------------------------------- */
 
 void CharInput::readBuf ()
 {
-   assert (inpStream != NULL);
-   if (! inpStream->good ()) // important for string streams
+   assert (inpFile != NULL || inpTextMode);
+   bufLen = 0;
+   if (inpFile != NULL)
    {
-       bufLen = 0;
+      bufLen = fread (buf, 1, bufSize, inpFile);
    }
    else
    {
-      inpStream->read (static_cast <char *> (static_cast <void *> (& buf)), bufSize);
-      bufLen = inpStream->gcount ();
+      size_t len = inpText.length ();
+      if (inpTextPos < len)
+      {
+         bufLen = len - inpTextPos;
+         if (bufLen > bufSize)
+            bufLen = bufSize;
+         memcpy (buf, inpText.c_str () + inpTextPos, bufLen);
+         inpTextPos += bufLen;
+      }
    }
    bufPos = 0;
 }
@@ -995,15 +1045,6 @@ void MixedInput::Init ()
 
 /* ---------------------------------------------------------------------- */
 
-void MixedInput::openStream (istream & stream)
-{
-   if (inp == NULL)
-      inp = new CharInput;
-
-   inp->openStream (stream);
-   Init (); // after open, important
-}
-
 void MixedInput::openString (string text)
 {
    if (inp == NULL)
@@ -1130,8 +1171,8 @@ void MixedInput::message (MessageLevel level, const string msg)
    else
    {
       if (level == flawLevel || level == errorLevel)
-         throw IOErrorException (msg, file_name, line, column);
-         // throw exception to stop parsing of some predicate
+         raise_error (msg, file_name, line, column, false);
+         // stop parsing (originally exception, nobody catches it except main)
 
       if (level == abortLevel)
          global_message (abortLevel, msg, file_name, line, column);
@@ -1215,11 +1256,11 @@ void RewindInput::Init ()
 void RewindInput::stop (string msg)
 {
    error (msg + ", tokenKind=" + tokenKindToStr (tokenKind) + ", tokenTxt=" + tokenTxt +
-                ", symbol = " + NumToStr (symbol) + ", symbol = " + conv (symbol));
+                ", symbol = " + IntToStr (symbol) + ", symbol = " + conv (symbol));
 
 }
 
-void RewindInput::stop ()
+void RewindInput::stopUnexpected ()
 {
    if (tokenKind == eofToken)
       stop ("Unexpected end of source text");
@@ -1787,7 +1828,7 @@ char TextInput::character ()
            cnt++;
            textCh ();
         }
-        return char (n);
+        return (char) n;  // cecko: (char) n - cmm nezna char (n)
      }
 
      else if (inpCh == 'x' || inpCh == 'X')     // hex
@@ -1806,7 +1847,7 @@ char TextInput::character ()
            n = n*16 + d;
            textCh ();
         }
-        return char (n);
+        return (char) n;  // cecko: (char) n - cmm nezna char (n)
      }
      else
      {
@@ -2253,7 +2294,7 @@ void MixedInput::translate ()
       default: ;
    }
 
-   // info ("TRANSLATE tokenTxt= " + tokenTxt + ", symbol = " + NumToStr (symbol) + ", symbol = " + conv (symbol));
+   // info ("TRANSLATE tokenTxt= " + tokenTxt + ", symbol = " + IntToStr (symbol) + ", symbol = " + conv (symbol));
 }
 
 /* ---------------------------------------------------------------------- */
@@ -2497,7 +2538,12 @@ signed char TextInput::readSignedChar ()
    signed char result = 0;
    string txt = readSignedNumber ();
    bool ok;
-   StrToNum (txt, result, ok);
+   long n = 0;
+   StrToLong (txt, n, ok);
+   if (ok && (n < SCHAR_MIN || n > SCHAR_MAX))
+      ok = false;
+   if (ok)
+      result = n;
    if (!ok)
       error ("Integer expected");
    return result;
@@ -2508,7 +2554,12 @@ short TextInput::readShort ()
    short result = 0;
    string txt = readSignedNumber ();
    bool ok;
-   StrToNum (txt, result, ok);
+   long n = 0;
+   StrToLong (txt, n, ok);
+   if (ok && (n < SHRT_MIN || n > SHRT_MAX))
+      ok = false;
+   if (ok)
+      result = n;
    if (!ok)
       error ("Integer expected");
    return result;
@@ -2519,7 +2570,7 @@ int TextInput::readInt ()
    int result = 0;
    string txt = readSignedNumber ();
    bool ok;
-   StrToNum (txt, result, ok);
+   StrToInt (txt, result, ok);
    if (!ok)
       error ("Integer expected");
    return result;
@@ -2530,7 +2581,7 @@ long TextInput::readLong ()
    long result = 0;
    string txt = readSignedNumber ();
    bool ok;
-   StrToNum (txt, result, ok);
+   StrToLong (txt, result, ok);
    if (!ok)
       error ("Long integer expected");
    return result;
@@ -2541,7 +2592,12 @@ unsigned char TextInput::readUChar ()
    unsigned char result = 0;
    string txt = readSignedNumber ();
    bool ok;
-   StrToNum (txt, result, ok);
+   unsigned int n = 0;
+   StrToUInt (txt, n, ok);
+   if (ok && n > UCHAR_MAX)
+      ok = false;
+   if (ok)
+      result = n;
    if (!ok)
       error ("Integer expected");
    return result;
@@ -2552,7 +2608,12 @@ unsigned short TextInput::readUShort ()
    unsigned short result = 0;
    string txt = readSignedNumber ();
    bool ok;
-   StrToNum (txt, result, ok);
+   unsigned int n = 0;
+   StrToUInt (txt, n, ok);
+   if (ok && n > USHRT_MAX)
+      ok = false;
+   if (ok)
+      result = n;
    if (!ok)
       error ("Integer expected");
    return result;
@@ -2563,7 +2624,7 @@ unsigned int TextInput::readUInt ()
    unsigned int result = 0;
    string txt = readSignedNumber ();
    bool ok;
-   StrToNum (txt, result, ok);
+   StrToUInt (txt, result, ok);
    if (!ok)
       error ("Unsigned integer expected");
    return result;
@@ -2574,7 +2635,7 @@ unsigned long TextInput::readULong ()
    unsigned long result = 0;
    string txt = readSignedNumber ();
    bool ok;
-   StrToNum (txt, result, ok);
+   StrToULong (txt, result, ok);
    if (!ok)
       error ("Unsinged long integer expected");
    return result;
@@ -2585,7 +2646,10 @@ float TextInput::readFloat ()
    float result = 0;
    string txt = readSignedNumber ();
    bool ok;
-   StrToNum (txt, result, ok);
+   double n = 0;
+   StrToDouble (txt, n, ok);
+   if (ok)
+      result = n;
    if (!ok)
       error ("Float expected");
    return result;
@@ -2596,7 +2660,7 @@ double TextInput::readDouble ()
    double result = 0;
    string txt = readSignedNumber ();
    bool ok;
-   StrToNum (txt, result, ok);
+   StrToDouble (txt, result, ok);
    if (!ok)
       error ("Double expected");
    return result;
@@ -2970,32 +3034,32 @@ void TextOutput::putString (string value)
 
 void TextOutput::putInt (int value)
 {
-    put (NumToStr (value));
+    put (IntToStr (value));
 }
 
 void TextOutput::putLong (long value)
 {
-    put (NumToStr (value));
+    put (LongToStr (value));
 }
 
 void TextOutput::putUInt (unsigned int value)
 {
-    put (NumToStr (value));
+    put (ULongToStr (value));
 }
 
 void TextOutput::putULong (unsigned long value)
 {
-    put (NumToStr (value));
+    put (ULongToStr (value));
 }
 
 void TextOutput::putFloat (float value)
 {
-    put (NumToStr (value));
+    put (DoubleToStr (value));
 }
 
 void TextOutput::putDouble (double value)
 {
-    put (NumToStr (value));
+    put (DoubleToStr (value));
 }
 /* ---------------------------------------------------------------------- */
 
@@ -3103,6 +3167,14 @@ void TextOutput::store ()
 string TextOutput::toString ()
 {
    return text_storage.to_string ();
+}
+
+/* vlozeni textu na pozici pos (napr. deklarace pred uz vypsany prikaz) */
+void TextOutput::insertText (int pos, const string s)
+{
+   string tail = text_storage.cut_from (pos);
+   text_storage.put_str (s);
+   text_storage.put_str (tail);
 }
 
 string TextOutput::incString ()

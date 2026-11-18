@@ -3,11 +3,12 @@
 
 #include "envio.h"
 
-#include "ioexception.h"
 #include "str.h" // const lf, ...
+#include "conv.h" // StrToULong, IntToStr, ...
 #include "inf.h" // function info
 
 #include <string.h>  // function memcpy
+#include <cstdio>    // fopen, fclose
 
 #define DUPL_OUTPUT
 
@@ -93,11 +94,10 @@ void InclDirectories::copyFrom (InclDirectories & source)
 
 inline bool FileExists (string file_name)
 {
-   ifstream f;
-
-   f.open (file_name.c_str ());
-   bool found = f.good ();
-   f.close ();
+   FILE * f = fopen (file_name.c_str (), "rb");
+   bool found = (f != NULL);
+   if (found)
+      fclose (f);
 
    return found;
 }
@@ -139,7 +139,7 @@ string InclDirectories::findInclFile (string name,
    string result = ""; // when not found
    // debug ("findInclFile " + name);
 
-   if (! hasPrefix (name, '/'))
+   if (! hasPrefixChar (name, '/'))
    {
       bool found = false;
       InclDir * item = first_dir;
@@ -241,6 +241,8 @@ CondSymbol::CondSymbol () :
    prev (NULL),
    next (NULL),
    above (NULL),
+   left (NULL),
+   right (NULL),
    fileName (),
    fileInx (0),
    linePos (0),
@@ -268,6 +270,8 @@ CondSymbol::~CondSymbol ()
 
    if (above != NULL)
    {
+      above->removeTree (this);
+
       if (prev != NULL)
          prev->next = next;
       else
@@ -288,7 +292,8 @@ CondSymbol::~CondSymbol ()
 
 CondSymbols::CondSymbols () :
    first_symbol (NULL),
-   last_symbol (NULL)
+   last_symbol (NULL),
+   root (NULL)
 {
 }
 
@@ -298,12 +303,108 @@ CondSymbols::~CondSymbols ()
    while (item != NULL)
    {
       CondSymbol * tmp = item->next;
+      item->above = NULL; // do not unlink from list and tree, everything is deleted
       delete item;
       item = tmp;
    }
 
    first_symbol = NULL;
    last_symbol = NULL;
+   root = NULL;
+}
+
+/* ---------------------------------------------------------------------- */
+
+/* unbalanced binary search tree: left < name <= right */
+
+void CondSymbols::insTree (CondSymbol * item)
+{
+   item->left = NULL;
+   item->right = NULL;
+
+   if (root == NULL)
+   {
+      root = item;
+   }
+   else
+   {
+      CondSymbol * p = root;
+      bool cont = true;
+      while (cont)
+      {
+         if (item->name < p->name)
+         {
+            if (p->left == NULL) { p->left = item; cont = false; }
+            else p = p->left;
+         }
+         else
+         {
+            // equal names to the right => searchSymbol finds older symbol first
+            if (p->right == NULL) { p->right = item; cont = false; }
+            else p = p->right;
+         }
+      }
+   }
+}
+
+void CondSymbols::replaceChild (CondSymbol * parent, CondSymbol * old_item, CondSymbol * new_item)
+{
+   if (parent == NULL)
+      root = new_item;
+   else if (parent->left == old_item)
+      parent->left = new_item;
+   else
+      parent->right = new_item;
+}
+
+void CondSymbols::removeTree (CondSymbol * item)
+{
+   // find item and its parent
+   CondSymbol * parent = NULL;
+   CondSymbol * p = root;
+   while (p != NULL && p != item)
+   {
+      parent = p;
+      if (item->name < p->name)
+         p = p->left;
+      else
+         p = p->right;
+   }
+
+   if (p != NULL)
+   {
+      if (item->left == NULL)
+      {
+         replaceChild (parent, item, item->right);
+      }
+      else if (item->right == NULL)
+      {
+         replaceChild (parent, item, item->left);
+      }
+      else
+      {
+         // two children: replace item with successor (minimum of right subtree)
+         CondSymbol * succ_parent = item;
+         CondSymbol * succ = item->right;
+         while (succ->left != NULL)
+         {
+            succ_parent = succ;
+            succ = succ->left;
+         }
+
+         if (succ_parent != item)
+         {
+            succ_parent->left = succ->right;
+            succ->right = item->right;
+         }
+         succ->left = item->left;
+
+         replaceChild (parent, item, succ);
+      }
+   }
+
+   item->left = NULL;
+   item->right = NULL;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -352,6 +453,8 @@ void CondSymbols::insSymbol (CondSymbol * item)
       last_symbol->next = item;
       last_symbol = item;
    }
+
+   insTree (item);
 }
 
 /* ---------------------------------------------------------------------- */
@@ -359,9 +462,14 @@ void CondSymbols::insSymbol (CondSymbol * item)
 CondSymbol * CondSymbols::searchSymbol (string name)
 {
    assert (this != NULL);
-   CondSymbol * item = first_symbol;
+   CondSymbol * item = root;
    while (item != NULL && item->name != name)
-      item = item->next;
+   {
+      if (name < item->name)
+         item = item->left;
+      else
+         item = item->right;
+   }
    return item;
 }
 
@@ -846,6 +954,7 @@ EnvOptions::EnvOptions ():
    reportIncludes (false),
    ignoreIncludes (false),
    tolerateIncludes (false),
+   tolerateOnlySystemIncludes (false),
 
    ignoreWarningDirectives (false),
    ignoreErrorDirectives (false),
@@ -1938,6 +2047,10 @@ void EnvInput::resolveSymbol () // @@
          }
       }
 
+      // selective expansion (e.g. only in directives, or not for some names)
+      if (symbol != NULL && ! symbol->local_param && ! expandMacro (symbol))
+         symbol = NULL;
+
       // read parameters and expand macro
       if (symbol != NULL)
          expandSymbol (symbol);
@@ -1983,7 +2096,7 @@ bool EnvInput::threeDots ()
    bool result;
    if (compound_separators)
    {
-       result = isSeparator() && tokenTxt == "...";
+       result = isSeparatorToken() && tokenTxt == "...";
        if (result)
           getSimpleToken ();
    }
@@ -2222,7 +2335,7 @@ bool EnvInput::twoSeparators (char c1, char c2)
     bool result;
     if (compound_separators)
     {
-       result = isSeparator () &&
+       result = isSeparatorToken () &&
                 tokenTxt.length () == 2 &&
                 tokenTxt [0] == c1 &&
                 tokenTxt [1] == c2;
@@ -2313,6 +2426,68 @@ int EnvInput::condIdent (bool cont)
 
 /* ---------------------------------------------------------------------- */
 
+int EnvInput::condHasInclude ()
+{
+   // __has_include ("file") or __has_include (<file>), file name without macro expansion
+   getSimpleToken (); // skip __has_include
+   skipSpaces ();
+
+   if (! isSeparator ('('))
+      error ("'(' expected (in __has_include)");
+
+   getSimpleToken (); // skip parenthesis
+   skipSpaces ();
+
+   string name = "";
+   bool system_file = false;
+
+   if (tokenKind == stringToken)
+   {
+      name = tokenVal;
+      getSimpleToken (); // skip string
+   }
+   else if (isSeparator ('<'))
+   {
+      system_file = true;
+      getSimpleToken (); // skip '<'
+      while (tokenKind != eolToken &&
+             tokenKind != stopToken &&
+             tokenKind != finalToken &&
+             tokenKind != eofToken &&
+             ! isSeparator ('>'))
+      {
+         name = name + tokenTxt;
+         getSimpleToken ();
+      }
+
+      if (! isSeparator ('>'))
+         error ("'>' expected (in __has_include)");
+
+      getSimpleToken (); // skip '>'
+   }
+   else
+   {
+      error ("File name expected (in __has_include)");
+   }
+
+   skipSpaces ();
+   if (! isSeparator (')'))
+      error ("')' expected (in __has_include)");
+
+   getExprToken (); // skip parenthesis, expand symbol
+
+   assert (real_input != NULL);
+   string dir = extractPath (real_input->getFileName ());
+   string found = incl_directories.lookupInclFile (name, dir, system_file);
+
+   if (found != "")
+      return 1;
+   else
+      return 0;
+}
+
+/* ---------------------------------------------------------------------- */
+
 int EnvInput::condSimpleExpr (bool cont)
 {
    int result = 0;
@@ -2335,11 +2510,11 @@ int EnvInput::condSimpleExpr (bool cont)
       if (inx < len)
          txt = Head (txt, inx);
 
-      bool ok = StrToInt (txt, result);
+      bool ok = StrToIntOk (txt, result);
       if (! ok)
       {
          unsigned long temp;
-         ok = StrToNum (txt, temp);
+         StrToULong (txt, temp, ok);
          if (ok)
             result = temp;
          else
@@ -2369,6 +2544,11 @@ int EnvInput::condSimpleExpr (bool cont)
          {
             result = condSymbolDefined ();
          }
+      }
+      else if ((tokenTxt == "__has_include" || tokenTxt == "__has_include_next") &&
+               localSearchSymbol (tokenTxt) == NULL)
+      {
+         result = condHasInclude ();
       }
       else
       {
@@ -2408,6 +2588,16 @@ int EnvInput::condSimpleExpr (bool cont)
       getExprToken (); // skip exclamation mark
       result = ~ condSimpleExpr (cont);
    }
+   else if (isSeparator ('-'))
+   {
+      getExprToken (); // skip unary minus
+      result = - condSimpleExpr (cont);
+   }
+   else if (isSeparator ('+'))
+   {
+      getExprToken (); // skip unary plus
+      result = condSimpleExpr (cont);
+   }
    else if (isSeparator ('('))
    {
       getExprToken (); // skip left parenthesis
@@ -2442,9 +2632,12 @@ int EnvInput::condFactor (bool cont)
       else
       {
          if (temp == 0)
-            error ("Zero divide");
-
-         if (mark == '/')
+         {
+            if (cont)
+               error ("Zero divide");
+            result = 0; // value is not used (cont == false)
+         }
+         else if (mark == '/')
             result = result / temp;
          else
             result = result % temp;
@@ -2917,7 +3110,7 @@ void EnvInput::includeDirective (bool include_next) // @@
                   explain ("include_directive", "include_next_found", name);
             }
 
-            if (name == "" && ! opt.tolerateIncludes)
+            if (name == "" && (! opt.tolerateIncludes || (opt.tolerateOnlySystemIncludes && ! system_dir)))
                error ("Cannot open include file: " + symbolic_name);
          }
          else
@@ -2956,6 +3149,38 @@ void EnvInput::includeDirective (bool include_next) // @@
 }
 
 /**************************** OTHER DIRECTIVES ****************************/
+
+/* cecko: #line N "soubor" - nasledujici radek je radek N souboru (cmm.bin: predzpracovana
+   prekladova jednotka se sablonami z hlavicek, chyby hlasi puvodni soubor a radek) */
+void EnvInput::lineDirective ()
+{
+   getSimpleToken (); // skip line
+   skipSpaces ();
+   int n = 0;
+   bool ok = false;
+   if (tokenKind == numberToken) StrToInt (tokenTxt, n, ok);
+   if (! ok)
+   {
+      error ("Line number expected");
+      return;
+   }
+   getSimpleToken ();
+   skipSpaces ();
+   string file = "";
+   if (tokenKind == stringToken)
+   {
+      file = tokenTxt;
+      if (file.length () >= 2 && file [0] == '"' && file [file.length () - 1] == '"')
+         file = file.substr (1, file.length () - 2);
+      getSimpleToken ();
+      skipSpaces ();
+   }
+   if (condValue && inp != NULL)
+   {
+      inp->linePos = n;   // konec radku direktivy uz precten
+      if (file != "") inp->fileInx = storeFileName (file);
+   }
+}
 
 void EnvInput::pragmaDirective ()
 {
@@ -3152,6 +3377,9 @@ void EnvInput::getToken ()
 
          else if (name == "pragma")
             pragmaDirective ();
+
+         else if (name == "line")
+            lineDirective ();
 
          else if (name == "warning")
             warningDirective ();

@@ -79,9 +79,12 @@ struct CondSymbol
    CondParam * first_param;
    CondParam * last_param;
 
-   CondSymbol * prev;
+   CondSymbol * prev; // list in order of definition
    CondSymbol * next;
    CondSymbols * above;
+
+   CondSymbol * left;  // unbalanced binary search tree (by name), only for searchSymbol
+   CondSymbol * right; // left < name <= right (equal names to the right)
 
    string fileName; // location of symbol defininiton
    int fileInx;
@@ -101,6 +104,12 @@ struct CondSymbols
 {
    CondSymbol * first_symbol;
    CondSymbol * last_symbol;
+
+   CondSymbol * root; // binary search tree
+
+   void insTree (CondSymbol * item);
+   void replaceChild (CondSymbol * parent, CondSymbol * old_item, CondSymbol * new_item);
+   void removeTree (CondSymbol * item);
 
    void insSymbol (CondSymbol * item);
 
@@ -253,6 +262,7 @@ struct EnvOptions
    bool reportIncludes; // true => produce tokens for include directives
    bool ignoreIncludes; // true => do not read include files, write original directive to output
    bool tolerateIncludes; // true => if include file is not found, write original directive to output
+   bool tolerateOnlySystemIncludes; // with tolerateIncludes: only <file_name>, missing "file_name" is an error
 
    bool ignoreWarningDirectives; // true => warning directives are ignored
    bool ignoreErrorDirectives; // true => error and warning directives are ignored
@@ -356,6 +366,7 @@ class EnvInput : public TextInput
 
    public:
       bool getCondValue () { return condValue; }
+      bool insideDirective () { return inside_directive; } // true => #if, #elif, #include ...
 
       void saveOptions (EnvOptions & state) { state = opt; }
       void restoreOptions (EnvOptions & state) { opt = state; }
@@ -405,6 +416,7 @@ class EnvInput : public TextInput
       bool condSymbolDefined ();
 
       int condIdent (bool cont);
+      int condHasInclude ();
       int condSimpleExpr (bool cont);
       int condFactor (bool cont);
       int condTerm (bool cont);
@@ -432,6 +444,7 @@ class EnvInput : public TextInput
       void endifDirective ();
       void includeDirective (bool include_next = false);
       void pragmaDirective ();
+      void lineDirective ();   // cecko: #line N "soubor" (cmm - predzpracovany text)
       void warningDirective ();
       void errorDirective ();
       void includeDirDirective ();
@@ -448,6 +461,10 @@ class EnvInput : public TextInput
       void setIncludeDirectiveToken (const string txt);
       void setUnusedDirectiveToken (const string txt);
       void setProcessedDirectiveToken ();
+
+      // selective macro expansion: false => symbol is not expanded, identifier is kept as token
+      // (called for each defined macro, also inside directives - see insideDirective)
+      virtual bool expandMacro (CondSymbol * symbol) { return true; }
 
       virtual bool customDirective (const string name) { return false; }
       virtual bool customPragma (const string name) { return false; }

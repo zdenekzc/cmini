@@ -2,6 +2,7 @@
 /* str.cc */
 
 #include "str.h"
+// #include "conv.h"
 
 #if 0
    #include "inf.h" // only for test_normalize_path
@@ -31,6 +32,11 @@ char * strToChars (const string s)
    memcpy (p, s.c_str (), len);
    p [len] = 0;
    return p;
+}
+
+string bufToStr (const char * buf, int len)
+{
+   return string (buf, len);
 }
 
 /* ---------------------------------------------------------------------- */
@@ -120,7 +126,7 @@ inline bool is_WhiteSpace (int n)
           n == '\x09';
 }
 
-string trim (string s)
+string trim (const string s)
 {
    int len = s.length ();
    while (len > 0 && is_WhiteSpace (s[len-1]))
@@ -133,7 +139,7 @@ string trim (string s)
    return s.substr (ofs-1, 1+len-ofs);
 }
 
-string trimLeft (string s)
+string trimLeft (const string s)
 {
    int len = s.length ();
 
@@ -144,7 +150,7 @@ string trimLeft (string s)
    return s.substr (ofs-1, 1+len-ofs);
 }
 
-string trimRight (string s)
+string trimRight (const string s)
 {
    int len = s.length ();
    while (len > 0 && is_WhiteSpace (s[len-1]))
@@ -155,13 +161,13 @@ string trimRight (string s)
 
 /* ---------------------------------------------------------------------- */
 
-bool hasPrefix (const string value, char prefix)
+bool hasPrefixChar (const string value, char prefix)
 {
    int len = value.length ();
    return len > 1 &&  value [0] == prefix;
 }
 
-string removePrefix (const string value, char prefix)
+string removePrefixChar (const string value, char prefix)
 {
    int len = value.length ();
    if (len > 1 && value [0] == prefix)
@@ -194,14 +200,14 @@ string removePrefix (const string value, const string prefix)
 
 /* ---------------------------------------------------------------------- */
 
-bool hasWordPrefix (const string value, char prefix)
+bool hasWordPrefixChar (const string value, char prefix)
 {
    int len = value.length ();
 
    return len > 1 && value [0] == prefix && isUpperCaseLetter (value [1]);
 }
 
-string removeWordPrefix (const string value, char prefix)
+string removeWordPrefixChar (const string value, char prefix)
 {
    int len = value.length ();
    if (len > 1 && value [0] == prefix && isUpperCaseLetter (value [1]))
@@ -236,13 +242,13 @@ string removeWordPrefix (const string value, const string prefix)
 
 /* ---------------------------------------------------------------------- */
 
-bool hasSuffix (const string value, char suffix)
+bool hasSuffixChar (const string value, char suffix)
 {
    int len = value.length ();
    return len > 1 && value [len-1] == suffix;
 }
 
-string removeSuffix (const string value, char suffix)
+string removeSuffixChar (const string value, char suffix)
 {
    int len = value.length ();
    if (len > 1 && value [len-1] == suffix)
@@ -413,7 +419,7 @@ string addSubdir (const string dir_name, const string file_name)
       return file_name;
    else if (file_name == "")
       return dir_name;
-   else if (hasPrefix (file_name, '/'))
+   else if (hasPrefixChar (file_name, '/'))
       return removeLastSlash (dir_name) + file_name;
    else
       return addSlash (dir_name) + file_name;
@@ -701,7 +707,7 @@ string removeQuotes (const string value, char quote)
                   inx ++;
                   ch = value [inx];
                }
-               result += char (n);
+               result += (char) n;  // cecko: (char) n - cmm nezna char (n)
             }
 
             else if (ch =='x' || ch =='X')  /* hex */
@@ -721,7 +727,7 @@ string removeQuotes (const string value, char quote)
                   inx ++;
                   ch = value [inx];
                }
-               result += char (n);
+               result += (char) n;  // cecko: (char) n - cmm nezna char (n)
             }
             else
             {
@@ -757,7 +763,7 @@ string removeQuotes (const string value, char quote)
 
 /* ---------------------------------------------------------------------- */
 
-string trimLines (string s)
+string trimLines (const string s)
 // remove leading and trailing white spaces and empty lines
 {
    int len = s.length ();

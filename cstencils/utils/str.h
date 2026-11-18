@@ -3,7 +3,6 @@
 #define __PROG_STR_H__
 
 #include "std.h"
-#include <sstream> // class istringstream (conversions from conv.h)
 
 OPEN_NAMESPACE
 
@@ -165,9 +164,10 @@ inline bool containsSubstr (const string s, const string t)
    return s.find (t) != string::npos;
 }
 
-inline string charToStr (char c) { return string (1, c); } // convert one character to string
-inline string charsToStr (const char * c) { return (c == NULL) ? "" : string (c); } // convert char pointer to string
+inline string charToStr (char c) { string s = ""; s += c; return s; } // convert one character to string
+inline string charsToStr (const char * c) { string s = ""; if (c != NULL) s = c; return s; } // convert char pointer to string
 char * strToChars (const string s); // convert string to char pointer
+string bufToStr (const char * buf, int len); // len characters from buf (string (buf, len))
 
 /* strings */
 
@@ -192,19 +192,19 @@ string trimLeft (const string s); // remove leading white spaces
 string trimRight (const string s); // remove trailing white spaces
 
 bool   hasPrefix (const string value, const string prefix);
-bool   hasPrefix (const string value, char prefix);
+bool   hasPrefixChar (const string value, char prefix);
 string removePrefix (const string value, const string prefix); // remove prefix (if present)
-string removePrefix (const string value, char prefix);
+string removePrefixChar (const string value, char prefix);
 
 bool   hasWordPrefix (const string value, const string prefix);
-bool   hasWordPrefix (const string value, char prefix);
+bool   hasWordPrefixChar (const string value, char prefix);
 string removeWordPrefix (const string value, const string prefix);
-string removeWordPrefix (const string value, char prefix);
+string removeWordPrefixChar (const string value, char prefix);
 
 bool   hasSuffix (const string value, const string suffix);
-bool   hasSuffix (const string value, char suffix);
+bool   hasSuffixChar (const string value, char suffix);
 string removeSuffix (const string value, const string suffix); // remove suffix (if present)
-string removeSuffix (const string value, char suffix);
+string removeSuffixChar (const string value, char suffix);
 
 string replaceChars (string s, char c1, char c2); // replace c1 with c2
 string removeChars (const string s, char c); // remove characters c
@@ -258,121 +258,6 @@ string normalizePath (const string s);
 // remove ".",  ".." and "//"
 
 void test_normalize_path ();
-
-/* ---------------------------------------------------------------------- */
-
-/* conversions (were in conv.h) */
-
-template <typename T>
-inline string NumToStr (T num)
-{
-   ostringstream stream;
-   stream << num;
-   return stream.str ();
-}
-
-template <typename T>
-inline void StrToNum (string txt, T & result, bool & ok)
-// txt ... input value
-// ok == true ... conversion succeded
-// result ... converted value, assigned only when ok == true
-{
-   T n;
-   istringstream stream (txt);
-
-   #ifdef GCC2
-      stream.unsetf (ios::skipws); // noskipws is not supported by GCC 2.96
-   #else
-      stream >> noskipws;
-   #endif
-
-   if (txt.length () > 2 && txt[0] == '0' && (txt[1] == 'x' || txt[1] == 'X'))
-   {
-      char c1;
-      char c2;
-      stream >> c1 >> c2 >> hex; // skip two characters and set hex
-   }
-
-   stream >> n;
-
-   #ifdef GCC2
-      ok = ! stream.fail (); // !?
-   #else
-      ok = (stream.eof () && ! stream.fail ());
-   #endif
-
-   if (ok)
-      result = n;
-
-   // ok == false, nothing is assigned to result
-}
-
-template <typename T>
-inline bool StrToNum (string txt, T & result)
-{
-   bool ok;
-   StrToNum (txt, result, ok);
-   return ok;
-}
-
-/* ---------------------------------------------------------------------- */
-
-inline string BoolToStr (bool value) // convert bool to string
-{
-   return value ? "true" : "false";
-}
-
-inline void StrToBool (string txt, bool & result, bool & ok) // convert string to boolean
-{
-   if (txt == "true")
-   {
-      result = true;
-      ok = true;
-   }
-   else if (txt == "false")
-   {
-      result = false;
-      ok = true;
-   }
-   else
-   {
-      ok = false;
-   }
-}
-
-inline bool StrToBool (string txt, bool & result)
-{
-   bool ok;
-   StrToBool (txt, result, ok);
-   return ok;
-}
-
-/* ---------------------------------------------------------------------- */
-
-inline string IntToStr (int value)
-// convert int to string
-{
-   return NumToStr (value);
-}
-
-inline void StrToInt (string txt, int & result, bool & ok)
-// convert string to int
-// txt ... input value
-// ok == true ... conversion succeded
-// result ... converted value, assigned only when ok == true
-{
-   StrToNum (txt, result, ok);
-}
-
-inline bool StrToInt (string txt, int & result)
-// returns ok from previous function
-{
-   bool ok;
-   StrToInt (txt, result, ok);
-   return ok;
-}
-
-/* ---------------------------------------------------------------------- */
 
 CLOSE_NAMESPACE
 

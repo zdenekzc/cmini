@@ -1259,7 +1259,7 @@ void List::readSource (EnvInput & io)
    element = io.readIdent ();
    io.checkSeparator ('>');
 
-   if (io.isIdent ())
+   if (io.isIdentToken ())
       Name = io.readIdent ();
 
    if (io.isSeparator (';'))
@@ -1404,7 +1404,7 @@ void customCommand (EnvInput & io, Project * prj)
       io.getToken ();
       string txt = io.readNumber ();
       int num;
-      if (StrToInt (txt, num))
+      if (StrToIntOk (txt, num))
       {
          assert (prj != NULL);
          prj->selected_alternative = num;

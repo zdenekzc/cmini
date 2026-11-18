@@ -5,6 +5,7 @@
 #include "elem.h"
 
 #include "str.h"
+#include "conv.h" // IntToStr, StrToInt
 #include "code.h" // ReadNormalField
 
 OPEN_NAMESPACE

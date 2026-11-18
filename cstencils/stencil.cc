@@ -29,7 +29,7 @@ static bool isStringType (string type)
 static string baseTypeName (string type)
 // type name without the pointer mark ("TItem *" -> "TItem")
 {
-   return trim (removeSuffix (type, '*'));
+   return trim (removeSuffixChar (type, '*'));
 }
 
 static bool isClassPointer (Module * module, string type)

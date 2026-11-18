@@ -9,7 +9,7 @@
 #include "std.h"
 #include "msglevel.h" // type MessageLevel
 
-#include <fstream>
+#include <cstdio> // FILE
 
 OPEN_NAMESPACE
 
@@ -170,6 +170,7 @@ class TextStorage
       int length () { return byte_count; }
       string to_string ();
       string inc_string ();
+      string cut_from (int pos);   // text od pozice pos (odebere se)
 
       void write (const string file_name);
       bool compare (const string file_name);
@@ -189,13 +190,14 @@ class CharInput
    protected:
       static const size_t bufSize = 4 * 1024;
 
-      istream * inpStream;
+      FILE * inpFile;      // vstup ze souboru (open)
+      string inpText;      // vstup z retezce (openString)
+      size_t inpTextPos;
+      bool inpTextMode;
 
       size_t bufPos;
       size_t bufLen;
       unsigned char buf [bufSize];
-
-      bool releaseStream;
 
    public:
       int fileInx; // file number
@@ -232,8 +234,8 @@ class CharInput
 
    public:
       void open (string file_name);
-      void openStream (istream & stream);
       void openString (string text);
+      void closeInput ();
 
       string getFileName ();
       void setFileName (const string file_name);
@@ -293,7 +295,6 @@ class MixedInput
 
    public:
       void open (string name);
-      void openStream (istream & stream);
       void openString (string text);
 
       void close () { Finish (); }
@@ -391,7 +392,7 @@ class RewindInput : public MixedInput
       void skipRewind ();
 
       void stop (string msg);
-      void stop ();
+      void stopUnexpected ();
 
       void saveTrace () { eliminateMessages (); }
       void restoreTrace () { restoreMessages (); }
@@ -470,12 +471,12 @@ class TextInput : public RewindInput
       virtual void getToken ();
       void nextToken () { getToken (); }
 
-      bool isName () { return tokenKind == nameToken; }
+      bool isNameToken () { return tokenKind == nameToken; }
       bool isNumber () { return tokenKind == numberToken; }
       bool isReal () { return tokenKind == realToken; }
       bool isChar () { return tokenKind == charToken; }
       bool isString () { return tokenKind == stringToken; }
-      bool isSeparator () { return tokenKind == separatorToken; }
+      bool isSeparatorToken () { return tokenKind == separatorToken; }
       bool isSpace () { return tokenKind == spaceToken; }
       bool isEol ()  { return tokenKind == eolToken; }
       bool isEof () { return tokenKind == eofToken; }
@@ -500,7 +501,7 @@ class TextInput : public RewindInput
 
       // name ... identifier or keyword
       // ident ... identifier
-      bool isIdent () { return symbol == IDENT; }
+      bool isIdentToken () { return symbol == IDENT; }
       bool isIdent (const string s) {return (symbol == IDENT) && (tokenTxt == s); }
       void checkIdent (const string s);
       string readIdent ();
@@ -575,6 +576,9 @@ class TextOutput
       void writeText ();
 
       string toString ();
+      int textLength () { return text_storage.length (); }
+      string cutText (int pos) { return text_storage.cut_from (pos); }   // text od pos (odebere se)
+      void insertText (int pos, const string s);   // vlozi text na pozici pos (stav vystupu se nemeni)
       string incString ();
 
       void reset () { text_storage.reset (); }
