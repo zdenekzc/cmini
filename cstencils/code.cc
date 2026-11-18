@@ -2757,7 +2757,7 @@ Class * find_class (Field * field, string name)
    // !? try local module, then project
    Class * cls = currentModule (elem) -> seekClass (name);
 
-   check (cls != NULL, "Unknown class: " + name, field);
+   check_field (cls != NULL, "Unknown class: " + name, field);
 
    return cls;
 }
@@ -2769,7 +2769,7 @@ void ClassPtrField::Prepare ()
       string txt = getText ();
 
       if (txt.find ('*') != string::npos)
-         check (false, "Class identifier expected: " + txt + " (not pointer)", this);
+         check_field (false, "Class identifier expected: " + txt + " (not pointer)", this);
 
       if (txt == "")
          setValue (NULL);
@@ -2795,7 +2795,7 @@ void AttrPtrField::Prepare ()
       Class * cls = find_class (this, a);
 
       Attr * attr = cls->seekAttr (b);
-      check (attr != NULL, "Unknown attribute: " + txt, this);
+      check_field (attr != NULL, "Unknown attribute: " + txt, this);
 
       setValue (attr);
    }
@@ -2818,7 +2818,7 @@ void ListPtrField::Prepare ()
          Class * cls = find_class (this, a);
 
          List * list = cls->seekList (b); // search in current class or in base classes
-         check (list != NULL, "Unknown list: " + txt, this);
+         check_field (list != NULL, "Unknown list: " + txt, this);
 
          setValue (list);
       }

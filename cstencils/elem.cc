@@ -441,7 +441,7 @@ static Element * searchElement (Element * top, const string id)
    return result;
 }
 
-Element * lookupElement (Element * start, const string id)
+Element * lookupElement_elem (Element * start, const string id)
 {
    assert (start != NULL);
 
@@ -452,10 +452,10 @@ Element * lookupElement (Element * start, const string id)
    return searchElement (top, id);
 }
 
-Element * lookupElement (Field * start, const string id)
+Element * lookupElement_field (Field * start, const string id)
 {
    assert (start != NULL);
-   return lookupElement (start->getUpperElem (), id);
+   return lookupElement_elem (start->getUpperElem (), id);
 }
 #endif
 
@@ -474,7 +474,7 @@ void copyFields (Element * target, Element * source, bool include_name)
          if (new_field == NULL)
             new_field = target->createField (name);
 
-         check (new_field != NULL, "Cannot copy fields", field);
+         check_field (new_field != NULL, "Cannot copy fields", field);
          new_field->setText (field->getText ());
          // target->insertLastField (new_field); already done by CreateField
       }
@@ -492,7 +492,7 @@ void copyElement (Element * target, Element * elem)
    if (factory != NULL)
       new_elem = factory->createElement ();
 
-   check (new_elem != NULL, "Cannot copy element", elem);
+   check_elem (new_elem != NULL, "Cannot copy element", elem);
    target->insertLastElem (new_elem);
 
    copyFields (new_elem, elem, true); // include name field
@@ -589,7 +589,7 @@ void field_info (Field * field,
 
 /* ---------------------------------------------------------------------- */
 
-void info (string msg, Element * elem)
+void info_elem (string msg, Element * elem)
 {
    string note;
    string file_name;
@@ -600,7 +600,7 @@ void info (string msg, Element * elem)
    info (msg + note, file_name, line, column);
 }
 
-void info (string msg, Field * field)
+void info_field (string msg, Field * field)
 {
    string note;
    string file_name;
@@ -613,7 +613,7 @@ void info (string msg, Field * field)
 
 /* ---------------------------------------------------------------------- */
 
-void warning (string msg, Element * elem)
+void warning_elem (string msg, Element * elem)
 {
    string note;
    string file_name;
@@ -624,7 +624,7 @@ void warning (string msg, Element * elem)
    warning (msg + note, file_name, line, column);
 }
 
-void warning (string msg, Field * field)
+void warning_field (string msg, Field * field)
 {
    string note;
    string file_name;
@@ -637,7 +637,7 @@ void warning (string msg, Field * field)
 
 /* ---------------------------------------------------------------------- */
 
-void error (string msg, Element * elem)
+void error_elem (string msg, Element * elem)
 {
    string note;
    string file_name;
@@ -648,7 +648,7 @@ void error (string msg, Element * elem)
    error (msg + note, file_name, line, column);
 }
 
-void error (string msg, Field * field)
+void error_field (string msg, Field * field)
 {
    string note;
    string file_name;
@@ -661,16 +661,16 @@ void error (string msg, Field * field)
 
 /* ---------------------------------------------------------------------- */
 
-void check (bool cond, string msg, Element * elem)
+void check_elem (bool cond, string msg, Element * elem)
 {
    if (!cond)
-      error (msg, elem);
+      error_elem (msg, elem);
 }
 
-void check (bool cond, string msg, Field * field)
+void check_field (bool cond, string msg, Field * field)
 {
    if (!cond)
-      error (msg, field);
+      error_field (msg, field);
 }
 
 /****************************** ELEMENT TREE ******************************/

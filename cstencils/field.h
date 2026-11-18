@@ -124,109 +124,102 @@ class Field_PropItem_Observer
 
 /* ---------------------------------------------------------------------- */
 
-template <typename T>
-class FieldTemplate : public Field
-{
-   private:
-      T * pointer;
+/* Field classes without templates (cmini has no templates): each macro
+   declares one class for one value type; methods getText, setText and
+   defaultValue of the value fields are defined in field.cc */
 
-   public:
-      virtual T getValue () /* new */
-         { return * pointer; }
-
-      virtual void setValue (T val) /* new */
-         { * pointer = val; }
-
-      virtual string getText ();
-
-      virtual void setText (string txt);
-
-      virtual T defaultValue (); /* new */
-
-      virtual bool isDefault ()
-         { return getValue () == defaultValue (); }
-
-      void setPointer (T * p_pointer)
-         { pointer = p_pointer; }
-
-      void setVariable (T & p_variable)
-         { pointer = & p_variable; }
-
-      FieldTemplate () :
-         pointer (NULL)
-         { }
+#define DECLARE_VALUE_FIELD(Name, T) \
+class Name : public Field \
+{ \
+   private: \
+      T * pointer; \
+   public: \
+      virtual T getValue () \
+         { return * pointer; } \
+      virtual void setValue (T val) \
+         { * pointer = val; } \
+      virtual string getText (); \
+      virtual void setText (string txt); \
+      virtual T defaultValue (); \
+      virtual bool isDefault () \
+         { return getValue () == defaultValue (); } \
+      void setPointer (T * p_pointer) \
+         { pointer = p_pointer; } \
+      void setVariable (T & p_variable) \
+         { pointer = & p_variable; } \
+      Name () : \
+         pointer (NULL) \
+         { } \
 };
 
-typedef FieldTemplate <bool>   BoolField;
-typedef FieldTemplate <int>    IntField;
-typedef FieldTemplate <string> StrField;
+DECLARE_VALUE_FIELD (BoolField, bool)
+DECLARE_VALUE_FIELD (IntField,  int)
+DECLARE_VALUE_FIELD (StrField,  string)
 
 /* ---------------------------------------------------------------------- */
 
-template <typename E>
-class IndirectFieldTemplate : public Field
-{
-   private:
-      typedef E * T;
+/* field of a pointer type (E * is stored in the field, text is kept as is) */
 
-      T * pointer;
-      string text;
-
-   public:
-      virtual T getValue ()
-         { return * pointer; }
-
-      virtual void setValue (T val)
-         { * pointer = val; }
-
-      virtual string getText ()
-         { return text; }
-
-      virtual void setText (string val)
-         { text = val; }
-
-      virtual T defaultValue ()
-         { return NULL; }
-
-      virtual bool isDefault ()
-         { return getValue () == defaultValue (); }
-
-      void setPointer (T * p_pointer)
-         { pointer = p_pointer; }
-
-      void setVariable (T & p_variable)
-         { pointer = & p_variable; }
-
-      IndirectFieldTemplate () :
-         pointer (NULL),
-         text ()
-         { }
+#define DECLARE_INDIRECT_FIELD(Name, E) \
+class Name : public Field \
+{ \
+   private: \
+      typedef E * T; \
+      T * pointer; \
+      string text; \
+   public: \
+      virtual T getValue () \
+         { return * pointer; } \
+      virtual void setValue (T val) \
+         { * pointer = val; } \
+      virtual string getText () \
+         { return text; } \
+      virtual void setText (string val) \
+         { text = val; } \
+      virtual T defaultValue () \
+         { return NULL; } \
+      virtual bool isDefault () \
+         { return getValue () == defaultValue (); } \
+      void setPointer (T * p_pointer) \
+         { pointer = p_pointer; } \
+      void setVariable (T & p_variable) \
+         { pointer = & p_variable; } \
+      Name () : \
+         pointer (NULL), \
+         text () \
+         { } \
 };
 
-typedef IndirectFieldTemplate <Element> ElementField;
+class Class;   /* forward declarations for the pointer fields (code.h) */
+class Attr;
+class List;
+
+DECLARE_INDIRECT_FIELD (ElementField, Element)
+DECLARE_INDIRECT_FIELD (IndirectField_Class, Class)
+DECLARE_INDIRECT_FIELD (IndirectField_Attr,  Attr)
+DECLARE_INDIRECT_FIELD (IndirectField_List,  List)
 
 /* ---------------------------------------------------------------------- */
 
-template <typename F, typename T>
-class FieldHolder : public F
-{
-   private:
-      T variable;
+/* field that keeps its own value (variable) */
 
-   public:
-      virtual T getValue ()
-         { return variable; }
-
-      virtual void setValue (T val)
-         { variable = val; }
-
-      FieldHolder ()
-         { this->setVariable (variable); }
+#define DECLARE_FIELD_HOLDER(Name, F, T) \
+class Name : public F \
+{ \
+   private: \
+      T variable; \
+   public: \
+      virtual T getValue () \
+         { return variable; } \
+      virtual void setValue (T val) \
+         { variable = val; } \
+      Name () \
+         { this->setVariable (variable); } \
 };
 
-typedef FieldHolder <BoolField, bool>   BoolFieldHolder;
-typedef FieldHolder <IntField,  int>    IntFieldHolder;
-typedef FieldHolder <StrField,  string> StrFieldHolder;
+DECLARE_FIELD_HOLDER (BoolFieldHolder, BoolField, bool)
+DECLARE_FIELD_HOLDER (IntFieldHolder,  IntField,  int)
+DECLARE_FIELD_HOLDER (StrFieldHolder,  StrField,  string)
 
 /* ---------------------------------------------------------------------- */
 

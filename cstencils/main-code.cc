@@ -1,12 +1,9 @@
 /* main-code.cc - translator list.t => list.hpp, list.cpp */
 
-#include <getopt.h>
 #include <stdlib.h>
-#include <cstddef>
 #include <iostream>
 
 #include "str.h"
-#include "ioexception.h"
 #include "inf.h"
 #include "code.h"
 
@@ -34,63 +31,70 @@ static void usage ()
 
 static void read_options (int argc, char ** argv, Project * prj)
 {
-   static struct option long_options [] =
-   { {"header",     required_argument, NULL, 'h'},
-     {"code",       required_argument, NULL, 'c'},
-     {"output-dir", required_argument, NULL, 'o'},
-     {"no-debug",   no_argument,       NULL, 'd'},
-     {"no-warn",    no_argument,       NULL, 'w'},
-     {"help",       no_argument,       NULL, 'H'},
-     {NULL, 0, NULL, 0} };
+   int i = 1;
 
-   int c;
-   while ((c = getopt_long (argc, argv, "h:c:", long_options, NULL)) != -1)
+   while (i < argc && argv [i][0] == '-' && argv [i][1] != '\0')
    {
-      switch (c)
+      string opt = argv [i];
+
+      if (opt == "--no-debug")
       {
-         case 'h':
+         disable_debug_messages ();
+         i++;
+      }
+      else if (opt == "--no-warn")
+      {
+         disable_warnings ();
+         i++;
+      }
+      else if (opt == "--help")
+      {
+         usage ();
+         exit (0);
+      }
+      else if (opt == "-h" || opt == "--header" ||
+               opt == "-c" || opt == "--code" ||
+               opt == "--output-dir")
+      {
+         if (i+1 >= argc)
+            error ("Missing argument for " + opt);
+
+         string val = argv [i+1];
+
+         if (opt == "-h" || opt == "--header")
+         {
             if (prj->header_name != "")
                error ("Header filename already defined");
-            prj->header_name = optarg;
-            break;
-
-         case 'c':
+            prj->header_name = val;
+         }
+         else if (opt == "-c" || opt == "--code")
+         {
             if (prj->code_name != "")
                error ("Code filename already defined");
-            prj->code_name = optarg;
-            break;
-
-         case 'o':
+            prj->code_name = val;
+         }
+         else
+         {
             if (prj->output_directory != "")
                error ("Output directory already defined");
-            prj->output_directory = optarg;
-            break;
-
-         case 'd':
-            disable_debug_messages ();
-            break;
-
-         case 'w':
-            disable_warnings ();
-            break;
-
-         case 'H':
-            usage ();
-            exit (0);
-
-         default:
-            usage ();
-            error ("Bad option");
+            prj->output_directory = val;
+         }
+         i += 2;
+      }
+      else
+      {
+         usage ();
+         error ("Bad option: " + opt);
       }
    }
 
-   if (optind >= argc)
+   if (i >= argc)
       error ("Missing input filename");
 
-   if (optind < argc-1)
+   if (i < argc-1)
       error ("Too many input filenames");
 
-   prj->inp_name = argv [optind];
+   prj->inp_name = argv [i];
 }
 
 /* ---------------------------------------------------------------------- */
@@ -107,75 +111,52 @@ extern "C" int main (int argc, char * argv [])
    enable_error_trace ();
    enable_abort_trace ();
 
-   int err_code = 0;
+   elem_init (); // init code librarry
+   code_init ();
 
-   try
+   Project * project = new Project;
+   read_options (argc, argv, project);
+
+   // without -h and -c: <base>.hpp and <base>.cpp from the input name (list.t => list.hpp, list.cpp)
+   if (project->header_name == "" && project->code_name == "")
    {
-      elem_init (); // init code librarry
-      code_init ();
-
-      Project * project = new Project;
-      read_options (argc, argv, project);
-
-      // without -h and -c: <base>.hpp and <base>.cpp from the input name (list.t => list.hpp, list.cpp)
-      if (project->header_name == "" && project->code_name == "")
-      {
-         string base = removePath (project->inp_name);
-         string::size_type dot = base.rfind ('.');
-         if (dot != string::npos && dot > 0)
-            base = base.substr (0, dot);
-         project->header_name = base + ".hpp";
-         project->code_name = base + ".cpp";
-      }
-
-      Module * module = new Module;
-      project->add (module);
-
-      module->source_file_name = project->inp_name;
-      if (project->header_name != "")
-         module->header_name = addSubdir (project->output_directory, project->header_name);
-      if (project->code_name != "")
-         module->code_name = addSubdir (project->output_directory, project->code_name);
-
-      EnvInput & io = project->input;
-      io.open (module->source_file_name);
-
-      io.getToken (); // read first token
-      module->readSource (io);
-
-      io.checkEnd ();
-      io.close ();
-
-      module->Compile ();
-
-      if (module->header_name != "")
-         module->writeInterface ();
-
-      if (module->code_name != "")
-         module->writeImplementation ();
-   }
-   catch (IOException & e)
-   {
-      show_error (e.getMessage (), e.getFilename (), e.getLine (), e.getColumn ());
-      err_code = 1;
-   }
-   catch (std::exception & e)
-   {
-      show_error (e.what ());
-      err_code = 1;
-   }
-   catch (...)
-   {
-      show_error ("unknown exception");
-      err_code = 1;
+      string base = removePath (project->inp_name);
+      string::size_type dot = base.rfind ('.');
+      if (dot != string::npos && dot > 0)
+         base = base.substr (0, dot);
+      project->header_name = base + ".hpp";
+      project->code_name = base + ".cpp";
    }
 
-   if (err_code == 0)
-   {
-      show_info ("O.K.");
-   }
+   Module * module = new Module;
+   project->add (module);
 
-   return err_code;
+   module->source_file_name = project->inp_name;
+   if (project->header_name != "")
+      module->header_name = addSubdir (project->output_directory, project->header_name);
+   if (project->code_name != "")
+      module->code_name = addSubdir (project->output_directory, project->code_name);
+
+   EnvInput & io = project->input;
+   io.open (module->source_file_name);
+
+   io.getToken (); // read first token
+   module->readSource (io);
+
+   io.checkEnd ();
+   io.close ();
+
+   module->Compile ();
+
+   if (module->header_name != "")
+      module->writeInterface ();
+
+   if (module->code_name != "")
+      module->writeImplementation ();
+
+   show_info ("O.K.");
+
+   return 0;
 }
 
 /* ---------------------------------------------------------------------- */

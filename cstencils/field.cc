@@ -132,13 +132,11 @@ void Field::setText (string txt)
 
 /***************************** BOOLEAN FIELD ******************************/
 
-template < >
 string BoolField::getText ()
 {
    return BoolToStr (getValue ());
 }
 
-template < >
 void BoolField::setText (string txt)
 {
    bool result;
@@ -146,12 +144,11 @@ void BoolField::setText (string txt)
 
    StrToBool (txt, result, ok);
 
-   check (ok, "Invalid boolean field value", this);
+   check_field (ok, "Invalid boolean field value", this);
    if (ok)
       setValue (result);
 }
 
-template < >
 bool BoolField::defaultValue ()
 {
    return false;
@@ -159,13 +156,11 @@ bool BoolField::defaultValue ()
 
 /***************************** INTEGER FIELD ******************************/
 
-template < >
 string IntField::getText ()
 {
    return IntToStr (getValue ());
 }
 
-template < >
 void IntField::setText (string txt)
 {
    int result;
@@ -173,12 +168,11 @@ void IntField::setText (string txt)
 
    StrToInt (txt, result, ok);
 
-   check (ok, "Invalid integer field value", this);
+   check_field (ok, "Invalid integer field value", this);
    if (ok)
       setValue (result);
 }
 
-template < >
 int IntField::defaultValue ()
 {
    return 0;
@@ -186,19 +180,16 @@ int IntField::defaultValue ()
 
 /****************************** STRING FIELD ******************************/
 
-template < >
 string StrField::getText ()
 {
    return getValue ();
 }
 
-template < >
 void StrField::setText (string txt)
 {
    setValue (txt);
 }
 
-template < >
 string StrField::defaultValue ()
 {
    return "";

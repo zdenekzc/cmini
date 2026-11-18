@@ -1149,19 +1149,19 @@ class Styler : public Element
 
 /* fields */
 
-class ClassPtrField : public IndirectFieldTemplate <Class>
+class ClassPtrField : public IndirectField_Class
 {
    public:
       virtual void Prepare ();
 };
 
-class AttrPtrField : public IndirectFieldTemplate <Attr>
+class AttrPtrField : public IndirectField_Attr
 {
    public:
       virtual void Prepare ();
 };
 
-class ListPtrField : public IndirectFieldTemplate <List>
+class ListPtrField : public IndirectField_List
 {
    public:
       virtual void Prepare ();

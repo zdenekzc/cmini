@@ -367,23 +367,23 @@ void copyElements (Element * target, Element * source); // copy all subelements 
 /* ---------------------------------------------------------------------- */
 
 #if 1
-Element * lookupElement (Element * start, const string id);
-Element * lookupElement (Field * start, const string id);
+Element * lookupElement_elem (Element * start, const string id);
+Element * lookupElement_field (Field * start, const string id);
 #endif
 
 /* ---------------------------------------------------------------------- */
 
-void info (string msg, Element * elem);
-void info (string msg, Field * field);
+void info_elem (string msg, Element * elem);
+void info_field (string msg, Field * field);
 
-void warning (string msg, Element * elem);
-void warning (string msg, Field * field);
+void warning_elem (string msg, Element * elem);
+void warning_field (string msg, Field * field);
 
-void error (string msg, Element * elem);
-void error (string msg, Field * field);
+void error_elem (string msg, Element * elem);
+void error_field (string msg, Field * field);
 
-void check (bool cond, string msg, Element * elem);
-void check (bool cond, string msg, Field * field);
+void check_elem (bool cond, string msg, Element * elem);
+void check_field (bool cond, string msg, Field * field);
 
 /* ---------------------------------------------------------------------- */
 
