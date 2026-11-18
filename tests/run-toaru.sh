@@ -43,7 +43,7 @@ if [ ! -f "$ISO" ]; then
 fi
 
 # 2) tools and ramdisk (the ramdisk is rebuilt on every run: its /extras payload changes)
-if [ ! -f "$TOOLS/_build/push/cecko-toaru.tar.gz" ]; then
+if [ ! -f "$TOOLS/_build/push/cmini-toaru.tar.gz" ]; then
    echo "== building the tools for ToaruOS (mkcross.sh) ..."
    "$TOOLS/mkcross.sh" > "$TOOLS/_build/mkcross.log" 2>&1 || die "mkcross.sh failed (see $TOOLS/_build/mkcross.log)"
 fi

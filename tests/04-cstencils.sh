@@ -6,7 +6,9 @@
 # CESTA PREKLADU (kazdy krok je v tomto souboru):
 #   0. make -C cmini: cmini.bin (cmini se prelozi sam)
 #   1. begin cstencils: _output/cstencils/, pracovni adresar $T, cminirt.o
-#   2. cstencils/*.cc a cstencils/utils/*.cc: cmini.bin -c x.o -S x.asm => $T (pasm)
+#   2. jednotky: cstencils main-code, elem, fact, field, flexible, stencil, code (ostatni .cc
+#      jsou fragmenty, ktere code.cc a elem.cc includuji) a utils conv, envio, inf, str, textio:
+#      cmini.bin -c x.o -S x.asm => $T (objekt pres pasm)
 #   3. gcc slinkuje objekty => $T/code-cmini
 #   4. referencni build: g++ z cstencils => $T/code-gpp
 #   5. kazdy cstencils/example/*.t: code-cmini --output-dir _output/cstencils => <base>.hpp, <base>.cpp

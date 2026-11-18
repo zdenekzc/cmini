@@ -1,20 +1,23 @@
 #!/bin/sh
 # 05-toaru.sh - _output/toaruos-tcc/: cmini a pasm v ToaruOS (bez gcc, v bezici VM)
 #
-# CESTA (kroky 1-2 na hostiteli, 3-4 v bezici VM ToaruOS 2.3.2; funkce cecko_* v toaruos-common.sh):
+# CESTA (kroky 1-2 na hostiteli, 3-4 v bezici VM ToaruOS 2.3.2; funkce cmini_* v toaruos-common.sh):
 #   1. mkcross.sh (toaruos-tools): cmini.bin, pasm.bin a cminirt.o pro ToaruOS
 #      + zdroje cmini; mkramdisk.sh je vlozi do ramdisku (/extras) a VM se boot-ne
 #      z ramdisku a kernelu (qemu -kernel/-initrd, bez ISO)
-#   2. VM ToaruOS: balik se zkopiruje do /extras/tmp/cecko a cmini / pasm se prelozi a spusti:
+#   2. VM ToaruOS: balik se zkopiruje do /extras/tmp/cmini a cmini / pasm se prelozi a spusti:
 #        guest-cmini-T  cmini -T dama.c (vlastni behova knihovna)
 #        guest-cmini-L  cmini -L /lib classes.c (libc ToaruOS)
 #        guest-pasm-x   pasm -x libc64.asm (assembler + linker)
+#        guest-cmini-L-<p>  cmini -L /lib <p>.cc: avl, btree, jezdec, veze (vzor
+#                           tests/examples/expected/<p>.txt), heapsort, quicksort (posledni radek O.K.)
 #        cst-build      cmini -L /lib unity.cc: cstencils (/extras/cstencils) v ToaruOS
 #        cst-run        code-cst --output-dir out example/list.t (list.hpp, list.cpp)
 #   3. vystupy programu se porovnaji se vzory tests/examples/expected (dama, classes)
 #      a s vystupem libc64 slinkovaneho na hostiteli (pasm -c, gcc);
 #      list.hpp a list.cpp z ToaruOS se porovnaji (CRC32 a velikost) s g++ buildem na hostiteli
-#   4. VM se zastavi; vystupy: _output/toaruos-tcc/{guest-*.out,cst-*.out,guest.log}
+#   4. VM se zastavi (s oknem, DISPLAY nastaveno, zustava bezet); vystupy:
+#      _output/toaruos-tcc/{guest-*.out,cst-*.out,guest.log}
 #
 # Vyzaduje qemu-system-x86_64, ISO ToaruOS (_import/) a
 # toaru-vm.sh. Bez nich se test jen preskoci (vypise se proc).
@@ -53,8 +56,8 @@ then
 fi
 
 # ------------------------------------------------------------- hostitel: prekladace a balik
-cecko_prepare
-$CECKO_OK || { echo "  toaruos-tcc: mkcross.sh selhal ($T/mkcross.log)" >&2; cecko_stop; finish; }
+cmini_prepare
+$CMINI_OK || { echo "  toaruos-tcc: mkcross.sh selhal ($T/mkcross.log)" >&2; cmini_stop; finish; }
 
 # ------------------------------------------------------------- VM
 # with a window (manual run) the VM stays up after the test: its directory is kept
@@ -76,15 +79,15 @@ done
 if ! $up
 then
    echo "  toaruos-tcc: VM nenastartovala ($WORKV)" >&2
-   cecko_stop
+   cmini_stop
    finish
 fi
 
 # ------------------------------------------------------------- v ToaruOS: prelozeni a beh
-cecko_guest $D
+cmini_guest $D
 $VM log 1000000 > $D/guest.log
-cp $T/cecko.log $D/guest.log 2> /dev/null
-cecko_stop
+cp $T/cmini.log $D/guest.log 2> /dev/null
+cmini_stop
 # Manual run with a window (DISPLAY set, TOARU_GUI not 0): QEMU stays up so that the
 # ToaruOS desktop can be used. Its working directory is kept (not under $T, which
 # finish removes); stop it with:  WORK=$WORKV $TOOLS/toaru-vm.sh stop

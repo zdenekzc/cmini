@@ -1,8 +1,8 @@
 #!/bin/bash
 # mkcross.sh — compilers FOR ToaruOS built ON THE HOST (cross build):
-#   _build/cross/cecko/          bin/cmini.bin pasm.bin, include/, lib/cminirt.o,
+#   _build/cross/cmini/          bin/cmini.bin pasm.bin, include/, lib/cminirt.o,
 #                                tests/examples, README.txt
-#   _build/push/cecko-toaru.tar.gz   the same as an archive (tests/15, tests/16 send it to the host)
+#   _build/push/cmini-toaru.tar.gz   the same as an archive (tests/15, tests/16 send it to the host)
 #
 #   ./mkcross.sh          (tree built - make all; ISO in _import/)
 #
@@ -16,7 +16,7 @@
 #     with ToaruOS crt0.o crti.o libc.a crtn.o (_build/toaru-lib)
 #   - sources: cmini and pasm from mkguest.sh (_build/guest-src)
 #
-# On ToaruOS (tar xzf cecko-toaru.tar.gz; cd cecko; see README.txt):
+# On ToaruOS (tar xzf cmini-toaru.tar.gz; cd cmini; see README.txt):
 #   bin/cmini.bin -T -o p p.c                 own library, ToaruOS syscalls
 #   bin/cmini.bin -L /lib -o p p.c            ToaruOS libc from /lib, pasm linker
 #   export PASM_LIBDIR=/lib; bin/pasm.bin -x p.asm
@@ -26,7 +26,7 @@ DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 TOP=$(cd "$DIR/.." && pwd)
 B=$DIR/_build
 OUT=${OUT:-$B/cross}
-TAR=${TAR:-$B/push/cecko-toaru.tar.gz}
+TAR=${TAR:-$B/push/cmini-toaru.tar.gz}
 PASM=$TOP/asm/pasm.bin
 
 die() { echo "error: $*" >&2; exit 1; }
@@ -45,7 +45,7 @@ CF="-O1 -std=gnu11 -w -Wno-error=implicit-function-declaration -Wno-error=int-co
     -U__gnu_linux__ -U__unix__ -D__toaru__=1 -D__toaru=1 -Dtoaru=1"
 O=$OUT/obj
 rm -rf "$OUT"
-mkdir -p "$O" "$OUT/cecko/bin" "$OUT/cecko/lib" "$OUT/cecko/tests/examples"
+mkdir -p "$O" "$OUT/cmini/bin" "$OUT/cmini/lib" "$OUT/cmini/tests/examples"
 
 cc() { gcc $CF "$@" 2> "$O/cc.log" || { cat "$O/cc.log" >&2; die "gcc $*"; }; }
 
@@ -64,21 +64,21 @@ for f in instr_drv translate decl expr stat sem util lexer instr cminirt; do
 done
 
 # runtime library of programs from cmini (and gcc on the host)
-cc -I"$TOP/cmini" -c "$TOP/cmini/cminirt.c" -o "$OUT/cecko/lib/cminirt.o"
+cc -I"$TOP/cmini" -c "$TOP/cmini/cminirt.c" -o "$OUT/cmini/lib/cminirt.o"
 
 link() { local out=$1; shift; "$PASM" -k "$out" "$L/crt0.o" "$L/crti.o" "$@" "$L/libc.a" "$L/crtn.o" || die "pasm -k $out"; }
-link "$OUT/cecko/bin/pasm.bin" "$O/a_pasm.o" $PASMLIB
-link "$OUT/cecko/bin/cmini.bin" $CMINI $PASMLIB
+link "$OUT/cmini/bin/pasm.bin" "$O/a_pasm.o" $PASMLIB
+link "$OUT/cmini/bin/cmini.bin" $CMINI $PASMLIB
 
 # headers for programs compiled by cmini, examples (../../include/containers.h)
-cp -a "$TOP/cmini/ownheaders" "$OUT/cecko/include"
-cp "$TOP"/tests/examples/*.cc "$OUT/cecko/tests/examples/"
-cp "$TOP/asm/tests/libc64.asm" "$TOP/asm/tests/sse64.asm" "$OUT/cecko/tests/"
-cat > "$OUT/cecko/README.txt" <<'EOF'
-cecko for ToaruOS - compilers built on the host (toaruos-tools/mkcross.sh),
+cp -a "$TOP/cmini/ownheaders" "$OUT/cmini/include"
+cp "$TOP"/tests/examples/*.cc "$OUT/cmini/tests/examples/"
+cp "$TOP/asm/tests/libc64.asm" "$TOP/asm/tests/sse64.asm" "$OUT/cmini/tests/"
+cat > "$OUT/cmini/README.txt" <<'EOF'
+cmini for ToaruOS - compilers built on the host (toaruos-tools/mkcross.sh),
 statically linked with ToaruOS libc: no gcc or ld.so needed. In ToaruOS:
 
-  cd /tmp/cecko
+  cd /tmp/cmini
   bin/cmini.bin -T -o /tmp/dama tests/examples/dama.cc       c-mini, own library
   /tmp/dama
   bin/cmini.bin -L /lib -o /tmp/classes tests/examples/classes.cc
@@ -92,6 +92,6 @@ EOF
 
 mkdir -p "$(dirname "$TAR")"
 tar --format=ustar --sort=name --owner=0 --group=0 --numeric-owner --mtime=@0 \
-    -cf - -C "$OUT" cecko | gzip -n > "$TAR"
-echo "cecko-toaru: $OUT/cecko, $TAR ($(wc -c < "$TAR") B)"
-ls -l "$OUT/cecko/bin"/*.bin "$OUT/cecko/lib/cminirt.o" | awk '{print "  " $5 "  " $9}'
+    -cf - -C "$OUT" cmini | gzip -n > "$TAR"
+echo "cmini-toaru: $OUT/cmini, $TAR ($(wc -c < "$TAR") B)"
+ls -l "$OUT/cmini/bin"/*.bin "$OUT/cmini/lib/cminirt.o" | awk '{print "  " $5 "  " $9}'

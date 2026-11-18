@@ -5,7 +5,7 @@
 #
 # Vystup (toaruos-tools/_build/):
 #   ramdisk.tgz   ramdisk.igz ze ISO se vsim pod /extras; z _build/push/ se pridaji
-#                 rozbalene adresare /extras/cmini-toaru (z cecko-toaru.tar.gz) a
+#                 rozbalene adresare /extras/cmini-toaru (z cmini-toaru.tar.gz) a
 #                 /extras/cmini-src (z cmini-src.tar.gz); archivy se nekopiruji
 #                 a /extras/cstencils (zdroje generatoru + unity.cc pro cmini),
 #                 /extras/tests/cmini-tests.sh (kroky testu pro terminal ToaruOS)
@@ -71,9 +71,9 @@ cat > "$WORK/ramdisk/extras/cstencils/unity.cc" <<'UNITY'
 #include "code.cc"
 #include "main-code.cc"
 UNITY
-# /extras/cmini-toaru: programs (bin/, lib/, include/) from cecko-toaru.tar.gz (top dir cecko/ dropped)
+# /extras/cmini-toaru: programs (bin/, lib/, include/) from cmini-toaru.tar.gz (top dir cmini/ dropped)
 mkdir -p "$WORK/ramdisk/extras/cmini-toaru"
-tar -xzf "$PUSH/cecko-toaru.tar.gz" --strip-components=1 -C "$WORK/ramdisk/extras/cmini-toaru"
+tar -xzf "$PUSH/cmini-toaru.tar.gz" --strip-components=1 -C "$WORK/ramdisk/extras/cmini-toaru"
 # /extras/cmini-src: compiler sources from cmini-src.tar.gz (top dir cmini-src/ dropped)
 mkdir -p "$WORK/ramdisk/extras/cmini-src"
 tar -xzf "$PUSH/cmini-src.tar.gz" --strip-components=1 -C "$WORK/ramdisk/extras/cmini-src"

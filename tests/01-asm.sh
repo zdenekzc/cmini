@@ -3,6 +3,20 @@
 #   vypis (.lst), ELF (.bin) a jeho vystup s navratovym kodem (.out),
 #   objekt OMF (.obj), Turbo Pascal inline (.inl); Windows win64 / win32: PE (.exe,
 #   vystup pod wine v .out), win64 i objekt COFF (.obj)
+#
+# CESTA (kazdy krok je v tomto souboru):
+#   0. make -C asm: asm/pasm.bin (assembler a linker, jeden program)
+#   1. begin asm: _output/asm/, pracovni adresar $T
+#   2. asm/tests/*.asm (kromě error.asm) se zkopiruji do _output/asm/examples/ a pasm se
+#      spusti s volbou podle jmena:
+#        hello32, hello64   -e -l  ELF (file.bin), spusti se
+#        libc64, sse64      -c -l  objekt ELF64 (file.o), gcc -no-pie => file.bin, spusti se
+#        win64, win32       -w -l  PE (file.exe), pod wine (pokud je) => .out
+#        inline             -i     Turbo Pascal inline (file.inl)
+#        ostatni            -o -l  objekt OMF (file.obj), jen se ulozi
+#   3. kazdy spustitelny .bin se spusti s casovym limitem 10 s; vystup a navratovy kod
+#      (radek rc=N) jdou do file.out
+#   4. win64: navic -m => COFF objekt (file.obj)
 
 . "$(dirname "$0")/common.sh"
 # preklad pasm (make je inkrementalni: nic nedela, kdyz je pasm.bin aktualni)

@@ -112,7 +112,7 @@ ToaruOS 2.3.2 in QEMU (KVM); details in sections 1-5c.
      `./guest-cmini.sh`: 18 programs, 14 identical, 4 only `%f`.
 8. **cmini and pasm compilers for ToaruOS built on the host** (2026-11-11, §5h)
    * `mkcross.sh`: host gcc + ToaruOS headers from the ISO + the pasm linker =>
-     `cecko-toaru.tar.gz`; in a clean ToaruOS (without gcc) cmini -T, cmini -L /lib,
+     `cmini-toaru.tar.gz`; in a clean ToaruOS (without gcc) cmini -T, cmini -L /lib,
      pasm -x, pasm -k - verify tests/15 and 16 (guest-*.out).
 8b. **Static linking with the ToaruOS libc on the host** (2026-11-11, §5g)
    * linker in asm/code.c (`pasm -x`, `cmini -L`, `PasmLink`), libc.a from the ISO
@@ -585,7 +585,7 @@ Programs that do not need gcc or ld.so in ToaruOS:
 
 ## 5h. Compilers for ToaruOS built on the host (cross build, 2026-11-11)
 
-    ./mkcross.sh       _build/cross/cecko and _build/push/cecko-toaru.tar.gz
+    ./mkcross.sh       _build/cross/cmini and _build/push/cmini-toaru.tar.gz
                        (+ source package _build/push/cmini-src.tar.gz)
 
 `cmini.bin`, `pasm.bin` and `cminirt.o` for ToaruOS are compiled ON THE
@@ -597,7 +597,7 @@ the ToaruOS headers e.g. do not declare `chmod`) - and they are linked by the pa
 (`pasm -k`, a new mode, linking only) with the ToaruOS `libc.a`.  In a clean ToaruOS
 (without gcc, without ld.so) the whole chain then works:
 
-    cd /tmp/cecko
+    cd /tmp/cmini
     bin/cmini.bin -T -o /tmp/d tests/examples/dama.cc          own library
     bin/cmini.bin -L /lib -o /tmp/c tests/examples/classes.cc  ToaruOS libc from /lib
     export PASM_LIBDIR=/lib; bin/pasm.bin -x tests/libc64.asm
@@ -605,9 +605,9 @@ the ToaruOS headers e.g. do not declare `chmod`) - and they are linked by the pa
 (`/lib/crt0.o`, `crti.o`, `crtn.o`, `libc.a` are in the base system of every
 ToaruOS.)  `tests/15-toaruos.sh` and `16-toaruos-libc.sh` (shared part
 `tests/toaruos-common.sh`) send to the running VM, in addition to the examples,
-`cecko-toaru.tar.gz` (=> `/tmp/cecko`) and the sources (=> `/tmp/src`, gcc compiles them
+`cmini-toaru.tar.gz` (=> `/tmp/cmini`) and the sources (=> `/tmp/src`, gcc compiles them
 from `msk install build-essential`, §5e) and verify the 3 steps above directly
-in the host (`_output/toaruos*/cecko/guest-*.out`: dama, classes, libc64 -
+in the host (`_output/toaruos*/cmini/guest-*.out`: dama, classes, libc64 -
 all identical to the pattern).  In the window (test 15) `run.sh` fetches them and prints the instructions;
 verified also by hand in the terminal (cmini -T jezdec.c => O.K.).
 
