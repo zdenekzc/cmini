@@ -5,7 +5,7 @@
 #   1. mkcross.sh (toaruos-tools): cmini.bin, pasm.bin a cminirt.o pro ToaruOS
 #      + zdroje cmini; mkramdisk.sh je vlozi do ramdisku (/extras) a VM se boot-ne
 #      z ramdisku a kernelu (qemu -kernel/-initrd, bez ISO)
-#   2. VM ToaruOS: balik se rozbali v /tmp/cecko a cmini / pasm se prelozi a spusti:
+#   2. VM ToaruOS: balik se zkopiruje do /extras/tmp/cecko a cmini / pasm se prelozi a spusti:
 #        guest-cmini-T  cmini -T dama.c (vlastni behova knihovna)
 #        guest-cmini-L  cmini -L /lib classes.c (libc ToaruOS)
 #        guest-pasm-x   pasm -x libc64.asm (assembler + linker)

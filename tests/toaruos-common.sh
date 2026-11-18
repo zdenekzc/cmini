@@ -6,8 +6,8 @@
 #                           _build/push/cecko-toaru.tar.gz (cmini.bin, pasm.bin,
 #                           cminirt.o, hlavicky, priklady) a zdroje cmini-src.tar.gz;
 #                           mkramdisk.sh je vlozi do ramdisku pod /extras (boot bez ISO)
-#   cecko_guest <adresar>   v bezicim hostovi ($VM, toaru-vm.sh): rozbali balik z
-#                           /extras do /tmp/cecko, zdroje do /tmp/src, a prekladace PRIMO
+#   cecko_guest <adresar>   v bezicim hostovi ($VM, toaru-vm.sh): zkopiruje balik z
+#                           /extras/cmini-toaru do /extras/tmp/cecko, /extras/cmini-src do /extras/tmp/src, a prekladace PRIMO
 #                           V ToaruOS prelozi a spusti:
 #                             guest-cmini-T    cmini -T dama.c (vlastni knihovna)
 #                             guest-cmini-L    cmini -L /lib classes.c (libc ToaruOS)
@@ -51,12 +51,12 @@ cecko_guest ()
    $CECKO_OK || return
    G=$1
    mkdir -p $G
-   $VM send "mkdir -p /tmp/src; cd /tmp; tar xzf /extras/cecko-toaru.tar.gz; cp /extras/cmini-src.tar.gz /tmp/src/; echo ==PKG-$RUN=="
+   $VM send "mkdir -p /extras/tmp; cd /extras/tmp; rm -rf cecko src; cp -r /extras/cmini-toaru cecko; mkdir src; cp -r /extras/cmini-src src/; echo ==PKG-$RUN=="
    for i in $(seq 1 60); do
       $VM log 5 | grep -qx "==PKG-$RUN==" && break
       sleep 1
    done
-   c="cd /tmp/cecko; export PASM_LIBDIR=/lib"
+   c="cd /extras/tmp/cecko; export PASM_LIBDIR=/lib"
    cecko_run guest-cmini-T  "$c; bin/cmini.bin -T -o /tmp/g1 tests/examples/dama.cc" /tmp/g1
    cecko_run guest-cmini-L  "$c; bin/cmini.bin -L /lib -I include -o /tmp/g2 tests/examples/classes.cc" /tmp/g2
    cecko_run guest-pasm-x   "$c; cp tests/libc64.asm /tmp/g3.asm; bin/pasm.bin -x /tmp/g3.asm" /tmp/g3.bin

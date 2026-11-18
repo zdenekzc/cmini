@@ -4,8 +4,9 @@
 #   ./mkramdisk.sh        (potrebuje _import/toaruos-2.3.2.iso a _build/push/ z mkcross.sh)
 #
 # Vystup (toaruos-tools/_build/):
-#   ramdisk.tgz   ramdisk.igz ze ISO se vsim, co je v _build/push/ (cecko-toaru.tar.gz,
-#                 cmini-src.tar.gz), pod /extras; stejna cesta jako mkiso.sh u /abc/new
+#   ramdisk.tgz   ramdisk.igz ze ISO se vsim pod /extras; z _build/push/ se pridaji
+#                 rozbalene adresare /extras/cmini-toaru (z cecko-toaru.tar.gz) a
+#                 /extras/cmini-src (z cmini-src.tar.gz); archivy se nekopiruji
 #   kernel.mb     kernel z ISO, v multiboot hlavicce vypnuty pozadavek na VBE (QEMU
 #                 multiboot loader by jinak odmitl "multiboot knows VBE")
 #
@@ -38,9 +39,20 @@ done
 echo "== unpacking ramdisk.igz"
 gzip -dc "$WORK/base/ramdisk.igz" | tar -xf - -C "$WORK/ramdisk"
 
-echo "== copying payload $PUSH into /extras"
+echo "== copying payload $PUSH into /extras (archives are unpacked as directories)"
 mkdir -p "$WORK/ramdisk/extras"
-cp -a "$PUSH"/. "$WORK/ramdisk/extras/"
+for f in "$PUSH"/*; do
+    case "$f" in
+        *.tar.gz) ;;                          # unpacked below
+        *) cp -a "$f" "$WORK/ramdisk/extras/" ;;
+    esac
+done
+# /extras/cmini-toaru: programs (bin/, lib/, include/) from cecko-toaru.tar.gz (top dir cecko/ dropped)
+mkdir -p "$WORK/ramdisk/extras/cmini-toaru"
+tar -xzf "$PUSH/cecko-toaru.tar.gz" --strip-components=1 -C "$WORK/ramdisk/extras/cmini-toaru"
+# /extras/cmini-src: compiler sources from cmini-src.tar.gz (top dir cmini-src/ dropped)
+mkdir -p "$WORK/ramdisk/extras/cmini-src"
+tar -xzf "$PUSH/cmini-src.tar.gz" --strip-components=1 -C "$WORK/ramdisk/extras/cmini-src"
 
 echo "== repacking ramdisk.tgz"
 # owner 1000 (user local), the same as mkiso.sh: root-owned /home/local would be unreadable

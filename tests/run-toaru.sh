@@ -10,8 +10,8 @@
 #   3. QEMU with a window and the desktop (START=live in toaru-vm.sh).
 #
 # Needs a graphical display (DISPLAY or WAYLAND_DISPLAY). The tools are in
-# /extras of the ramdisk: in the terminal of ToaruOS use /extras/cecko-toaru.tar.gz
-# (it is unpacked by the test tests/04 into /tmp/cecko).
+# /extras of the ramdisk: in the terminal of ToaruOS use /extras/cmini-toaru/
+# (the test tests/05-toaru.sh copies it to /tmp/cecko).
 #
 # Stop the VM:  WORK=toaruos-tools/_build/vm-run toaruos-tools/toaru-vm.sh stop
 
