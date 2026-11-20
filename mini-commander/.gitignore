@@ -1,0 +1,11 @@
+TAGS
+./mc
+/static/.build.*/
+/static/mc.map
+/static/mc.symbols
+/static/mc.sections
+/mc-cmini
+*.cmini.o
+cminirt.o
+/mc
+/static/mc
