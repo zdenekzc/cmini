@@ -55,13 +55,27 @@ cp "$O/c_cminirt.o" "$B/out/cmini/lib/cminirt.o"
 #     malloc/realloc/strdup/snprintf/qsort/fopen - the output is compared in the VM
 "$CMINI" -L "$L" $CINC -c "$O/rt.o" "$DIR/selfhost/rt.c" || die "cmini rt"
 "$PASM" -k "$O/rt.bin" $L/crt0.o $L/crti.o "$O/rt.o" $L/libc.a $L/crtn.o || die "link rt"
+"$CMINI" -L "$L" $CINC -c "$O/realloc.o" "$DIR/selfhost/realloc.c" && "$PASM" -k "$O/realloc.bin" $L/crt0.o $L/crti.o "$O/realloc.o" $L/libc.a $L/crtn.o || die "link realloc"
+"$CMINI" -L "$L" $CINC -c "$O/init.o" "$DIR/selfhost/init.c" && "$PASM" -k "$O/init.bin" $L/crt0.o $L/crti.o "$O/init.o" $L/libc.a $L/crtn.o || die "link init"
+"$CMINI" -L "$L" $CINC -c "$O/heap.o" "$DIR/selfhost/heap.c" && "$PASM" -k "$O/heap.bin" $L/crt0.o $L/crti.o "$O/heap.o" $L/libc.a $L/crtn.o || die "link heap"
+"$CMINI" -L "$L" $CINC -c "$O/textadd.o" "$DIR/selfhost/textadd.c" && "$PASM" -k "$O/textadd.bin" $L/crt0.o $L/crti.o "$O/textadd.o" $L/libc.a $L/crtn.o || die "link textadd"
 
 "$CMINI" -L "$L" $CINC -c "$O/stack.o" "$DIR/selfhost/stack.c" && "$PASM" -k "$O/stack.bin" $L/crt0.o $L/crti.o "$O/stack.o" $L/libc.a $L/crtn.o || die "stack test"
 "$CMINI" -L "$L" $CINC -c "$O/jmp.o" "$DIR/selfhost/jmp.c" && "$PASM" -k "$O/jmp.bin" $L/crt0.o $L/crti.o "$O/jmp.o" "$O/setjmp_alias.o" $L/libc.a $L/crtn.o || die "jmp test"
 
+# 2c. pasm check: host cmini writes the asm text of a small program, host pasm makes the
+#     ToaruOS binary; the same asm is assembled by pasm-toaru in the VM and compared (cmp)
+mkdir -p "$O/pasmcheck"
+cp "$DIR/selfhost/triv.c" "$O/pasmcheck/"
+(cd "$O/pasmcheck" && "$TOP/cmini/cmini.bin" -T -S triv.asm -o triv triv.c > /dev/null 2>&1; "$PASM" -e -T triv.asm > /dev/null) || die "host pasm check"
+[[ -s $O/pasmcheck/triv.bin ]] || die "host pasm check: no triv.bin"
+
 # 3. package layout as mkcross.sh: include/, tests/examples/ and their expected outputs
 cp -a "$TOP/cmini/ownheaders" "$B/out/cmini/include"
-mkdir -p "$B/out/cmini/tests" && cp "$O/rt.bin" "$B/out/cmini/tests/rt.bin" && cp "$O/stack.bin" "$B/out/cmini/tests/stack.bin" && cp "$O/jmp.bin" "$B/out/cmini/tests/jmp.bin"
+mkdir -p "$B/out/cmini/tests/pasmcheck" && cp "$O/pasmcheck/triv.asm" "$O/pasmcheck/triv.bin" "$B/out/cmini/tests/pasmcheck/"
+mkdir -p "$B/out/cmini/tests" && cp "$O/rt.bin" "$B/out/cmini/tests/rt.bin"
+# optional debugging build (instrumented cmini, see the trace notes): TRACE_BIN=/path/cmini-trace.bin
+if [[ -n ${TRACE_BIN:-} && -f $TRACE_BIN ]]; then cp "$TRACE_BIN" "$B/out/cmini/tests/cmini-trace.bin"; fi && cp "$O/stack.bin" "$B/out/cmini/tests/stack.bin" && cp "$O/jmp.bin" "$B/out/cmini/tests/jmp.bin" && cp "$O/realloc.bin" "$B/out/cmini/tests/realloc.bin" && cp "$O/init.bin" "$B/out/cmini/tests/init.bin" && cp "$O/textadd.bin" "$B/out/cmini/tests/textadd.bin" && cp "$O/heap.bin" "$B/out/cmini/tests/heap.bin"
 cp "$TOP"/tests/examples/*.cc "$B/out/cmini/tests/examples/"
 cp -a "$TOP/tests/examples/expected" "$B/out/cmini/tests/examples/"
 cat > "$B/out/cmini/README.txt" <<'TXT'
