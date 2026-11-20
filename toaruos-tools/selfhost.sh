@@ -79,6 +79,12 @@ if [[ -n ${TIDE_BIN:-} && -f $TIDE_BIN ]]; then
     cp "$TIDE_BIN" "$B/out/cmini/tests/tiny-ide-toaru.bin"
     mkdir -p "$B/out/cmini/tests/tide-demo" && cp "$TOP/tiny-ide/demo/hello.c" "$B/out/cmini/tests/tide-demo/"
 fi
+# optional: mini-commander built by cmini for ToaruOS (mini-commander/build-toaru-cmini.sh)
+if [[ -n ${MC_BIN:-} && -f $MC_BIN ]]; then
+    cp "$MC_BIN" "$B/out/cmini/tests/mc-toaru.bin"
+fi
+# optional: a test program for the curses shim (cmini-curses/tests/keys.c)
+if [[ -n ${KEYS_BIN:-} && -f $KEYS_BIN ]]; then cp "$KEYS_BIN" "$B/out/cmini/tests/keys.bin"; fi
 # optional debugging build (instrumented cmini, see the trace notes): TRACE_BIN=/path/cmini-trace.bin
 if [[ -n ${TRACE_BIN:-} && -f $TRACE_BIN ]]; then cp "$TRACE_BIN" "$B/out/cmini/tests/cmini-trace.bin"; fi && cp "$O/stack.bin" "$B/out/cmini/tests/stack.bin" && cp "$O/jmp.bin" "$B/out/cmini/tests/jmp.bin" && cp "$O/realloc.bin" "$B/out/cmini/tests/realloc.bin" && cp "$O/init.bin" "$B/out/cmini/tests/init.bin" && cp "$O/textadd.bin" "$B/out/cmini/tests/textadd.bin" && cp "$O/heap.bin" "$B/out/cmini/tests/heap.bin"
 cp "$TOP"/tests/examples/*.cc "$B/out/cmini/tests/examples/"

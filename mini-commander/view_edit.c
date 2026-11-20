@@ -187,11 +187,21 @@ static file_lines *load_file_lines(const char *filename, off_t *num_lines, off_t
         return NULL;
     }
     size_t length=(size_t)statbuf.st_size;
-    char *data=length ? mmap(NULL, length, PROT_READ, MAP_PRIVATE, fd, 0) : "";
-    if (data == MAP_FAILED) { close(fd); return NULL; }
+    /* read the file into memory (no mmap: ToaruOS has none); the lines are copied out */
+    char *data=malloc(length ? length : 1);
+    if (!data) { close(fd); errno=ENOMEM; return NULL; }
+    size_t got=0;
+    while (got < length)
+    {
+        ssize_t r=read(fd, data+got, length-got);
+        if (r < 0 && errno == EINTR) continue;
+        if (r <= 0) break;
+        got+=(size_t)r;
+    }
+    if (got != length) { int e=errno ? errno : EIO; free(data); close(fd); errno=e; return NULL; }
     file_lines *tail, *head=split_file_lines(data, length, num_lines, &tail);
     int error=errno;
-    if (length) munmap(data, length);
+    free(data);
     close(fd);
     errno=error;
     return head;

@@ -526,6 +526,13 @@ int show_chmod_dialog(const char *name, const stat_t *info, mode_t *mode, mode_t
 
     // Keep the login name held by main() intact: getpwuid() shares static storage.
     char owner[256], group[256], lookup[CMD_MAX];
+#ifdef TOARU_CMINI
+    /* ToaruOS: no reentrant lookups; the owner name comes from getpwuid, the group as a number */
+    passwd_t *owner_info=getpwuid(info->st_uid);
+    if (owner_info) snprintf(owner, sizeof(owner), "%s", owner_info->pw_name);
+    else snprintf(owner, sizeof(owner), "%lu", (unsigned long)info->st_uid);
+    snprintf(group, sizeof(group), "%lu", (unsigned long)info->st_gid);
+#else
     passwd_t owner_entry, *owner_info=NULL;
     group_t group_entry, *group_info=NULL;
     if (getpwuid_r(info->st_uid, &owner_entry, lookup, sizeof(lookup), &owner_info) == 0 && owner_info)
@@ -534,6 +541,7 @@ int show_chmod_dialog(const char *name, const stat_t *info, mode_t *mode, mode_t
     if (getgrgid_r(info->st_gid, &group_entry, lookup, sizeof(lookup), &group_info) == 0 && group_info)
         snprintf(group, sizeof(group), "%s", group_info->gr_name);
     else snprintf(group, sizeof(group), "%lu", (unsigned long)info->st_gid);
+#endif
 
     int focus=0, pressed=-1, action=CHMOD_CANCEL;
     while (1) {
