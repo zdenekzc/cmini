@@ -78,6 +78,21 @@ tar -xzf "$PUSH/cmini-toaru.tar.gz" --strip-components=1 -C "$WORK/ramdisk/extra
 mkdir -p "$WORK/ramdisk/extras/cmini-src"
 tar -xzf "$PUSH/cmini-src.tar.gz" --strip-components=1 -C "$WORK/ramdisk/extras/cmini-src"
 
+# /extras/mini-commander/mc-toaru.bin and /extras/tiny-ide/tiny-ide-toaru.bin: built by
+# cmini (build-toaru-cmini.sh of each tool); the links in /bin: mc, tiny-ide, cmini
+MC_BIN=${MC_BIN:-$TOP/mini-commander/_build/cmini-toaru/mc-toaru.bin}
+TIDE_BIN=${TIDE_BIN:-$TOP/tiny-ide/_build/cmini-toaru/tiny-ide-toaru.bin}
+for f in "$MC_BIN" "$TIDE_BIN"; do
+    [[ -f "$f" ]] || die "missing $f (run the build-toaru-cmini.sh of the tool)"
+done
+mkdir -p "$WORK/ramdisk/extras/mini-commander" "$WORK/ramdisk/extras/tiny-ide" "$WORK/ramdisk/bin"
+cp "$MC_BIN" "$WORK/ramdisk/extras/mini-commander/mc-toaru.bin"
+cp "$TIDE_BIN" "$WORK/ramdisk/extras/tiny-ide/tiny-ide-toaru.bin"
+chmod 755 "$WORK/ramdisk/extras/mini-commander/mc-toaru.bin" "$WORK/ramdisk/extras/tiny-ide/tiny-ide-toaru.bin"
+ln -sfn /extras/mini-commander/mc-toaru.bin "$WORK/ramdisk/bin/mc"
+ln -sfn /extras/tiny-ide/tiny-ide-toaru.bin "$WORK/ramdisk/bin/tiny-ide"
+ln -sfn /extras/cmini-toaru/bin/cmini.bin "$WORK/ramdisk/bin/cmini"
+
 echo "== repacking ramdisk.tgz"
 # owner 1000 (user local), the same as mkiso.sh: root-owned /home/local would be unreadable
 (

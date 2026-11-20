@@ -556,9 +556,17 @@ static void tree_walk(app_t *app, const char *path, int depth)
         char full[PATH_MAX];
         if (!path_join(full, sizeof(full), path, name))
             continue;
+#ifdef TOARU_CMINI
+        /* ToaruOS dirent has no d_type: a directory is a path that opendir() opens */
+        DIR *probe = opendir(full);
+        bool is_dir = probe != NULL;
+        if (probe)
+            closedir(probe);
+#else
         bool is_dir = entry->d_type == DT_DIR;
         if (!is_dir && entry->d_type != DT_REG)
             continue;
+#endif
         file_item_t *grown = realloc(items, (size_t)(count + 1) * sizeof(*items));
         if (!grown)
             break;

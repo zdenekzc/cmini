@@ -112,11 +112,11 @@ int main(int argc, char *argv[]) {
     while (1) {
         update_cmd();
 
-        // Print file names in left and right windows
+        // Print file names in left and right windows. The panels are staged after
+        // stdscr (update_cmd): the shim copies whole windows, so stdscr must not
+        // be staged again on top of them.
         update_panel(win1, &left_panel);
         update_panel(win2, &right_panel);
-        // Present both panels together, with the cursor on the command line.
-        wnoutrefresh(stdscr);
         refresh_screen(1);
         int visible_items = getmaxy(win1) - 5;
 

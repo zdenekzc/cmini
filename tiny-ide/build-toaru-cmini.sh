@@ -22,7 +22,7 @@ die() { echo "error: $*" >&2; exit 1; }
 rm -rf "$OUT"; mkdir -p "$O"
 
 INC="-I $HERE/toaru-cmini -I $TOP/cmini/ownheaders"
-cc() { "$CMINI" -L "$L" $INC -D calloc=cm_calloc -c "$1" "$2" || die "cmini -c $2"; }
+cc() { "$CMINI" -L "$L" $INC -D TOARU_CMINI=1 -D calloc=cm_calloc -c "$1" "$2" || die "cmini -c $2"; }
 
 OBJS=""
 for f in main app editor runner ui dialogs; do cc "$O/$f.o" "$HERE/$f.c"; OBJS="$OBJS $O/$f.o"; done

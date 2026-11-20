@@ -28,7 +28,12 @@ WORK=$TOOLS/_build/vm-run
 INITRD=$TOOLS/_build/ramdisk.tgz
 KERNEL=$TOOLS/_build/kernel.mb
 
+MC_BIN=$TOP/mini-commander/_build/cmini-toaru/mc-toaru.bin
+TIDE_BIN=$TOP/tiny-ide/_build/cmini-toaru/tiny-ide-toaru.bin
+
 die () { echo "run-toaru: $*" >&2; exit 1; }
+
+mkdir -p "$TOOLS/_build"
 
 [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ] || die "no graphical display (DISPLAY is not set)"
 command -v qemu-system-x86_64 > /dev/null || die "missing qemu-system-x86_64"
@@ -46,6 +51,14 @@ fi
 if [ ! -f "$TOOLS/_build/push/cmini-toaru.tar.gz" ]; then
    echo "== building the tools for ToaruOS (mkcross.sh) ..."
    "$TOOLS/mkcross.sh" > "$TOOLS/_build/mkcross.log" 2>&1 || die "mkcross.sh failed (see $TOOLS/_build/mkcross.log)"
+fi
+if [ ! -f "$MC_BIN" ]; then
+   echo "== building mini-commander for ToaruOS (build-toaru-cmini.sh) ..."
+   "$TOP/mini-commander/build-toaru-cmini.sh" > "$TOOLS/_build/mc-toaru.log" 2>&1 || die "mini-commander build failed (see $TOOLS/_build/mc-toaru.log)"
+fi
+if [ ! -f "$TIDE_BIN" ]; then
+   echo "== building tiny-ide for ToaruOS (build-toaru-cmini.sh) ..."
+   "$TOP/tiny-ide/build-toaru-cmini.sh" > "$TOOLS/_build/tiny-ide-toaru.log" 2>&1 || die "tiny-ide build failed (see $TOOLS/_build/tiny-ide-toaru.log)"
 fi
 echo "== building the ramdisk (mkramdisk.sh) ..."
 "$TOOLS/mkramdisk.sh" > "$TOOLS/_build/mkramdisk.log" 2>&1 || die "mkramdisk.sh failed (see $TOOLS/_build/mkramdisk.log)"
