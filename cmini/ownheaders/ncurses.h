@@ -34,6 +34,7 @@ extern int LINES, COLS, ESCDELAY;
 #define KEY_NPAGE 338
 #define KEY_PPAGE 339
 #define KEY_DC 330
+#define KEY_IC 331
 #define KEY_BTAB 353
 #define KEY_RESIZE 410
 #define KEY_MOUSE 409

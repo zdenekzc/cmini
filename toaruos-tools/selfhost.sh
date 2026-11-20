@@ -74,6 +74,11 @@ cp "$DIR/selfhost/triv.c" "$O/pasmcheck/"
 cp -a "$TOP/cmini/ownheaders" "$B/out/cmini/include"
 mkdir -p "$B/out/cmini/tests/pasmcheck" && cp "$O/pasmcheck/triv.asm" "$O/pasmcheck/triv.bin" "$B/out/cmini/tests/pasmcheck/"
 mkdir -p "$B/out/cmini/tests" && cp "$O/rt.bin" "$B/out/cmini/tests/rt.bin"
+# optional: tiny-ide built by cmini for ToaruOS (tiny-ide/build-toaru-cmini.sh) and its demo
+if [[ -n ${TIDE_BIN:-} && -f $TIDE_BIN ]]; then
+    cp "$TIDE_BIN" "$B/out/cmini/tests/tiny-ide-toaru.bin"
+    mkdir -p "$B/out/cmini/tests/tide-demo" && cp "$TOP/tiny-ide/demo/hello.c" "$B/out/cmini/tests/tide-demo/"
+fi
 # optional debugging build (instrumented cmini, see the trace notes): TRACE_BIN=/path/cmini-trace.bin
 if [[ -n ${TRACE_BIN:-} && -f $TRACE_BIN ]]; then cp "$TRACE_BIN" "$B/out/cmini/tests/cmini-trace.bin"; fi && cp "$O/stack.bin" "$B/out/cmini/tests/stack.bin" && cp "$O/jmp.bin" "$B/out/cmini/tests/jmp.bin" && cp "$O/realloc.bin" "$B/out/cmini/tests/realloc.bin" && cp "$O/init.bin" "$B/out/cmini/tests/init.bin" && cp "$O/textadd.bin" "$B/out/cmini/tests/textadd.bin" && cp "$O/heap.bin" "$B/out/cmini/tests/heap.bin"
 cp "$TOP"/tests/examples/*.cc "$B/out/cmini/tests/examples/"

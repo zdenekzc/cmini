@@ -214,7 +214,11 @@ int confirm_dialog(app_t *app, const char *title, const char *message,
         for (int i = 0; i < count; ++i) {
             button_x[i] = x;
             attrset(i == selected ? D_TITLE | A_BOLD : D_DIALOG);
-            mvprintw(frame.y + frame.height - 3, x, "[ %s ]", buttons[i]);
+            {
+                char label[256];
+                snprintf(label, sizeof(label), "[ %s ]", buttons[i]);
+                mvaddstr(frame.y + frame.height - 3, x, label);
+            }
             x += button_width[i] + 2;
         }
         curs_set(0);
