@@ -10,6 +10,16 @@ CMini is a compiler for a subset of C++:
 - Generates x86-64 code.
 - Translates the source text to plain C (`-C`).
 
+- ToaruOS: CMini and PAsm run inside the ToaruOS hobby operating system. `toaruos-tools/selfhost.sh`
+  cross-compiles them with CMini itself, with no TinyCC and no `-C` translation.
+- The ToaruOS ramdisk contains mini-commander (a two-panel file manager, 8-bit ncurses port) and
+  tiny-ide (a small IDE). Both are built by CMini (`build-toaru-cmini.sh`) and placed in `/extras`,
+  with the links `/bin/mc`, `/bin/tiny-ide` and `/bin/cmini`.
+- `tests/run-toaru.sh` starts ToaruOS in a QEMU window with these tools (needs a graphical display).
+  Its build steps run only when the output is missing.
+- Known open problem: a CMini built for ToaruOS crashes while generating instructions
+  (`TextAdd` after `realloc`).
+
 The code generator `instr.c` produces the x86-64 code, and `translate.c` translates the source to plain C. Both files were written by AI.
 
 It is written in C and compiles itself (self-hosting).
