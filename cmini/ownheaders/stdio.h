@@ -1,3 +1,5 @@
+#ifndef CMINI_STDIO_H_GUARD
+#define CMINI_STDIO_H_GUARD
 /* cstdio - cparser (glibc) */
 
 #ifndef CPARSER_CSTDIO
@@ -63,5 +65,10 @@ inline FILE * cparser_stdout ()
 }
 
 #define stdout (cparser_stdout ())
+
+#endif
+
+/* tiny-ide */
+int rename (const char *from, const char *to);
 
 #endif

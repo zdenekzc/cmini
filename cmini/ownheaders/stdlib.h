@@ -1,3 +1,5 @@
+#ifndef CMINI_STDLIB_H_GUARD
+#define CMINI_STDLIB_H_GUARD
 /* cstdlib - cparser (glibc) */
 
 #ifndef CPARSER_CSTDLIB
@@ -22,5 +24,11 @@ long   strtol (const char * s, char * * end, int base);
 double strtod (const char * s, char * * end);
 double atof (const char * s);
 unsigned long strtoul (const char * s, char * * end, int base);
+
+#endif
+
+/* tiny-ide: paths and temporary files */
+char *realpath (const char *path, char *resolved);
+int mkstemp (char *template);
 
 #endif

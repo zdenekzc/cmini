@@ -1,3 +1,5 @@
+#ifndef CMINI_STDINT_H_GUARD
+#define CMINI_STDINT_H_GUARD
 /* cstdint - cparser: celociselne typy pevne delky (int = 4 bajty jako g++,
    v promennych instr.cc ale vzdy 8bajtovy slot) */
 
@@ -28,5 +30,9 @@ typedef unsigned long  uintptr_t;
 #define INT64_MIN  (-9223372036854775807L - 1)
 #define INT64_MAX  9223372036854775807L
 #define UINT64_MAX 18446744073709551615UL
+
+#endif
+typedef unsigned long uintmax_t;
+#define SIZE_MAX 18446744073709551615UL
 
 #endif
