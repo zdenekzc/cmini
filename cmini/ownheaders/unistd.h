@@ -46,3 +46,10 @@ int execvp (const char *file, char *const argv[]);
 typedef long off_t;
 
 #endif
+
+#ifndef CMINI_UNISTD_TINY_IDE_GUARD
+#define CMINI_UNISTD_TINY_IDE_GUARD
+/* tiny-ide */
+ssize_t readlink (const char * path, char * buf, unsigned long size);
+int setpgid (int pid, int pgid);
+#endif

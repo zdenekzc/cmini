@@ -1,7 +1,7 @@
 # Tiny IDE — malé ncurses IDE pro Linux
 
 Tiny IDE je textový protějšek `nuklear-ide`. Má strom projektu, taby,
-C/C++ editor se zvýrazňováním syntaxe, překlad TinyCC, asynchronní spuštění
+C/C++ editor se zvýrazňováním syntaxe, překlad programů pomocí cmini, asynchronní spuštění
 programu a klikatelnou diagnostiku. Vzhled a ovládání navazují na
 `mini-commander`: modré pozadí, azurové lišty, ASCII dialogy, myš a funkční
 klávesy `F1`–`F10`.
@@ -21,7 +21,7 @@ následovat port pro ToaruOS.
  hello.c               |   6 }
  README.md             |   7
 ----------------------- OUTPUT --------------------------------------------
-$ tcc -std=c11 -Wall -Wextra -O2 -g -o /tmp/tiny-ide-…/hello hello.c
+$ /abc/cmini/cmini/cmini.bin -I …/ownheaders -o /tmp/tiny-ide-…/hello hello.c
 [exit 0]
  hello.c *            Saved    Ln 10, Col 28                  Editor
 1Help  2Save  3SaveAs  4New  5Run  6Focus  7Build  8Close  9Output  10Quit
@@ -29,9 +29,11 @@ $ tcc -std=c11 -Wall -Wextra -O2 -g -o /tmp/tiny-ide-…/hello hello.c
 
 ## Sestavení a spuštění
 
-Potřeby: C překladač, Unicode `ncursesw` a `pkg-config`. Pro překlad programů
-z IDE se používá TinyCC; ten nemusí být nainstalovaný, pokud jsou k dispozici
-jeho zdroje v tomto repozitáři.
+Potřeby: C překladač pro samotné IDE (gcc nebo cc), `ncursesw` a `pkg-config`.
+Programy z IDE překládá **cmini** (`cmini/cmini.bin`, C i C++ podmnožina). Cesta
+ke kompilátoru se hledá v proměnné `CMINI`, vedle spustitelného souboru IDE,
+v `../cmini/cmini.bin` a v `PATH`. Hlavičky cmini (`cmini/ownheaders`) se
+přidají automaticky, pokud jsou vedle něj.
 
 Fedora:
 
@@ -50,8 +52,8 @@ Sestavení a demo:
 ```sh
 cd tiny-ide
 make
-make tcc                  # systémový tcc nebo _build/host-tcc/tcc
-make run                  # otevře demo/hello.c; F5 přeloží a spustí
+make cmini                # sestaví ../cmini/cmini.bin, pokud chybí
+make run                  # otevře demo/hello.c; F5 přeloží cmini a spustí
 ```
 
 Nebo ručně:
@@ -66,26 +68,17 @@ Nebo ručně:
 Doporučený je UTF-8 terminál alespoň 80×24, například `LC_ALL=C.UTF-8`.
 Terminál menší než 40×8 program odmítne vykreslovat do doby, než ho zvětšíte.
 
-### Hostitelský TinyCC
+### Kompilátor programů: cmini
 
-`make tcc` nejprve použije `tcc` z `PATH`. Jinak sestaví zdroje z
-`../_import/download/tinycc` **mimo download strom** do
-`../_build/host-tcc`. Nejsou potřeba žádné další stahování ani úpravy zdrojů.
-Build vytvoří jen `tcc`, `libtcc1.a` a odkaz na potřebné include hlavičky.
-
-TinyCC lze také zvolit prostředím:
+Programy se překládají `cmini.bin -I <ownheaders> -o prog soubor.c` (i `.cc`);
+chyby se hlásí ve formátu `soubor:řádek:sloupec: error: …`, na který lze v
+výstupu kliknout. Cestu ke kompilátoru lze zadat prostředím:
 
 ```sh
-TCC=/cesta/k/tcc ./tiny-ide.bin demo/hello.c
-# IDE_TCC má přednost před TCC; nestandardní -B lze zadat takto:
-TCC_B=/cesta/k/tcc-runtime ./tiny-ide.bin demo/hello.c
-# IDE_CFLAGS nahradí výchozí sadu přepínačů (-std=c11 -Wall -Wextra -O2 -g),
-# hodí se na pomalých emulovaných cílech, kde tcc -O2 trvá minut:
-IDE_CFLAGS=-g0 ./tiny-ide.bin demo/hello.c
+CMINI=/cesta/k/cmini.bin ./tiny-ide.bin demo/hello.c
 ```
 
-C soubory se překládají TinyCC. Pro `.cc`, `.cpp` a `.cxx` se místo něj použije
-`CXX` (výchozí `c++`), protože TinyCC nemá C++ frontend.
+TinyCC se v Linuxovém IDE nepoužívá.
 
 ## Ovládání
 
@@ -179,7 +172,7 @@ tiny-ide/
 ├── main.c             # argumenty, akce, klávesnice a myš
 ├── app.c              # soubory, taby, output a strom projektu
 ├── editor.c/.h        # na curses nezávislý UTF-8 textový model a undo/redo
-├── runner.c           # TinyCC/CXX, procesní skupiny, diagnostika
+├── runner.c           # cmini, procesní skupiny, diagnostika
 ├── ui.c               # ncurses panely, syntaxe a klávesové sekvence
 ├── dialogs.c          # vstupní a potvrzovací dialogy, nápověda
 ├── demo/hello.c

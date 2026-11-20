@@ -23,3 +23,12 @@ char * strrchr (const char * s, int c);
 char * strstr (const char * s, const char * t);
 
 #endif
+
+#ifndef CMINI_STRING_TINY_IDE_GUARD
+#define CMINI_STRING_TINY_IDE_GUARD
+/* tiny-ide: without these prototypes cparser assumes int results, which
+ * truncates pointers (memchr, strerror) and sizes (strcspn). */
+void * memchr (const void * s, int c, unsigned long n);
+unsigned long strcspn (const char * s, const char * reject);
+char * strerror (int errnum);
+#endif

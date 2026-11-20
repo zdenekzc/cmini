@@ -12,47 +12,30 @@ LDLIBS += $(NCURSES_LIBS)
 TARGET := tiny-ide.bin
 SOURCES := main.c app.c editor.c runner.c ui.c dialogs.c
 HEADERS := tiny_ide.h editor.h
-TCC_SRC ?= ../_import/download/tinycc
-TCC_BUILD ?= ../_build/host-tcc
+# The IDE compiles C and C++ programs with cmini (cmini/cmini.bin).
+CMINI ?= ../cmini/cmini.bin
 
-.PHONY: all run tcc check check-unit check-smoke clean
+.PHONY: all run cmini check check-unit check-smoke clean
 
 all: $(TARGET)
 
 $(TARGET): $(SOURCES) $(HEADERS) Makefile
 	$(CC) $(CFLAGS) $(NCURSES_CFLAGS) -o $@ $(SOURCES) $(LDFLAGS) $(LDLIBS)
 
-run: $(TARGET) tcc
+run: $(TARGET) cmini
 	./$(TARGET) demo/hello.c
 
-$(TCC_BUILD)/include:
-	mkdir -p $(TCC_BUILD)
-	ln -sfn $(abspath $(TCC_SRC))/include $@
-
-$(TCC_BUILD)/tcc: $(TCC_SRC)/configure | $(TCC_BUILD)/include
-	mkdir -p $(TCC_BUILD)
-	cd $(TCC_BUILD) && $(abspath $(TCC_SRC))/configure --prefix=$(abspath $(TCC_BUILD))/install
-	$(MAKE) -C $(TCC_BUILD) tcc
-
-$(TCC_BUILD)/libtcc1.a: $(TCC_BUILD)/tcc
-	$(MAKE) -C $(TCC_BUILD)/lib ../libtcc1.a
-
-tcc:
-	@if command -v tcc >/dev/null 2>&1; then \
-		echo "using system tcc: $$(command -v tcc)"; \
-	else \
-		$(MAKE) $(TCC_BUILD)/tcc $(TCC_BUILD)/libtcc1.a; \
-		echo "using $(TCC_BUILD)/tcc"; \
-	fi
+cmini:
+	@test -x "$(CMINI)" || $(MAKE) -C ../cmini/cmini cmini.bin
+	@test -x "$(CMINI)" && echo "using cmini: $(CMINI)"
 
 check-unit: tests/test_editor.c editor.c editor.h
 	mkdir -p ../_build/tiny-ide-tests
 	$(CC) $(CFLAGS) -I. -o ../_build/tiny-ide-tests/test_editor tests/test_editor.c editor.c $(LDFLAGS)
 	../_build/tiny-ide-tests/test_editor
 
-check-smoke: $(TARGET) tcc
-	@compiler=$$(command -v tcc 2>/dev/null || printf '%s' "$(abspath $(TCC_BUILD)/tcc)"); \
-	TCC="$$compiler" python3 -I tests/smoke.py ./$(TARGET)
+check-smoke: $(TARGET) cmini
+	CMINI="$(abspath $(CMINI))" python3 -I tests/smoke.py ./$(TARGET)
 
 check: check-unit check-smoke
 

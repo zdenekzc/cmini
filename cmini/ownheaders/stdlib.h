@@ -32,3 +32,10 @@ char *realpath (const char *path, char *resolved);
 int mkstemp (char *template);
 
 #endif
+
+#ifndef CMINI_STDLIB_TINY_IDE_GUARD
+#define CMINI_STDLIB_TINY_IDE_GUARD
+/* tiny-ide: sorting the project tree */
+void qsort (void * base, unsigned long nmemb, unsigned long size,
+            int (* compar) (const void *, const void *));
+#endif

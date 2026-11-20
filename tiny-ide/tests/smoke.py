@@ -103,7 +103,7 @@ def main():
         raise SystemExit("usage: smoke.py /path/to/tiny-ide.bin")
     binary = Path(sys.argv[1]).resolve()
     root = Path(__file__).resolve().parents[1]
-    require(os.environ.get("TCC"), "TCC must point at a host TinyCC")
+    require(os.environ.get("CMINI"), "CMINI must point at cmini.bin")
 
     with tempfile.TemporaryDirectory(prefix="tiny-ide-smoke-") as temporary:
         project = Path(temporary)

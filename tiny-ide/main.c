@@ -14,7 +14,7 @@ static void usage(const char *program)
            "Usage: %s [-b|--nocolor] [-h|--help] [-v|--version] [project-dir | source-file]\n"
            "\n"
            "F1 help, F2 save, F3 save as, F4 new, F5 build+run, F7 build,\n"
-           "F8 close tab, F9 output pane, F10 quit.  C uses TinyCC; C++ uses CXX.\n",
+           "F8 close tab, F9 output pane, F10 quit.  C and C++ are compiled by cmini.\n",
            program);
 }
 

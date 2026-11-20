@@ -1,4 +1,4 @@
-/* Nonblocking TinyCC/C++ build and run, with clickable compiler locations. */
+/* Nonblocking cmini build and run, with clickable compiler locations. */
 #include "tiny_ide.h"
 
 static void close_child_fd(app_t *app)
@@ -128,11 +128,10 @@ static bool candidate_compiler(const char *candidate, char *out, size_t size)
     return executable(path) && snprintf(out, size, "%s", path) < (int)size;
 }
 
-static bool find_tcc(app_t *app, char *out, size_t size)
+/* cmini.bin: the compiler for C and C++ files (CMINI overrides the search). */
+static bool find_cmini(app_t *app, char *out, size_t size)
 {
-    const char *configured = getenv("IDE_TCC");
-    if (!configured || !configured[0])
-        configured = getenv("TCC");
+    const char *configured = getenv("CMINI");
     if (candidate_compiler(configured, out, size))
         return true;
 
@@ -144,8 +143,7 @@ static bool find_tcc(app_t *app, char *out, size_t size)
         if (slash) {
             *slash = '\0';
             const char *const relative[] = {
-                "../_build/host-tcc/tcc", "../_build/download/tinycc/tcc",
-                "../_import/download/tinycc/tcc", "tcc", NULL
+                "../cmini/cmini.bin", "../../cmini/cmini/cmini.bin", NULL
             };
             for (int i = 0; relative[i]; ++i) {
                 char candidate[PATH_MAX];
@@ -157,8 +155,7 @@ static bool find_tcc(app_t *app, char *out, size_t size)
     }
 
     const char *const relative[] = {
-        "_build/host-tcc/tcc", "../_build/host-tcc/tcc",
-        "_build/download/tinycc/tcc", "../_build/download/tinycc/tcc", NULL
+        "../cmini/cmini.bin", "../../cmini/cmini/cmini.bin", NULL
     };
     for (int i = 0; relative[i]; ++i) {
         char candidate[PATH_MAX];
@@ -166,41 +163,23 @@ static bool find_tcc(app_t *app, char *out, size_t size)
             candidate_compiler(candidate, out, size))
             return true;
     }
-    return search_path("tcc", out, size);
+    return search_path("cmini.bin", out, size);
 }
 
-static bool tcc_needs_b(const char *compiler, char *out, size_t size)
+/* The cmini headers (cmini/ownheaders) next to the compiler, if present. */
+static bool cmini_include_dir(const char *compiler, char *out, size_t size)
 {
-    const char *configured = getenv("TCC_B");
-    if (configured && configured[0]) {
-        size_t length = strlen(configured);
-        if (length + 3 <= size) {
-            out[0] = '-';
-            out[1] = 'B';
-            memcpy(out + 2, configured, length + 1);
-            return true;
-        }
-        return false;
-    }
     char directory[PATH_MAX];
     snprintf(directory, sizeof(directory), "%s", compiler);
     char *slash = strrchr(directory, '/');
     if (!slash)
         return false;
     *slash = '\0';
-    char include[PATH_MAX], runtime[PATH_MAX];
-    if (!path_join(include, sizeof(include), directory, "include/stddef.h") ||
-        !path_join(runtime, sizeof(runtime), directory, "libtcc1.a"))
+    char stdio_header[PATH_MAX];
+    if (!path_join(out, size, directory, "ownheaders") ||
+        !path_join(stdio_header, sizeof(stdio_header), out, "stdio.h"))
         return false;
-    if (access(include, R_OK) == 0 && access(runtime, R_OK) == 0 &&
-        strlen(directory) + 3 <= size) {
-        size_t length = strlen(directory);
-        out[0] = '-';
-        out[1] = 'B';
-        memcpy(out + 2, directory, length + 1);
-        return true;
-    }
-    return false;
+    return access(stdio_header, R_OK) == 0;
 }
 
 static bool start_run(app_t *app)
@@ -236,25 +215,19 @@ bool start_build(app_t *app, bool then_run)
     }
     snprintf(app->build_source, sizeof(app->build_source), "%s", tab->path);
 
-    bool cpp = is_cpp_file(tab->path);
-    char compiler[PATH_MAX], tcc_b[PATH_MAX];
-    bool has_tcc_b = false;
-    if (cpp) {
-        const char *cxx = getenv("CXX");
-        snprintf(compiler, sizeof(compiler), "%s", cxx && cxx[0] ? cxx : "c++");
-    } else if (!find_tcc(app, compiler, sizeof(compiler))) {
+    char compiler[PATH_MAX], include[PATH_MAX];
+    if (!find_cmini(app, compiler, sizeof(compiler))) {
         output_clear(app);
         app->show_output = true;
         app->build_failed = true;
         output_printf(app,
-            "TinyCC (tcc) was not found.\n\n"
-            "Install tcc, run 'make -C tiny-ide tcc', or use:\n"
-            "  TCC=/path/to/tcc ./tiny-ide/tiny-ide.bin\n");
-        set_status(app, "TinyCC not found - run make tcc or set TCC");
+            "cmini (cmini.bin) was not found.\n\n"
+            "Build it with 'make -C cmini', or use:\n"
+            "  CMINI=/path/to/cmini.bin ./tiny-ide/tiny-ide.bin\n");
+        set_status(app, "cmini not found - build cmini or set CMINI");
         return false;
-    } else {
-        has_tcc_b = tcc_needs_b(compiler, tcc_b, sizeof(tcc_b));
     }
+    bool has_include = cmini_include_dir(compiler, include, sizeof(include));
 
     char stem[160];
     snprintf(stem, sizeof(stem), "%s", base_name(tab->path));
@@ -271,31 +244,12 @@ bool start_build(app_t *app, bool then_run)
         return false;
     }
 
-    char *argv[24];
+    char *argv[8];
     int argc = 0;
     argv[argc++] = compiler;
-    if (!cpp && has_tcc_b)
-        argv[argc++] = tcc_b;
-    /* IDE_CFLAGS replaces the default flag set; useful on slow emulated
-       targets where tcc -O2 costs minutes (e.g. IDE_CFLAGS="-g0"). */
-    static char custom_flags[512];
-    bool custom_used = false;
-    const char *custom = getenv("IDE_CFLAGS");
-    if (custom && custom[0] && strlen(custom) < sizeof(custom_flags)) {
-        snprintf(custom_flags, sizeof(custom_flags), "%s", custom);
-        char *token = strtok(custom_flags, " \t");
-        while (token && argc < 18) {
-            argv[argc++] = token;
-            custom_used = true;
-            token = strtok(NULL, " \t");
-        }
-    }
-    if (!custom_used) {
-        argv[argc++] = cpp ? "-std=c++17" : "-std=c11";
-        argv[argc++] = "-Wall";
-        argv[argc++] = "-Wextra";
-        argv[argc++] = "-O2";
-        argv[argc++] = "-g";
+    if (has_include) {
+        argv[argc++] = "-I";
+        argv[argc++] = include;
     }
     argv[argc++] = "-o";
     argv[argc++] = app->exe_path;
@@ -307,8 +261,6 @@ bool start_build(app_t *app, bool then_run)
     for (int i = 1; argv[i]; ++i)
         output_printf(app, " %s", argv[i]);
     output_printf(app, "\n");
-    if (cpp)
-        output_printf(app, "# TinyCC has no C++ frontend; using CXX (%s)\n", compiler);
     output_printf(app, "\n");
     app->build_failed = false;
     app->run_after_build = then_run;
@@ -446,7 +398,7 @@ void remove_build_dir(app_t *app)
     rmdir(app->build_dir);
 }
 
-/* Accept tcc/gcc diagnostics, including "In file included from ...:N:". */
+/* Accept cmini/gcc diagnostics, including "In file included from ...:N:". */
 static bool parse_location(const char *line, char *path, size_t size, int *number)
 {
     int length = (int)strlen(line);
