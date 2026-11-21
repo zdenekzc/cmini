@@ -15,6 +15,17 @@
 # Spusteni (toaru-vm.sh): INITRD=_build/ramdisk.tgz KERNEL=_build/kernel.mb ./toaru-vm.sh start
 set -euo pipefail
 
+# The whole script runs in ONE fakeroot session (fakeroot keeps its owner database per
+# invocation): the stock owners and setuid bits of the ramdisk survive the unpack and
+# repack, so /bin/sudo stays setuid root (otherwise "effective uid is not 0") and
+# /home/local stays local:local. Without fakeroot the owners get flattened to 1000.
+if [[ -z ${MKRAMDISK_UNDER_FAKEROOT:-} ]]; then
+    if command -v fakeroot > /dev/null 2>&1; then
+        exec fakeroot -- env MKRAMDISK_UNDER_FAKEROOT=1 bash "$0" "$@"
+    fi
+    echo "warning: fakeroot missing - sudo in ToaruOS loses its setuid bit (sudo dnf install fakeroot)" >&2
+fi
+
 DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 TOP=$(cd "$DIR/.." && pwd)
 ISO=${ISO:-$TOP/_import/toaruos-2.3.2.iso}
@@ -39,7 +50,7 @@ for f in kernel ramdisk.igz; do
 done
 
 echo "== unpacking ramdisk.igz"
-gzip -dc "$WORK/base/ramdisk.igz" | tar -xf - -C "$WORK/ramdisk"
+gzip -dc "$WORK/base/ramdisk.igz" | tar --same-owner -xf - -C "$WORK/ramdisk"
 
 echo "== copying payload $PUSH into /extras (archives are unpacked as directories)"
 mkdir -p "$WORK/ramdisk/extras"
@@ -94,11 +105,20 @@ ln -sfn /extras/tiny-ide/tiny-ide-toaru.bin "$WORK/ramdisk/bin/tiny-ide"
 ln -sfn /extras/cmini-toaru/bin/cmini.bin "$WORK/ramdisk/bin/cmini"
 
 echo "== repacking ramdisk.tgz"
-# owner 1000 (user local), the same as mkiso.sh: root-owned /home/local would be unreadable
+if [[ -n ${MKRAMDISK_UNDER_FAKEROOT:-} ]]; then
+    # stock owners from the archive (root for system files, setuid kept); only the
+    # payload copied from the host belongs to the user "local" (uid/gid 1000)
+    chown -R 1000:1000 "$WORK/ramdisk/extras"
+    OWNER=(--numeric-owner)
+else
+    # no fakeroot: everything owner 1000, otherwise root-owned /home/local would be
+    # unreadable for the session (but /bin/sudo is not setuid root then)
+    OWNER=(--owner=1000 --group=1000)
+fi
 (
     cd "$WORK/ramdisk"
     find . -mindepth 1 -maxdepth 1 -printf '%P\0' |
-        tar --null --owner=1000 --group=1000 -cf - -T -
+        tar --null "${OWNER[@]}" -cf - -T -
 ) | gzip -9 -n > "$B/ramdisk.tgz"
 
 echo "== writing kernel.mb"
