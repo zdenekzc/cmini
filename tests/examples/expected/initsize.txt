@@ -1,0 +1,5 @@
+param after TEXT init: 1122334455667788
+int array: 1 2 3, neighbours 111 222
+small: x 7 9 1 2.50
+outer: 10 y -3 40 0 0.25 50
+short array: 1 -2 3 -4, char array: abcd

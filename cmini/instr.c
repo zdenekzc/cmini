@@ -7573,7 +7573,11 @@ static void codeLocalInit (TypePtr type, ExprPtr init, long off, const char * na
         if (type->sort == Bool && fpKind (init->type) == 0)
             normalizeBool ();
     }
-    ins2 (iMov, qword_ptr (RBP, (int) off), gp (RAX));
+    /* a member or an element is stored with its own size (int 4, short 2, char / bool 1,
+       float 4 = 32-bit image): a qword store overwrote the neighbour - TEXT t = { NULL, 0, 0 }
+       cleared the lower half of the parameter next to it (tests/examples/initsize.cc) */
+    long size = scalarSize (type);
+    ins2 (iMov, sized_ptr (size, RBP, (int) off), gp (subReg (RAX, size)));
 }
 
 static void codeIf (StatPtr stat)

@@ -17,8 +17,10 @@ CMini is a compiler for a subset of C++:
   with the links `/bin/mc`, `/bin/tiny-ide` and `/bin/cmini`.
 - `tests/run-toaru.sh` starts ToaruOS in a QEMU window with these tools (needs a graphical display).
   Its build steps run only when the output is missing.
-- Known open problem: a CMini built for ToaruOS crashes while generating instructions
-  (`TextAdd` after `realloc`).
+- CMini compiles itself inside ToaruOS: `/extras/build-new-cmini.sh` builds `/extras/new-cmini`
+  with the installed CMini (no gcc), and that compiler reproduces itself byte for byte.
+  (The former crash "`TextAdd` after `realloc`" was a code generator bug: a local initializer
+  `{ ... }` stored `int` members as 8 bytes and cleared the neighbouring variable.)
 
 The code generator `instr.c` produces the x86-64 code, and `translate.c` translates the source to plain C. Both files were written by AI.
 

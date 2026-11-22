@@ -24,7 +24,7 @@ cd "$TOP" || exit 1
 V=$TOP/_output
 EX=tests/examples
 
-PROGRAMS="dama jezdec avl btree veze classes strings defaults chars dtors floats objcopy pointers sequence dictionary dyncast quicksort heapsort"
+PROGRAMS="dama jezdec avl btree veze classes strings defaults chars dtors floats objcopy pointers sequence dictionary dyncast quicksort heapsort initsize"
 # zdroje prekladace (cmini a pasm); cmini.bin preklada sam sebe po souborech
 SOURCES="$(ls cmini/*.cc cmini/*.c) $(ls asm/*.c 2> /dev/null)"
 CMINI_CFLAGS="-std=gnu11 -w -I $TOP/cmini"
