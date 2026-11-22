@@ -8,7 +8,7 @@
 #                 rozbalene adresare /extras/cmini-toaru (z cmini-toaru.tar.gz) a
 #                 /extras/cmini-src (z cmini-src.tar.gz); archivy se nekopiruji
 #                 a /extras/cstencils (zdroje generatoru + unity.cc pro cmini),
-#                 /extras/tests/cmini-tests.sh (kroky testu pro terminal ToaruOS)
+#                 /extras/cmini-tests.sh (kroky testu pro terminal ToaruOS)
 #   kernel.mb     kernel z ISO, v multiboot hlavicce vypnuty pozadavek na VBE (QEMU
 #                 multiboot loader by jinak odmitl "multiboot knows VBE")
 #
@@ -60,9 +60,10 @@ for f in "$PUSH"/*; do
         *) cp -a "$f" "$WORK/ramdisk/extras/" ;;
     esac
 done
-# /extras/tests/cmini-tests.sh: the steps of tests/05-toaru.sh for the ToaruOS terminal
-mkdir -p "$WORK/ramdisk/extras/tests"
-cp "$DIR/guest/cmini-tests.sh" "$WORK/ramdisk/extras/tests/cmini-tests.sh"
+# /extras/cmini-tests.sh: the steps of tests/05-toaru.sh for the ToaruOS terminal
+# (executable with #!/bin/sh, so it runs as /extras/cmini-tests.sh)
+cp "$DIR/guest/cmini-tests.sh" "$WORK/ramdisk/extras/cmini-tests.sh"
+chmod 755 "$WORK/ramdisk/extras/cmini-tests.sh"
 # /extras/cstencils: sources of the stencil generator (without rtl/) and unity.cc,
 # one translation unit for cmini (cmini -o makes one program from one source file)
 rm -rf "$WORK/ramdisk/extras/cstencils"
@@ -93,6 +94,7 @@ tar -xzf "$PUSH/cmini-src.tar.gz" --strip-components=1 -C "$WORK/ramdisk/extras/
 mkdir -p "$WORK/ramdisk/extras/cmini-src/selfhost"
 cp "$DIR/selfhost/calloc_zero.c" "$DIR/selfhost/setjmp_alias.asm" "$WORK/ramdisk/extras/cmini-src/selfhost/"
 cp "$DIR/guest/build-new-cmini.sh" "$WORK/ramdisk/extras/build-new-cmini.sh"
+chmod 755 "$WORK/ramdisk/extras/build-new-cmini.sh"
 
 # /extras/mini-commander/mc-toaru.bin and /extras/tiny-ide/tiny-ide-toaru.bin: built by
 # cmini (build-toaru-cmini.sh of each tool); the links in /bin: mc, tiny-ide, cmini
@@ -108,6 +110,27 @@ chmod 755 "$WORK/ramdisk/extras/mini-commander/mc-toaru.bin" "$WORK/ramdisk/extr
 ln -sfn /extras/mini-commander/mc-toaru.bin "$WORK/ramdisk/bin/mc"
 ln -sfn /extras/tiny-ide/tiny-ide-toaru.bin "$WORK/ramdisk/bin/tiny-ide"
 ln -sfn /extras/cmini-toaru/bin/cmini.bin "$WORK/ramdisk/bin/cmini"
+
+# sources for a rebuild by cmini inside ToaruOS:
+#   /extras/mini-commander/src  (+ cmini-toaru/ declarations, curses/ = cmini-curses layer)
+#   /extras/tiny-ide/src        (+ toaru-cmini/ = its own curses layer)
+#   /extras/build-new-mc.sh => /extras/new-mc, /extras/build-new-tiny-ide.sh => /extras/new-tiny-ide
+MCS=$WORK/ramdisk/extras/mini-commander/src
+mkdir -p "$MCS/cmini-toaru"
+cp "$TOP"/mini-commander/*.c "$TOP"/mini-commander/*.h "$TOP/mini-commander/LICENSE" "$TOP/mini-commander/README.md" "$MCS/"
+cp "$TOP/mini-commander/cmini-toaru/cmini_libc.h" "$MCS/cmini-toaru/"
+cp -r "$DIR/cmini-curses" "$MCS/curses"
+rm -rf "$MCS/curses/tests"
+cp "$DIR/selfhost/calloc_zero.c" "$MCS/"
+TIS=$WORK/ramdisk/extras/tiny-ide/src
+mkdir -p "$TIS"
+cp "$TOP"/tiny-ide/*.c "$TOP"/tiny-ide/*.h "$TOP/tiny-ide/README.md" "$TIS/"
+cp -r "$TOP/tiny-ide/toaru-cmini" "$TIS/toaru-cmini"
+cp "$DIR/selfhost/calloc_zero.c" "$TIS/"
+for s in build-new-mc.sh build-new-tiny-ide.sh; do
+    cp "$DIR/guest/$s" "$WORK/ramdisk/extras/$s"
+    chmod 755 "$WORK/ramdisk/extras/$s"
+done
 
 echo "== repacking ramdisk.tgz"
 if [[ -n ${MKRAMDISK_UNDER_FAKEROOT:-} ]]; then

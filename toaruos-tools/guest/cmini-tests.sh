@@ -1,6 +1,7 @@
+#!/bin/sh
 # cmini-tests.sh - tests of cmini and cstencils inside ToaruOS (the same steps as tests/05-toaru.sh)
 #
-#   in the terminal of ToaruOS:   esh /extras/tests/cmini-tests.sh
+#   in the terminal of ToaruOS:   /extras/cmini-tests.sh   (or: sh /extras/cmini-tests.sh)
 #
 # Everything is built in /extras/tmp (visible in the file browser). Expected values are
 # printed next to the results; no test runs by itself, read the output.

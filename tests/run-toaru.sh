@@ -12,7 +12,7 @@
 # Needs a graphical display (DISPLAY or WAYLAND_DISPLAY). The tools are in
 # /extras of the ramdisk (/extras/cmini-toaru, /extras/cmini-src, /extras/cstencils).
 # The tests of cmini and cstencils (the steps of tests/05-toaru.sh) are in the ToaruOS
-# terminal:   esh /extras/tests/cmini-tests.sh   (the results go to /extras/tmp).
+# terminal:   /extras/cmini-tests.sh   (the results go to /extras/tmp).
 #
 # Stop the VM:  WORK=toaruos-tools/_build/vm-run toaruos-tools/toaru-vm.sh stop
 
@@ -71,5 +71,5 @@ env WORK="$WORK" INITRD="$INITRD" KERNEL="$KERNEL" START=live \
 echo "The window shows the desktop after about 15 s. The VM keeps running after this"
 echo "script ends."
 echo "In the ToaruOS terminal run the cmini and cstencils tests with:"
-echo "    esh /extras/tests/cmini-tests.sh"
+echo "    /extras/cmini-tests.sh"
 echo "Stop the VM with:  WORK=$WORK $TOOLS/toaru-vm.sh stop"

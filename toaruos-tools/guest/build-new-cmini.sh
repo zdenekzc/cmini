@@ -1,6 +1,7 @@
+#!/bin/sh
 # build-new-cmini.sh - cmini compiles cmini (and pasm) inside ToaruOS, no gcc
 #
-#   in the terminal of ToaruOS:   sh /extras/build-new-cmini.sh
+#   in the terminal of ToaruOS:   /extras/build-new-cmini.sh   (or: sh /extras/build-new-cmini.sh)
 #
 # The same steps as toaruos-tools/selfhost.sh on the host: the installed compiler
 # /extras/cmini-toaru/bin/cmini.bin compiles every source of /extras/cmini-src with
