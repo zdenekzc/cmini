@@ -27,7 +27,10 @@ void init_screen() {
     mouseinterval(50);
     mousemask(ALL_MOUSE_EVENTS|REPORT_MOUSE_POSITION, NULL);
     mouse_tracking(1);
-    ESCDELAY = 50;
+    /* Alt+Enter (the two-press Esc+Enter habit) inserts the current file name
+     * into the command line, but only when both bytes arrive inside the ESC
+     * window; half a second is enough for fingers, 50 ms was not (as in /abc/tiny). */
+    ESCDELAY = 500;
     start_color();
     raw();
     keypad(stdscr, TRUE);
