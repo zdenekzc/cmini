@@ -52,6 +52,9 @@ static int cursor_visible = 1;
 static int initialised;
 static int raw_active;
 static int timeout_ms = -1;
+/* nl() mode (the ncurses default): Enter = CR from the raw terminal is returned as NL;
+ * mc compares with '\n'. nonl() (tiny-ide) returns CR unchanged. */
+static int nl_mode = 1;
 static int saved_ok;
 static struct termios saved_tio;
 
@@ -195,10 +198,15 @@ static void cell_set(WINDOW *w, int y, int x, chtype ch)
 }
 
 /* a character with the window's current attributes (and the caller's attributes) */
+/* cell = character + attributes; the colour pair of the character wins, then the pair
+ * of the window attributes, then the pair of the window background (wbkgd) */
 static chtype cell_value(WINDOW *w, chtype ch)
 {
-    chtype attr = (ch & ~(chtype) A_CHARTEXT) | (w->attr & ~(chtype) A_CHARTEXT);
-    return attr | (ch & A_CHARTEXT);
+    chtype attr = (ch & ~(chtype) (A_CHARTEXT | A_COLOR)) | (w->attr & ~(chtype) (A_CHARTEXT | A_COLOR));
+    chtype color = ch & A_COLOR;
+    if (color == 0) color = w->attr & A_COLOR;
+    if (color == 0) color = w->bkg & A_COLOR;
+    return attr | color | (ch & A_CHARTEXT);
 }
 
 static void apply_key_table(void);
@@ -310,6 +318,7 @@ static int getch_impl(int ms)
 
     c = next_byte(ms);
     if (c < 0) return ERR;
+    if (c == '\r' && nl_mode) return '\n';
     if (c != 27) return c;
 
     buf[len++] = 27;
@@ -490,8 +499,15 @@ int echo(void)
     return OK;
 }
 
+int nl(void)
+{
+    nl_mode = 1;
+    return OK;
+}
+
 int nonl(void)
 {
+    nl_mode = 0;
     return OK;
 }
 
@@ -854,11 +870,19 @@ int wbkgd(WINDOW *win, chtype ch)
 {
     int n;
     chtype old = win->bkg;
-    win->bkg = ch & ~(chtype) A_CHARTEXT;
-    win->bkg |= ch & A_CHARTEXT;
-    for (n = 0; n < win->maxy * win->maxx; n++)
-        if ((win->cells[n] & A_CHARTEXT) == (old & A_CHARTEXT) && (win->cells[n] & A_CHARTEXT) == ' ')
-            win->cells[n] = win->bkg;
+    /* ncurses: character 0 (mc: wbkgd(win, COLOR_PAIR(n))) means a space */
+    if ((ch & A_CHARTEXT) == 0) ch |= ' ';
+    win->bkg = ch;
+    /* as in ncurses: cells with the old background character get the new one, cells
+     * with the old background colour (or none) get the new colour */
+    for (n = 0; n < win->maxy * win->maxx; n++) {
+        chtype c = win->cells[n];
+        if ((c & A_CHARTEXT) == (old & A_CHARTEXT))
+            c = (c & ~(chtype) A_CHARTEXT) | (ch & A_CHARTEXT);
+        if ((c & A_COLOR) == 0 || (c & A_COLOR) == (old & A_COLOR))
+            c = (c & ~(chtype) A_COLOR) | (ch & A_COLOR);
+        win->cells[n] = c;
+    }
     win->touched = 1;
     return OK;
 }
@@ -874,15 +898,25 @@ int attrset(int attrs)
     return wattrset(stdscr, attrs);
 }
 
+/* ncurses semantics: a colour pair REPLACES the current pair (only one at a time), the
+ * other attribute bits are added. OR-ing the pair numbers mixed the pairs of mc
+ * (4|8|1|2 = 15 = COLOR_BLUE_ON_WHITE: white background everywhere). */
 int wattron(WINDOW *win, int attrs)
 {
-    win->attr |= (chtype) attrs;
+    chtype a = (chtype) attrs;
+    if (a & A_COLOR)
+        win->attr = (win->attr & ~(chtype) A_COLOR) | (a & A_COLOR);
+    win->attr |= a & ~(chtype) A_COLOR;
     return OK;
 }
 
+/* a colour pair in attrs turns the colour off completely (back to pair 0) */
 int wattroff(WINDOW *win, int attrs)
 {
-    win->attr &= ~(chtype) attrs;
+    chtype a = (chtype) attrs;
+    if (a & A_COLOR)
+        win->attr &= ~(chtype) A_COLOR;
+    win->attr &= ~(a & ~(chtype) A_COLOR);
     return OK;
 }
 

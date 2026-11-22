@@ -115,6 +115,7 @@ int raw(void);
 int cbreak(void);
 int noecho(void);
 int echo(void);
+int nl(void);
 int nonl(void);
 int keypad(WINDOW *win, int on);
 int curs_set(int visibility);
