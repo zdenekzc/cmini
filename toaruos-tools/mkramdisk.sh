@@ -88,6 +88,11 @@ tar -xzf "$PUSH/cmini-toaru.tar.gz" --strip-components=1 -C "$WORK/ramdisk/extra
 # /extras/cmini-src: compiler sources from cmini-src.tar.gz (top dir cmini-src/ dropped)
 mkdir -p "$WORK/ramdisk/extras/cmini-src"
 tar -xzf "$PUSH/cmini-src.tar.gz" --strip-components=1 -C "$WORK/ramdisk/extras/cmini-src"
+# /extras/build-new-cmini.sh: cmini compiles cmini in ToaruOS => /extras/new-cmini;
+# its helpers (as in selfhost.sh) go to /extras/cmini-src/selfhost
+mkdir -p "$WORK/ramdisk/extras/cmini-src/selfhost"
+cp "$DIR/selfhost/calloc_zero.c" "$DIR/selfhost/setjmp_alias.asm" "$WORK/ramdisk/extras/cmini-src/selfhost/"
+cp "$DIR/guest/build-new-cmini.sh" "$WORK/ramdisk/extras/build-new-cmini.sh"
 
 # /extras/mini-commander/mc-toaru.bin and /extras/tiny-ide/tiny-ide-toaru.bin: built by
 # cmini (build-toaru-cmini.sh of each tool); the links in /bin: mc, tiny-ide, cmini
