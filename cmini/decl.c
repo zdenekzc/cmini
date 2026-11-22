@@ -601,6 +601,15 @@ TypePtr CreateType (IDENT_TYP id, sort_typ sort, bool def)
   else
   {
      obj = Search (Display[DisplayLevel], id);
+     if (obj==NULL && !def)
+     {
+        /* struct X v;  struct X * p;  in a function or in another structure: X declared
+           in an enclosing scope (otherwise a new empty local type X hid it and its
+           members were not found - tests/examples/structtag.cc) */
+        ObjectPtr outer = Lookup (id);
+        if (outer!=NULL && IsType (outer) && outer->storage!=Typedef && outer->type->sort==sort)
+           obj = outer;
+     }
      if (obj==NULL)
      {
         /* new type */

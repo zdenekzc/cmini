@@ -1,0 +1,5 @@
+a: A 2 3, b: B 20 30, p->i 3
+sum (&a) 70, sum (&b) 116
+list: 123
+pair: x 1 2 y 3 4
+local: 42
