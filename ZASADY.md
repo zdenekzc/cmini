@@ -73,6 +73,17 @@ Pravidla pro `_output/`:
 - Později bude existovat také generátor parserů napsaný v CMini v adresáři `gram/`
   a `utils/` (adresář `utils` se už objevuje v `cstencils`).
 
+## cstencils a CDL (Compiler Definition Language)
+
+- `cstencils/` je experiment napsaný v CMini. Z deklarací tříd generuje například
+  spojové seznamy.
+- `cstencils/code.h` obsahuje třídy `Class`, `Func`, ..., které tvoří základ pro
+  generování zdrojových textů v parser generátoru napsaném v C-- (`gram/`).
+- Z tohoto experimentu má vzniknout základ pro **CDL** (Compiler Definition Language,
+  také `cdl`). Plán je zmíněný v projektu arm64-compiler.
+- CDL nesmí záviset na parser generátoru. Proto se do projektu cecko zatím kopírují
+  všechny potřebné soubory parser generátoru do adresáře `gram/`, aby `gram/` byl stabilní.
+
 ## Stav kódu vůči těmto zásadám
 
 - `toaruos-tools/mkramdisk.sh` kontroluje `fakeroot` a po sestavení archivu kontroluje,
