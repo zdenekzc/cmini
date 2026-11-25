@@ -6,7 +6,7 @@
 # The same steps as tiny-ide/build-toaru-cmini.sh on the host: the installed compiler
 # /extras/cmini-toaru/bin/cmini.bin compiles the sources of /extras/tiny-ide/src with
 # -L /lib -c (pasm backend, ToaruOS libc) together with the 8-bit curses layer of
-# tiny-ide (src/toaru-cmini: curses8.c, glue.c) and the zeroing calloc, pasm -k links
+# tiny-ide (src/curses: curses8.c, glue.c = the shared layer, headers in src/curses and src/toaru-cmini) and the zeroing calloc, pasm -k links
 # them with the ToaruOS crt0/crti/libc.a/crtn from /lib.
 #
 # Result: /extras/new-tiny-ide/tiny-ide-toaru.bin, objects in obj/
@@ -21,14 +21,14 @@ mkdir -p /extras/new-tiny-ide/obj
 cd /extras/tiny-ide/src
 
 echo "== 2. cmini: tiny-ide sources and its curses layer (cmini -L /lib -c)"
-/extras/cmini-toaru/bin/cmini.bin -L /lib -I toaru-cmini -I /extras/cmini-toaru/include -D TOARU_CMINI=1 -D calloc=cm_calloc -c /extras/new-tiny-ide/obj/main.o main.c
-/extras/cmini-toaru/bin/cmini.bin -L /lib -I toaru-cmini -I /extras/cmini-toaru/include -D TOARU_CMINI=1 -D calloc=cm_calloc -c /extras/new-tiny-ide/obj/app.o app.c
-/extras/cmini-toaru/bin/cmini.bin -L /lib -I toaru-cmini -I /extras/cmini-toaru/include -D TOARU_CMINI=1 -D calloc=cm_calloc -c /extras/new-tiny-ide/obj/editor.o editor.c
-/extras/cmini-toaru/bin/cmini.bin -L /lib -I toaru-cmini -I /extras/cmini-toaru/include -D TOARU_CMINI=1 -D calloc=cm_calloc -c /extras/new-tiny-ide/obj/runner.o runner.c
-/extras/cmini-toaru/bin/cmini.bin -L /lib -I toaru-cmini -I /extras/cmini-toaru/include -D TOARU_CMINI=1 -D calloc=cm_calloc -c /extras/new-tiny-ide/obj/ui.o ui.c
-/extras/cmini-toaru/bin/cmini.bin -L /lib -I toaru-cmini -I /extras/cmini-toaru/include -D TOARU_CMINI=1 -D calloc=cm_calloc -c /extras/new-tiny-ide/obj/dialogs.o dialogs.c
-/extras/cmini-toaru/bin/cmini.bin -L /lib -I toaru-cmini -I /extras/cmini-toaru/include -D TOARU_CMINI=1 -D calloc=cm_calloc -c /extras/new-tiny-ide/obj/curses8.o toaru-cmini/curses8.c
-/extras/cmini-toaru/bin/cmini.bin -L /lib -I toaru-cmini -I /extras/cmini-toaru/include -D TOARU_CMINI=1 -D calloc=cm_calloc -c /extras/new-tiny-ide/obj/glue.o toaru-cmini/glue.c
+/extras/cmini-toaru/bin/cmini.bin -L /lib -I curses -I toaru-cmini -I /extras/cmini-toaru/include -D TOARU_CMINI=1 -D calloc=cm_calloc -c /extras/new-tiny-ide/obj/main.o main.c
+/extras/cmini-toaru/bin/cmini.bin -L /lib -I curses -I toaru-cmini -I /extras/cmini-toaru/include -D TOARU_CMINI=1 -D calloc=cm_calloc -c /extras/new-tiny-ide/obj/app.o app.c
+/extras/cmini-toaru/bin/cmini.bin -L /lib -I curses -I toaru-cmini -I /extras/cmini-toaru/include -D TOARU_CMINI=1 -D calloc=cm_calloc -c /extras/new-tiny-ide/obj/editor.o editor.c
+/extras/cmini-toaru/bin/cmini.bin -L /lib -I curses -I toaru-cmini -I /extras/cmini-toaru/include -D TOARU_CMINI=1 -D calloc=cm_calloc -c /extras/new-tiny-ide/obj/runner.o runner.c
+/extras/cmini-toaru/bin/cmini.bin -L /lib -I curses -I toaru-cmini -I /extras/cmini-toaru/include -D TOARU_CMINI=1 -D calloc=cm_calloc -c /extras/new-tiny-ide/obj/ui.o ui.c
+/extras/cmini-toaru/bin/cmini.bin -L /lib -I curses -I toaru-cmini -I /extras/cmini-toaru/include -D TOARU_CMINI=1 -D calloc=cm_calloc -c /extras/new-tiny-ide/obj/dialogs.o dialogs.c
+/extras/cmini-toaru/bin/cmini.bin -L /lib -I curses -I toaru-cmini -I /extras/cmini-toaru/include -D TOARU_CMINI=1 -D calloc=cm_calloc -c /extras/new-tiny-ide/obj/curses8.o curses/curses8.c
+/extras/cmini-toaru/bin/cmini.bin -L /lib -I curses -I toaru-cmini -I /extras/cmini-toaru/include -D TOARU_CMINI=1 -D calloc=cm_calloc -c /extras/new-tiny-ide/obj/glue.o curses/glue.c
 /extras/cmini-toaru/bin/cmini.bin -L /lib -I /extras/cmini-toaru/include -c /extras/new-tiny-ide/obj/calloc_zero.o calloc_zero.c
 
 echo "== 3. link (pasm -k, ToaruOS crt0/crti/libc.a/crtn)"

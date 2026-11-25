@@ -41,6 +41,48 @@ cp -a "$TCC/lib/include" "$W/extras/tcc/include"
 echo "== /extras/examples (cmini -C, cminirt.o for aarch64) and /extras/build-examples.sh"
 TCC="$TCC/bin/aarch64-toaru-tcc" "$TOP/toaruos-tools/mkexamples.sh" "$W/extras" a64 > /dev/null
 
+echo "== tiny-ide and mini-commander: cmini -C (translate), compiled by the cross TinyCC"
+# the same sources and the same curses layer (toaruos-tools/cmini-curses) as the x86_64 builds;
+# uintmax_t: cmini_libc.h (mini-commander) declares it as long unsigned int, the sysroot as tcc's type
+CTCC="$TCC/bin/aarch64-toaru-tcc"
+CMINI=$TOP/cmini/cmini.bin
+TCCFLAGS=(-B"$TCC/lib" -w -I "$TOP/cmini" -include "$TOP/toaruos-tools/tcc/cmini-compat.h" "-D__UINTMAX_TYPE__=long unsigned int" -D TOARU_CMINI=1 -D calloc=cm_calloc)
+A=$B/arm64/apps
+rm -rf "$A"; mkdir -p "$A/tide" "$A/mc"
+SHIM=$TOP/toaruos-tools/cmini-curses
+(
+    cd "$TOP/tiny-ide"
+    for f in main app editor runner ui dialogs
+    do "$CMINI" -C -I "$TOP/cmini/ownheaders" -I "$SHIM" -D TOARU_CMINI=1 -D calloc=cm_calloc -o "$A/tide/$f.c" "$f.c" \
+          || { echo "error: cmini -C tiny-ide/$f.c" >&2; exit 1; }
+    done
+)
+(
+    cd "$TOP/mini-commander"
+    for f in mc cmd operations dialog filelist init panel ui view_edit progress
+    do "$CMINI" -C -I "$TOP/mini-commander/cmini-toaru" -I "$SHIM" -D TOARU_CMINI=1 -D calloc=cm_calloc -o "$A/mc/$f.c" "$f.c" \
+          || { echo "error: cmini -C mini-commander/$f.c" >&2; exit 1; }
+    done
+)
+for f in curses8 glue
+do "$CTCC" "${TCCFLAGS[@]}" -I "$SHIM" -c "$SHIM/$f.c" -o "$A/tide/$f.o" || { echo "error: tcc $f.c" >&2; exit 1; }
+done
+"$CTCC" -B"$TCC/lib" -w -c "$TOP/toaruos-tools/selfhost/calloc_zero.c" -o "$A/tide/calloc_zero.o" || exit 1
+"$CTCC" -B"$TCC/lib" -w -c "$TOP/cmini/cminirt.c" -I "$TOP/cmini" -o "$A/tide/cminirt.o" || exit 1
+for f in main app editor runner ui dialogs
+do "$CTCC" "${TCCFLAGS[@]}" -I "$SHIM" -I "$TOP/tiny-ide/toaru-cmini" -c "$A/tide/$f.c" -o "$A/tide/$f.o" || { echo "error: tcc tiny-ide/$f.c" >&2; exit 1; }
+done
+"$CTCC" "${TCCFLAGS[@]}" -o "$A/tide/tiny-ide-toaru.bin" "$A/tide"/{main,app,editor,runner,ui,dialogs,curses8,glue,calloc_zero}.o "$A/tide/cminirt.o" \
+      || { echo "error: link tiny-ide" >&2; exit 1; }
+for f in mc cmd operations dialog filelist init panel ui view_edit progress
+do "$CTCC" "${TCCFLAGS[@]}" -I "$TOP/mini-commander/cmini-toaru" -I "$SHIM" -c "$A/mc/$f.c" -o "$A/mc/$f.o" || { echo "error: tcc mc/$f.c" >&2; exit 1; }
+done
+"$CTCC" "${TCCFLAGS[@]}" -o "$A/mc/mc-toaru.bin" "$A/mc"/{mc,cmd,operations,dialog,filelist,init,panel,ui,view_edit,progress}.o \
+      "$A/tide/curses8.o" "$A/tide/glue.o" "$A/tide/calloc_zero.o" "$A/tide/cminirt.o" \
+      || { echo "error: link mini-commander" >&2; exit 1; }
+mkdir -p "$W/extras/tiny-ide"; install -m 755 "$A/tide/tiny-ide-toaru.bin" "$W/extras/tiny-ide/tiny-ide-toaru.bin"
+mkdir -p "$W/extras/mini-commander"; install -m 755 "$A/mc/mc-toaru.bin" "$W/extras/mini-commander/mc-toaru.bin"
+
 echo "== repacking the release ramdisk under fakeroot"
 UNPACK=$(mktemp -d "$OUT/unpack.XXXXXX")
 fakeroot -- bash -c '

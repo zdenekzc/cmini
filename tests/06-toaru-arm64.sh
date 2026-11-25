@@ -59,6 +59,19 @@ fi
 a64_send "sh /extras/build-examples.sh"
 last=rc_check
 a64_wait "==END-$last==" 900 || echo "  toaruos-arm64: run_examples.sh neskoncil (cast $last)" >&2
+# tiny-ide a mini-commander (preloženy translate cestou v hostiteli): -v musi odpovedet
+for app in tide mc
+do
+   case $app in
+      tide) bin=/extras/tiny-ide/tiny-ide-toaru.bin ;;
+      mc)   bin=/extras/mini-commander/mc-toaru.bin ;;
+   esac
+   a64_send "echo ==BEG-$app-v=="
+   a64_send "$bin -v"
+   a64_send "echo RC=\$?"
+   a64_send "echo ==END-$app-v=="
+   a64_wait "==END-$app-v==" 120 || echo "  toaruos-arm64: $app -v neodpovedel" >&2
+done
 a64_log 200000 > $V/toaruos-arm64/serial.txt 2> /dev/null || true
 a64_stop
 
@@ -72,6 +85,16 @@ do
    if [ "$rc" != "RC=0" ]
    then echo "$p" >> $T/bad; echo "  $p: navratovy kod '$rc' (ocekavano RC=0)" >&2
    fi
+done
+# -v: tiny-ide a mini-commander se spusti a vypisi verzi (navratovy kod jen zaznamenavame)
+echo "Tiny IDE 1.0" > $T/exp/app-tide-v.txt
+echo "Version 2.0" > $T/exp/app-mc-v.txt
+for app in tide mc
+do
+   # the terminal redraws the prompt and the typed command: keep only the version line itself
+   awk -v b="==BEG-$app-v==" -v e="==END-$app-v==" '$0==b{f=1;next} $0==e{f=0} f' $V/toaruos-arm64/serial.txt \
+      | grep -o 'Tiny IDE 1\.0\|Version 2\.0' | head -1 > $V/toaruos-arm64/$app-v.out
+   check $V/toaruos-arm64/$app-v.out app-$app-v
 done
 # exit-code path: rc_check vraci 7; RC=7 na serial lince potvrdi, ze navratovy kod dojde do shellu
 rc=$(awk '$0=="==BEG-rc_check=="{f=1;next} $0=="==END-rc_check=="{f=0} f && /^RC=/' $V/toaruos-arm64/serial.txt | head -1)

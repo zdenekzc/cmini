@@ -126,7 +126,7 @@ ln -sfn /extras/cmini-toaru/bin/cmini.bin "$WORK/ramdisk/bin/cmini"
 
 # sources for a rebuild by cmini inside ToaruOS:
 #   /extras/mini-commander/src  (+ cmini-toaru/ declarations, curses/ = cmini-curses layer)
-#   /extras/tiny-ide/src        (+ toaru-cmini/ = its own curses layer)
+#   /extras/tiny-ide/src        (+ toaru-cmini/ = headers, curses/ = the shared 8-bit curses layer)
 #   /extras/build-new-mc.sh => /extras/new-mc, /extras/build-new-tiny-ide.sh => /extras/new-tiny-ide
 MCS=$WORK/ramdisk/extras/mini-commander/src
 mkdir -p "$MCS/cmini-toaru"
@@ -139,6 +139,8 @@ TIS=$WORK/ramdisk/extras/tiny-ide/src
 mkdir -p "$TIS"
 cp "$TOP"/tiny-ide/*.c "$TOP"/tiny-ide/*.h "$TOP/tiny-ide/README.md" "$TIS/"
 cp -r "$TOP/tiny-ide/toaru-cmini" "$TIS/toaru-cmini"
+cp -r "$DIR/cmini-curses" "$TIS/curses"          # curses8.c, glue.c, ncurses.h (shared with mc)
+rm -rf "$TIS/curses/tests"
 cp "$DIR/selfhost/calloc_zero.c" "$TIS/"
 for s in build-new-mc.sh build-new-tiny-ide.sh; do
     cp "$DIR/guest/$s" "$WORK/ramdisk/extras/$s"

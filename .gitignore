@@ -13,3 +13,6 @@ __pycache__/
 !toaruos-tools/probe/counterexample/*.elf
 # downloaded files (ISO, sources) - outside _build, not backed up
 _import/
+
+# personal Claude Code settings (not shared)
+.claude/settings.local.json
