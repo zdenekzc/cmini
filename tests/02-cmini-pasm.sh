@@ -83,5 +83,34 @@ if $TOP/cmini/cmini.bin -S $V/cmini-pasm/examples/dama-S.asm -I $TOP/cmini/ownhe
 then echo "  OK    cmini.bin -S: $V/cmini-pasm/examples/dama-S.asm"
 else echo "  FAIL  cmini.bin -S (dama)"; FAILED=1
 fi
+# tiny-ide a mini-commander: cmini (pasm) na Linuxu, glibc + ncursesw; test v pseudoterminalu
+# (tiny-ide/tests/smoke.py, mini-commander/tests/pty_smoke.py - jen Python stdlib)
+if [ ! -f /usr/include/ncursesw/curses.h ]
+then echo "  !!! CHYBI ncursesw (sudo dnf install ncurses-devel): tiny-ide a mc se nepreloží" >&2; FAILED=1
+else
+   TI=$V/cmini-pasm/tiny-ide; mkdir -p $TI
+   objs=""; ok_ti=true
+   for f in main app editor runner ui dialogs
+   do
+      (cd tiny-ide && $TOP/cmini/cmini.bin -I $TOP/cmini/ownheaders -c $T/ti-$f.o $f.c > $T/ti-$f.log 2>&1) || ok_ti=false
+      objs="$objs $T/ti-$f.o"
+   done
+   $ok_ti && gcc -no-pie $objs $T/cminirt.o -lncursesw -lm -o $TI/tiny-ide.bin > $T/ti-link.log 2>&1 &&
+      CMINI=$TOP/cmini/cmini.bin python3 -I tiny-ide/tests/smoke.py $TI/tiny-ide.bin > $T/ti-smoke.log 2>&1 &&
+      echo "tiny-ide" >> $T/ok
+   [ -f $T/ok ] && grep -qx tiny-ide $T/ok || { echo "tiny-ide" >> $T/bad; echo "  tiny-ide: viz $T/ti-*.log" >&2; }
+
+   MC=$V/cmini-pasm/mini-commander; mkdir -p $MC
+   objs=""; ok_mc=true
+   for f in mc cmd operations dialog filelist init panel ui view_edit progress
+   do
+      (cd mini-commander && $TOP/cmini/cmini.bin -I cmini -c $T/mc-$f.o $f.c > $T/mc-$f.log 2>&1) || ok_mc=false
+      objs="$objs $T/mc-$f.o"
+   done
+   $ok_mc && gcc -no-pie $objs $T/cminirt.o -lncursesw -o $MC/mc-cmini.bin > $T/mc-link.log 2>&1 &&
+      python3 -I mini-commander/tests/pty_smoke.py $MC/mc-cmini.bin > $T/mc-smoke.log 2>&1 &&
+      echo "mc" >> $T/ok
+   [ -f $T/ok ] && grep -qx mc $T/ok || { echo "mc" >> $T/bad; echo "  mc: viz $T/mc-*.log" >&2; }
+fi
 report cmini-pasm "c-mini => pasm (.asm), vypis (.lst); cmini.bin a asm/pasm.bin (sam sebou)"
 finish

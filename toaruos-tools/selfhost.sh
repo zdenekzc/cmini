@@ -13,8 +13,8 @@ set -euo pipefail
 
 DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 TOP=$(cd "$DIR/.." && pwd)
-L=$DIR/_build/toaru-lib
-B=$DIR/_build/selfhost
+L=$TOP/_build/toaru-lib
+B=$TOP/_build/selfhost
 CMINI=${CMINI:-$TOP/cmini/cmini.bin}
 PASM=${PASM:-$TOP/asm/pasm.bin}
 CINC="-I $TOP/cmini/ownheaders"

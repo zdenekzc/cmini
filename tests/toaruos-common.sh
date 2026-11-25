@@ -19,10 +19,17 @@
 # build-essential potrebuje sit) - viz toaruos-tools/guest-cmini.sh.
 
 CMINI_OK=false
+# programy cross-prelozene na hostiteli (mkcross.sh => /extras/cmini-toaru/examples-bin); cout ne:
+# ToaruOS libc nema dprintf (cerr)
+CROSS_PROGRAMS="dama classes avl btree jezdec veze heapsort quicksort"
+CROSS_NAMES="cross-dama cross-classes cross-avl cross-btree cross-jezdec cross-veze cross-heapsort cross-quicksort"
 
 cmini_prepare ()
 {
+   # tiny-ide a mini-commander: cmini (pasm) pro ToaruOS, do _build/<nastroj>/cmini-toaru/
    if "$TOP/toaruos-tools/mkcross.sh" > $T/mkcross.log 2>&1 &&
+      "$TOP/mini-commander/build-toaru-cmini.sh" > $T/mc-toaru.log 2>&1 &&
+      "$TOP/tiny-ide/build-toaru-cmini.sh" > $T/tide-toaru.log 2>&1 &&
       "$TOP/toaruos-tools/mkramdisk.sh" > $T/mkramdisk.log 2>&1; then
       CMINI_OK=true
       # vzor pro libc64.asm: tentyz program na Linuxu (pasm -c, gcc, glibc)
@@ -34,6 +41,10 @@ cmini_prepare ()
       cp $EX/expected/classes.txt $T/exp/guest-cmini-L.txt
       # dalsi prikazy: cmini -L (libc ToaruOS) - vzor tests/examples/expected/<p>.txt, heapsort a quicksort jen O.K.
       for p in avl btree jezdec veze; do cp $EX/expected/$p.txt $T/exp/guest-cmini-L-$p.txt; done
+      for p in $CROSS_PROGRAMS; do cp $EX/expected/$p.txt $T/exp/cross-$p.txt 2> /dev/null; done
+      # -v: tiny-ide a mini-commander (version, ocekavany radek)
+      echo "Tiny IDE 1.0" > $T/exp/cross-tiny-ide-v.txt; cp $T/exp/cross-tiny-ide-v.txt $T/exp/guest-tiny-ide-v.txt
+      echo "Version 2.0" > $T/exp/cross-mc-v.txt; cp $T/exp/cross-mc-v.txt $T/exp/guest-mc-v.txt
    else
       echo "  krizovy preklad prekladacu pro ToaruOS selhal (mkcross.sh, $T/mkcross.log)" >&2
    fi
@@ -85,7 +96,7 @@ cmini_cstencils ()   # cmini_cstencils <adresar> - cstencils prelozeny cmini v T
 cmini_run ()   # cmini_run <jmeno> <prikazy pred behem> <program> - jeden test v hostovi
 {
    $VM send "$2; echo ==BEG-$1-$RUN==; $3; echo; echo ==END-$1-$RUN=="
-   for i in $(seq 1 120); do
+   for i in $(seq 1 ${RUN_WAIT:-120}); do
       $VM log 5 | grep -qx "==END-$1-$RUN==" && return
       sleep 1
    done
@@ -111,8 +122,26 @@ cmini_guest ()
    cmini_run guest-cmini-L-veze "$c; bin/cmini.bin -L /lib -I include -o /tmp/g-veze tests/examples/veze.cc" /tmp/g-veze
    cmini_run guest-cmini-L-heapsort "$c; bin/cmini.bin -L /lib -I include -o /tmp/g-heapsort tests/examples/heapsort.cc" /tmp/g-heapsort
    cmini_run guest-cmini-L-quicksort "$c; bin/cmini.bin -L /lib -I include -o /tmp/g-quicksort tests/examples/quicksort.cc" /tmp/g-quicksort
+   # cross-compiled examples (mkcross.sh, host cmini -L): run them as they are
+   for p in $CROSS_PROGRAMS; do
+      cmini_run cross-$p "cd /extras/cmini-toaru/examples-bin" "./$p"
+   done
+   # tiny-ide a mini-commander cross-compiled on the host: -v (version) must answer
+   cmini_run cross-tiny-ide-v "cd /extras" "/extras/tiny-ide/tiny-ide-toaru.bin -v"
+   cmini_run cross-mc-v "cd /extras" "/extras/mini-commander/mc-toaru.bin -v"
+   # tiny-ide a mini-commander zkompilovane cmini UVNITR ToaruOS (guest skripty build-new-*.sh)
+   RUN_WAIT=1200 cmini_run build-new-tiny-ide "cd /extras" "sh /extras/build-new-tiny-ide.sh"
+   cmini_run guest-tiny-ide-v "cd /extras" "/extras/new-tiny-ide/tiny-ide-toaru.bin -v"
+   RUN_WAIT=1200 cmini_run build-new-mc "cd /extras" "sh /extras/build-new-mc.sh"
+   cmini_run guest-mc-v "cd /extras" "/extras/new-mc/mc-toaru.bin -v"
    cmini_cstencils $G
    $VM log 1000000 > $T/cmini.log
+   for p in $CROSS_NAMES cross-tiny-ide-v cross-mc-v guest-tiny-ide-v guest-mc-v build-new-tiny-ide build-new-mc; do
+      awk -v b="==BEG-$p-$RUN==" -v e="==END-$p-$RUN==" '$0==b{f=1;next} $0==e{f=0} f && !/^root@/' \
+         $T/cmini.log | sed '$ { /^$/ d }' > $G/$p.out
+   done
+   # vystupy prekladu (build-new-*) nemaji vzor: uspech je guest-*-v (program se spustil a vypsal verzi)
+   for p in $CROSS_NAMES cross-tiny-ide-v cross-mc-v guest-tiny-ide-v guest-mc-v; do check $G/$p.out $p; done
    for p in guest-cmini-T guest-cmini-L guest-pasm-x guest-cmini-L-avl guest-cmini-L-btree guest-cmini-L-jezdec guest-cmini-L-veze guest-cmini-L-heapsort guest-cmini-L-quicksort; do
       # echo pred koncovou znackou => posledni prazdny radek pryc
       awk -v b="==BEG-$p-$RUN==" -v e="==END-$p-$RUN==" '$0==b{f=1;next} $0==e{f=0} f && !/^root@/' \

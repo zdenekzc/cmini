@@ -12,7 +12,7 @@ set -euo pipefail
 DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 TOP=$(cd "$DIR/.." && pwd)
 TCC=${TCC:-/opt/tinycc/bin/tcc}
-B=$DIR/_build
+B=$TOP/_build
 L=$B/toaru-lib
 OUT=$B/tcc
 O=$OUT/obj

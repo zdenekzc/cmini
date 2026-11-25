@@ -1,24 +1,30 @@
 #!/bin/sh
-# 05-toaru.sh - _output/toaruos-tcc/: cmini a pasm v ToaruOS (bez gcc, v bezici VM)
+# 05-toaru.sh - _output/toaruos-tcc/: cmini (varianta pasm) v ToaruOS x86_64 (bez gcc, v bezici VM)
 #
 # CESTA (kroky 1-2 na hostiteli, 3-4 v bezici VM ToaruOS 2.3.2; funkce cmini_* v toaruos-common.sh):
-#   1. mkcross.sh (toaruos-tools): cmini.bin, pasm.bin a cminirt.o pro ToaruOS
-#      + zdroje cmini; mkramdisk.sh je vlozi do ramdisku (/extras) a VM se boot-ne
-#      z ramdisku a kernelu (qemu -kernel/-initrd, bez ISO)
-#   2. VM ToaruOS: balik se zkopiruje do /extras/tmp/cmini a cmini / pasm se prelozi a spusti:
-#        guest-cmini-T  cmini -T dama.c (vlastni behova knihovna)
-#        guest-cmini-L  cmini -L /lib classes.c (libc ToaruOS)
-#        guest-pasm-x   pasm -x libc64.asm (assembler + linker)
-#        guest-cmini-L-<p>  cmini -L /lib <p>.cc: avl, btree, jezdec, veze (vzor
-#                           tests/examples/expected/<p>.txt), heapsort, quicksort (posledni radek O.K.)
-#        cst-build      cmini -L /lib unity.cc: cstencils (/extras/cstencils) v ToaruOS
-#        cst-run        code-cst --output-dir out example/list.t (list.hpp, list.cpp)
-#   3. vystupy programu se porovnaji se vzory tests/examples/expected (dama, classes)
-#      a s vystupem libc64 slinkovaneho na hostiteli (pasm -c, gcc);
-#      list.hpp a list.cpp z ToaruOS se porovnaji (CRC32 a velikost) s g++ buildem na hostiteli
+#   1. na hostiteli (_build/ v hlavnim adresari):
+#      mkcross.sh        cmini.bin a pasm.bin pro ToaruOS (staticky, ToaruOS libc), zdroje cmini,
+#                        CROSS-PRELOZENE PRIKLADY (_build/cross/cmini/examples-bin/)
+#      mini-commander/build-toaru-cmini.sh, tiny-ide/build-toaru-cmini.sh
+#                        mc-toaru.bin a tiny-ide-toaru.bin (cross, cmini -L toaru-lib, pasm -k)
+#      mkramdisk.sh      vse se vlozi do ramdisku pod /extras, VM se boot-ne z ramdisku a kernelu
+#                        (qemu -kernel/-initrd, bez ISO)
+#   2. v bezici VM ToaruOS:
+#        guest-cmini-T / -L / -L-<p>   prekladani cmini uvnitr ToaruOS (/extras/tmp)
+#        guest-pasm-x                  pasm -x libc64.asm (assembler + linker)
+#        cst-build / cst-run           cstencils (unity.cc) prelozeny v ToaruOS
+#        cross-<p>                     programy cross-prelozene na hostiteli (/extras/cmini-toaru/examples-bin)
+#        cross-tiny-ide-v, cross-mc-v  -v (verze) cross-prelozenych tiny-ide a mc
+#        build-new-tiny-ide, build-new-mc  /extras/build-new-*.sh: tiny-ide a mc prelozene cmini UVNITR ToaruOS
+#        guest-tiny-ide-v, guest-mc-v  -v programu prelozenych uvnitr ToaruOS
+#   3. vystupy se porovnaji se vzory tests/examples/expected (dama, classes, ...), u -v s
+#      ocekavanym radkem, u cstencils CRC32 a velikosti (g++ build na hostiteli).
 #   4. VM se zastavi (s oknem, DISPLAY nastaveno, zustava bezet); vystupy:
-#      _output/toaruos-tcc/{guest-*.out,cst-*.out,guest.log}
+#      _output/toaruos-tcc/{guest-*.out,cross-*.out,build-new-*.out,cst-*.out,guest.log}
 #
+# Translate (cmini -C) se netestuje; translate.c je v cmini.bin jen kvuli volbe -C v instr_drv.c.
+# cout se neprekladá krizove: ToaruOS libc nema dprintf (cerr).
+# Pro ToaruOS ARM64 bude tests/06-toaru-arm64 (zatim neexistuje).
 # Vyzaduje qemu-system-x86_64, ISO ToaruOS (_import/) a
 # toaru-vm.sh. Bez nich se test jen preskoci (vypise se proc).
 # POZOR: jeden NN-*.sh se nesmi spustit dvakrat soucasne (sdileji _output a _build/vystup).
@@ -63,9 +69,9 @@ $CMINI_OK || { echo "  toaruos-tcc: mkcross.sh selhal ($T/mkcross.log)" >&2; cmi
 # with a window (manual run) the VM stays up after the test: its directory is kept
 KEEP_VM=0
 if [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ] && [ "${TOARU_GUI:-1}" != 0 ]; then KEEP_VM=1; fi
-if [ "$KEEP_VM" = 1 ]; then WORKV=$TOOLS/_build/vm-keep; else WORKV=$T/vm; fi
+if [ "$KEEP_VM" = 1 ]; then WORKV=$TOP/_build/vm-keep; else WORKV=$T/vm; fi
 mkdir -p $WORKV
-VM="env WORK=$WORKV INITRD=$TOOLS/_build/ramdisk.tgz KERNEL=$TOOLS/_build/kernel.mb $TOOLS/toaru-vm.sh"
+VM="env WORK=$WORKV INITRD=$TOP/_build/ramdisk.tgz KERNEL=$TOP/_build/kernel.mb $TOOLS/toaru-vm.sh"
 up=false
 for attempt in 1 2 3; do
    $VM start > /dev/null

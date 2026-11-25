@@ -12,8 +12,8 @@ HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 TOP=$(cd "$HERE/.." && pwd)
 CMINI=${CMINI:-$TOP/cmini/cmini.bin}
 PASM=${PASM:-$TOP/asm/pasm.bin}
-L=$TOP/toaruos-tools/_build/toaru-lib
-OUT=$HERE/_build/cmini-toaru
+L=$TOP/_build/toaru-lib
+OUT=$TOP/_build/tiny-ide/cmini-toaru
 O=$OUT/obj
 die() { echo "error: $*" >&2; exit 1; }
 [[ -x $CMINI ]] || die "missing $CMINI (make -C cmini)"

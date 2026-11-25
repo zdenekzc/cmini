@@ -11,9 +11,10 @@
 set -euo pipefail
 
 DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+TOP=$(cd "$DIR/.." && pwd)
 ISO=${ISO:-${DIR}/../_import/toaruos-2.3.2.iso}
-OUT=${OUT:-${DIR}/_build/toaru-lib}
-INC=${INC:-${DIR}/_build/toaru-include}
+OUT=${OUT:-${TOP}/_build/toaru-lib}
+INC=${INC:-${TOP}/_build/toaru-include}
 
 die() { echo "error: $*" >&2; exit 1; }
 [[ -f $ISO ]] || die "missing ISO: $ISO"

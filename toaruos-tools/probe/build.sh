@@ -17,8 +17,9 @@
 set -u
 
 D=$(cd "$(dirname "$0")" && pwd)
-OUT=${OUT:-${D}/../_build/probe}
-PUSH=${PUSH:-${D}/../_build/push}
+TOP=$(cd "$D/../.." && pwd)
+OUT=${OUT:-${TOP}/_build/probe}
+PUSH=${PUSH:-${TOP}/_build/push}
 CC=${CC:-gcc}
 BASE=${BASE:-0x3F000000}
 LDFLAGS="-nostdlib -no-pie -static -Wl,-Ttext-segment=${BASE} -Wl,-z,max-page-size=0x1000"

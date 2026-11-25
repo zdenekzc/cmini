@@ -41,9 +41,9 @@ fi
 DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 TOP=$(cd "$DIR/.." && pwd)
 ISO=${ISO:-$TOP/_import/toaruos-2.3.2.iso}
-PUSH=${PUSH:-$DIR/_build/push}
-B=$DIR/_build
-WORK=$B/ramdisk-work
+PUSH=${PUSH:-$TOP/_build/push}
+B=$TOP/_build
+WORK=$B/mkramdisk
 
 die() { echo "error: $*" >&2; exit 1; }
 for t in isoinfo gzip tar python3; do
@@ -110,8 +110,8 @@ chmod 755 "$WORK/ramdisk/extras/build-new-cmini.sh"
 
 # /extras/mini-commander/mc-toaru.bin and /extras/tiny-ide/tiny-ide-toaru.bin: built by
 # cmini (build-toaru-cmini.sh of each tool); the links in /bin: mc, tiny-ide, cmini
-MC_BIN=${MC_BIN:-$TOP/mini-commander/_build/cmini-toaru/mc-toaru.bin}
-TIDE_BIN=${TIDE_BIN:-$TOP/tiny-ide/_build/cmini-toaru/tiny-ide-toaru.bin}
+MC_BIN=${MC_BIN:-$TOP/_build/mini-commander/cmini-toaru/mc-toaru.bin}
+TIDE_BIN=${TIDE_BIN:-$TOP/_build/tiny-ide/cmini-toaru/tiny-ide-toaru.bin}
 for f in "$MC_BIN" "$TIDE_BIN"; do
     [[ -f "$f" ]] || die "missing $f (run the build-toaru-cmini.sh of the tool)"
 done
@@ -162,7 +162,10 @@ fi
 ) | gzip -9 -n > "$B/ramdisk.tgz"
 
 # Kontrola setuid bitu sudo v hotovem archivu: mod s (setuid) a vlastnik root (uid 0)
-SUDO_LINE=$(tar -tvzf "$B/ramdisk.tgz" | awk '$NF ~ /(^|\/)bin\/sudo$/ { print; exit }')
+# (the listing goes into a variable and awk reads all of it: exiting awk early would give tar SIGPIPE,
+# and pipefail would stop the script)
+LISTING=$(tar -tvzf "$B/ramdisk.tgz")
+SUDO_LINE=$(printf '%s\n' "$LISTING" | awk '$NF ~ /^(\.\/)?bin\/sudo$/ { print }')
 if [[ -z $SUDO_LINE ]]; then
     warn_box "/bin/sudo v ramdisku CHYBI" "ToaruOS nebude mit sudo."
 elif [[ ! $SUDO_LINE =~ ^-[rwx-]{2}s ]] || [[ ! $SUDO_LINE =~ [[:space:]](root/root|0/0|root/0|0/root)[[:space:]] ]]; then

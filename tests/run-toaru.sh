@@ -24,16 +24,16 @@ TOOLS=$TOP/toaruos-tools
 ISO=$TOP/_import/toaruos-2.3.2.iso
 ISO_URL=https://github.com/klange/toaruos/releases/download/v2.3.2/image.iso
 ISO_MD5=0043dba93a361b908814a03be2ba7ab2
-WORK=$TOOLS/_build/vm-run
-INITRD=$TOOLS/_build/ramdisk.tgz
-KERNEL=$TOOLS/_build/kernel.mb
+WORK=$TOP/_build/vm-run
+INITRD=$TOP/_build/ramdisk.tgz
+KERNEL=$TOP/_build/kernel.mb
 
-MC_BIN=$TOP/mini-commander/_build/cmini-toaru/mc-toaru.bin
-TIDE_BIN=$TOP/tiny-ide/_build/cmini-toaru/tiny-ide-toaru.bin
+MC_BIN=$TOP/_build/mini-commander/cmini-toaru/mc-toaru.bin
+TIDE_BIN=$TOP/_build/tiny-ide/cmini-toaru/tiny-ide-toaru.bin
 
 die () { echo "run-toaru: $*" >&2; exit 1; }
 
-mkdir -p "$TOOLS/_build"
+mkdir -p "$TOP/_build"
 
 [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ] || die "no graphical display (DISPLAY is not set)"
 command -v qemu-system-x86_64 > /dev/null || die "missing qemu-system-x86_64"
@@ -48,20 +48,20 @@ if [ ! -f "$ISO" ]; then
 fi
 
 # 2) tools and ramdisk (the ramdisk is rebuilt on every run: its /extras payload changes)
-if [ ! -f "$TOOLS/_build/push/cmini-toaru.tar.gz" ]; then
+if [ ! -f "$TOP/_build/push/cmini-toaru.tar.gz" ]; then
    echo "== building the tools for ToaruOS (mkcross.sh) ..."
-   "$TOOLS/mkcross.sh" > "$TOOLS/_build/mkcross.log" 2>&1 || die "mkcross.sh failed (see $TOOLS/_build/mkcross.log)"
+   "$TOOLS/mkcross.sh" > "$TOP/_build/mkcross.log" 2>&1 || die "mkcross.sh failed (see $TOP/_build/mkcross.log)"
 fi
 if [ ! -f "$MC_BIN" ]; then
    echo "== building mini-commander for ToaruOS (build-toaru-cmini.sh) ..."
-   "$TOP/mini-commander/build-toaru-cmini.sh" > "$TOOLS/_build/mc-toaru.log" 2>&1 || die "mini-commander build failed (see $TOOLS/_build/mc-toaru.log)"
+   "$TOP/mini-commander/build-toaru-cmini.sh" > "$TOP/_build/mc-toaru.log" 2>&1 || die "mini-commander build failed (see $TOP/_build/mc-toaru.log)"
 fi
 if [ ! -f "$TIDE_BIN" ]; then
    echo "== building tiny-ide for ToaruOS (build-toaru-cmini.sh) ..."
-   "$TOP/tiny-ide/build-toaru-cmini.sh" > "$TOOLS/_build/tiny-ide-toaru.log" 2>&1 || die "tiny-ide build failed (see $TOOLS/_build/tiny-ide-toaru.log)"
+   "$TOP/tiny-ide/build-toaru-cmini.sh" > "$TOP/_build/tiny-ide-toaru.log" 2>&1 || die "tiny-ide build failed (see $TOP/_build/tiny-ide-toaru.log)"
 fi
 echo "== building the ramdisk (mkramdisk.sh) ..."
-"$TOOLS/mkramdisk.sh" > "$TOOLS/_build/mkramdisk.log" 2>&1 || die "mkramdisk.sh failed (see $TOOLS/_build/mkramdisk.log)"
+"$TOOLS/mkramdisk.sh" > "$TOP/_build/mkramdisk.log" 2>&1 || die "mkramdisk.sh failed (see $TOP/_build/mkramdisk.log)"
 
 # 3) the VM with the desktop
 mkdir -p "$WORK"

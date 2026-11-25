@@ -13,11 +13,12 @@
 set -u
 
 DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+TOP=$(cd "$DIR/.." && pwd)
 ISO=${ISO:-${DIR}/../_import/toaruos-2.3.2.iso}
 # Boot bez ISO: INITRD (ramdisk.tgz) + KERNEL (kernel.mb), viz mkramdisk.sh
 INITRD=${INITRD:-}
-KERNEL=${KERNEL:-${DIR}/_build/kernel.mb}
-WORK=${WORK:-${DIR}/_build/work}
+KERNEL=${KERNEL:-${TOP}/_build/kernel.mb}
+WORK=${WORK:-${TOP}/_build/work}
 RAM=${RAM:-1024}
 SMP=${SMP:-2}
 FIFO=${WORK}/in

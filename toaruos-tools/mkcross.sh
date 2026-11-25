@@ -24,7 +24,7 @@ set -euo pipefail
 
 DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 TOP=$(cd "$DIR/.." && pwd)
-B=$DIR/_build
+B=$TOP/_build
 OUT=${OUT:-$B/cross}
 TAR=${TAR:-$B/push/cmini-toaru.tar.gz}
 PASM=$TOP/asm/pasm.bin
@@ -73,6 +73,20 @@ link "$OUT/cmini/bin/cmini.bin" $CMINI $PASMLIB
 # headers for programs compiled by cmini, examples (../../include/containers.h)
 cp -a "$TOP/cmini/ownheaders" "$OUT/cmini/include"
 cp "$TOP"/tests/examples/*.cc "$OUT/cmini/tests/examples/"
+# cross-compiled examples: host cmini.bin -L (ToaruOS libc, pasm linker) => static ToaruOS ELF
+# in $OUT/cmini/examples-bin/ (run in ToaruOS: /extras/cmini-toaru/examples-bin/<name>)
+mkdir -p "$OUT/cmini/examples-bin"
+cross_ok=0; cross_bad=""
+for c in "$TOP"/tests/examples/*.cc
+do
+    p=$(basename "$c" .cc)
+    if "$TOP/cmini/cmini.bin" -L "$L" -I "$TOP/cmini/ownheaders" -o "$OUT/cmini/examples-bin/$p" "$c" > "$O/ex-$p.log" 2>&1
+    then cross_ok=$((cross_ok + 1))
+    else cross_bad="$cross_bad $p"
+    fi
+    rm -f "$OUT/cmini/examples-bin/$p.asm" "$OUT/cmini/examples-bin/$p.lst"
+done
+echo "cross examples: $cross_ok OK${cross_bad:+, failed:$cross_bad}"
 cp "$TOP/asm/tests/libc64.asm" "$TOP/asm/tests/sse64.asm" "$OUT/cmini/tests/"
 cat > "$OUT/cmini/README.txt" <<'EOF'
 cmini for ToaruOS - compilers built on the host (toaruos-tools/mkcross.sh),

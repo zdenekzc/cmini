@@ -10,8 +10,9 @@
 set -u
 
 DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-SRC=${SRC:-${DIR}/_build/push}
-IMG=${IMG:-${DIR}/_build/share.img}
+TOP=$(cd "$DIR/.." && pwd)
+SRC=${SRC:-${TOP}/_build/push}
+IMG=${IMG:-${TOP}/_build/share/share.img}
 MB=${MB:-64}
 
 die() { echo "error: $*" >&2; exit 1; }

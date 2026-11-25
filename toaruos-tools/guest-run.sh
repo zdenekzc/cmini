@@ -14,7 +14,7 @@ set -uo pipefail
 
 DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 TOP=$(cd "$DIR/.." && pwd)
-OUT=${OUT:-${DIR}/_build/guest-run}
+OUT=${OUT:-${TOP}/_build/guest-run}
 PORT=${PORT:-8010}
 PROGS=${PROGS:-"toaruc dama jezdec avl classes strings defaults chars dtors"}
 CMINI=${CMINI:-${TOP}/cmini/cmini.bin}

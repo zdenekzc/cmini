@@ -25,7 +25,7 @@ Tyto zásady platí pro celý strom (`cmini`, `asm`, `mini-commander`, `tiny-ide
 | Adresář | Obsah | V gitu |
 |---|---|---|
 | `_import/` | stahovaná data (ISO ToaruOS, zdrojáky třetích stran) | ne (`.gitignore`) |
-| `_build/` | všechno pracovní a binární, **každý nástroj do vlastního podadresáře** (`_build/cmini`, `_build/vystup/...`). Přímo v `_build/` jsou jen **kernel, initrd (ramdisk) a iso** pro ToaruOS | ne |
+| `_build/` | všechno pracovní a binární, **v hlavním adresáři** (ne v `toaruos-tools/_build`), **každý nástroj do vlastního podadresáře** (`_build/cmini`, `_build/asm`, `_build/tiny-ide/...`, `_build/mini-commander/...`, `_build/vystup/...`, `_build/cross/...`). Přímo v `_build/` jsou jen **kernel, initrd (ramdisk) a iso** pro ToaruOS | ne |
 | `_output/` | výsledky testů určené uživateli (studentům) | ne |
 
 Pravidla pro `_output/`:

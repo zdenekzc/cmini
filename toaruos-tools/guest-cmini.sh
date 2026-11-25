@@ -15,7 +15,7 @@ set -uo pipefail
 
 DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 TOP=$(cd "$DIR/.." && pwd)
-OUT=${OUT:-${DIR}/_build/guest-cmini}
+OUT=${OUT:-${TOP}/_build/guest-cmini}
 PORT=${PORT:-8011}
 PROGS=${PROGS:-"dama jezdec avl btree veze classes strings defaults chars dtors floats objcopy pointers sequence dictionary dyncast quicksort heapsort"}
 VM=$DIR/toaru-vm.sh
@@ -24,7 +24,7 @@ die() { echo "error: $*" >&2; exit 2; }
 
 rm -rf "$OUT"; mkdir -p "$OUT"
 OUT= SRC= "$DIR/mkpkg.sh" > /dev/null || die "mkpkg.sh"
-cp "$DIR/_build/push/cmini-src.tar.gz" "$OUT/"
+cp "$TOP/_build/push/cmini-src.tar.gz" "$OUT/"
 for p in $PROGS; do cp "$TOP/tests/examples/$p.cc" "$OUT/" || die "missing tests/examples/$p.cc"; done
 
 started=false

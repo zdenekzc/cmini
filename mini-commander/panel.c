@@ -14,7 +14,7 @@ void select_file(PanelProp *panel, FileNode *file, int selected)
     if (!file->is_dir) panel->bytes_selected_files+=selected ? file->size : -file->size;
 }
 
-// '*' matches any sequence; '?' consumes one complete UTF-8 character.
+// '*' matches any sequence; '?' consumes one byte (8-bit text).
 int filename_matches(const char *pattern, const char *name)
 {
     const char *star=NULL, *retry=NULL;
@@ -341,7 +341,7 @@ void update_panel(WINDOW *win, PanelProp *panel) {
     }
 
     if (panel->search_mode == 1) {
-        // Keep the end of the UTF-8 search text visible inside the panel.
+        // Keep the end of the search text visible inside the panel.
         wattron(win, COLOR_PAIR(COLOR_BLACK_ON_CYAN));
         mvwhline(win, height-2, 1, ' ', width);
         mvwaddch(win, height-2, 1, '/');

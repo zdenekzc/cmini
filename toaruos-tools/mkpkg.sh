@@ -19,13 +19,14 @@
 set -euo pipefail
 
 DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+TOP=$(cd "$DIR/.." && pwd)
 die() { echo "error: $*" >&2; exit 1; }
 
 if [[ -z ${SRC:-} ]]; then
     OUT= "$DIR/mkguest.sh" > /dev/null || die "mkguest.sh failed"   # here OUT = tar, not a directory
-    SRC=${DIR}/_build/guest-src
+    SRC=${TOP}/_build/guest-src
 fi
-OUT=${OUT:-${DIR}/_build/push/cmini-src.tar.gz}
+OUT=${OUT:-${TOP}/_build/push/cmini-src.tar.gz}
 
 
 [[ -d $SRC ]] || die "not a directory with sources: $SRC"

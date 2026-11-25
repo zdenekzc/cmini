@@ -16,7 +16,7 @@ set -euo pipefail
 
 DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 TOP=$(cd "$DIR/.." && pwd)
-OUT=${OUT:-${DIR}/_build/guest-src}
+OUT=${OUT:-${TOP}/_build/guest-src}
 
 die() { echo "error: $*" >&2; exit 1; }
 

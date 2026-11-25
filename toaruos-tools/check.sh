@@ -24,6 +24,7 @@
 set -uo pipefail
 
 DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+TOP=$(cd "$DIR/.." && pwd)
 VERBOSE=${VERBOSE:-0}
 [[ ${1:-} == -v ]] && VERBOSE=1
 
@@ -175,7 +176,7 @@ check_elf_toaru() {
     esac
 }
 n_elf=0
-for f in "$DIR"/probe/*.elf "$DIR"/probe/*.bin "$DIR"/_build/probe/*.elf "$DIR"/_build/push/*.elf "$DIR"/_build/push/*.bin; do
+for f in "$DIR"/probe/*.elf "$DIR"/probe/*.bin "$TOP"/_build/probe/*.elf "$TOP"/_build/push/*.elf "$TOP"/_build/push/*.bin; do
     [[ -f $f ]] || continue
     n_elf=$((n_elf+1))
     check_elf_toaru "$f"
@@ -243,7 +244,7 @@ grep -q "not running" <<<"$st" && ok "status: $(head -1 <<<"$st")" || bad "statu
 "$DIR/toaru-vm.sh" send 'ls /' >"$TMP/send.log" 2>&1
 [[ $? -ne 0 ]] && ok "send without VM rejected ($(head -1 <<<"$(cat "$TMP/send.log")"))" \
                 || bad "send without VM did not fail — it could write into someone else's FIFO"
-stale=$(find "$DIR/_build/work" -maxdepth 1 -name '*.pid' 2>/dev/null)
+stale=$(find "$TOP/_build/work" -maxdepth 1 -name '*.pid' 2>/dev/null)
 [[ -z $stale ]] && ok "_build/work/ has no *.pid" \
     || bad "in _build/work/ there is *.pid ($stale) — stop/running would kill another (recycled) process"
 if [[ ${QEMU:-0} == 1 ]]; then
