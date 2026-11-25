@@ -1,5 +1,44 @@
+diff --git a/arm64-link.c b/arm64-link.c
+index d3d925d..6a44c90 100644
+--- a/arm64-link.c
++++ b/arm64-link.c
+@@ -35,6 +35,7 @@ ST_FUNC int code_reloc (int reloc_type)
+         case R_AARCH64_MOVW_UABS_G2_NC:
+         case R_AARCH64_MOVW_UABS_G3:
+         case R_AARCH64_ADR_PREL_PG_HI21:
++        case R_AARCH64_ADR_PREL_LO21:
+         case R_AARCH64_ADD_ABS_LO12_NC:
+         case R_AARCH64_ADR_GOT_PAGE:
+         case R_AARCH64_LD64_GOT_LO12_NC:
+@@ -71,6 +72,7 @@ ST_FUNC int gotplt_entry_type (int reloc_type)
+         case R_AARCH64_MOVW_UABS_G2_NC:
+         case R_AARCH64_MOVW_UABS_G3:
+         case R_AARCH64_ADR_PREL_PG_HI21:
++        case R_AARCH64_ADR_PREL_LO21:
+         case R_AARCH64_ADD_ABS_LO12_NC:
+         case R_AARCH64_LDST128_ABS_LO12_NC:
+         case R_AARCH64_LDST64_ABS_LO12_NC:
+@@ -245,6 +247,18 @@ ST_FUNC void relocate(TCCState *s1, ElfW_Rel *rel, int type, unsigned char *ptr,
+             write32le(ptr, ((read32le(ptr) & 0xffe0001f) |
+                             (val >> 48 & 0xffff) << 5));
+             return;
++        case R_AARCH64_ADR_PREL_LO21: {
++            /* gcc's small-model `adr x0, main` (aarch64 crt0.o): the whole
++               PC-relative offset is encoded, not a page like in ADRP.  The
++               immediate layout is the same (immlo bits 30:29, immhi 23:5),
++               only the opcode differs, and the mask below keeps it. */
++            int64_t off = val - addr;
++            if ((uint64_t)(off + ((uint64_t)1 << 20)) >> 21)
++                tcc_error_noabort("R_AARCH64_ADR_PREL_LO21 relocation failed");
++            write32le(ptr, ((read32le(ptr) & 0x9f00001f) |
++                            (off & 0x1ffffc) << 3 | (off & 3) << 29));
++            return;
++        }
+         case R_AARCH64_ADR_PREL_PG_HI21: {
+             uint64_t off = (val >> 12) - (addr >> 12);
+ #ifdef TCC_TARGET_PE
 diff --git a/include/tccdefs.h b/include/tccdefs.h
-index 2655c1d..6cee082 100644
+index 2655c1d..3dddc53 100644
 --- a/include/tccdefs.h
 +++ b/include/tccdefs.h
 @@ -38,7 +38,8 @@
@@ -50,7 +89,7 @@ index 2655c1d..6cee082 100644
      /* Linux */
  
 diff --git a/libtcc.c b/libtcc.c
-index 44ea25f..6f0a960 100644
+index 44ea25f..6065f73 100644
 --- a/libtcc.c
 +++ b/libtcc.c
 @@ -904,6 +904,13 @@ LIBTCCAPI TCCState *tcc_new(void)
@@ -68,7 +107,7 @@ index 44ea25f..6f0a960 100644
      s->ppfp = stdout;
      /* might be used in error() before preprocess_start() */
 diff --git a/tcc.h b/tcc.h
-index 864a4e3..dfd03c4 100644
+index 0840f44..b5853f7 100644
 --- a/tcc.h
 +++ b/tcc.h
 @@ -201,6 +201,17 @@ extern long double strtold (const char *__nptr, char **__endptr);
@@ -90,7 +129,7 @@ index 864a4e3..dfd03c4 100644
  # undef CONFIG_TCC_BACKTRACE
  #else
 diff --git a/tccelf.c b/tccelf.c
-index 9e2d136..67cca42 100644
+index 9e2d136..2087f1b 100644
 --- a/tccelf.c
 +++ b/tccelf.c
 @@ -1565,7 +1565,12 @@ ST_FUNC int set_global_sym(TCCState *s1, const char *name, Section *sec, addr_t
@@ -241,10 +280,10 @@ index 9e2d136..67cca42 100644
      if (d->dyna)
          fill_phdr(&d->phdr[d->dyna], PT_DYNAMIC, d->dynamic);
 diff --git a/tccgen.c b/tccgen.c
-index d9721a5..8591b05 100644
+index ddf451d..a00fa30 100644
 --- a/tccgen.c
 +++ b/tccgen.c
-@@ -8682,10 +8682,23 @@ static void gen_function(Sym *sym)
+@@ -8752,10 +8752,24 @@ static void gen_function(Sym *sym)
      /* NOTE: we patch the symbol size later */
      put_extern_sym(sym, cur_text_section, ind, 0);
  
@@ -255,8 +294,9 @@ index d9721a5..8591b05 100644
 +       the range between __init_array_start and __init_array_end.  Note that
 +       libc.a is loaded after this unit is compiled, so _libc_init is the last
 +       entry: a constructor must not need stdio. */
++    /* aarch64 ToaruOS 2.3.2 libc.a has .init_array (not .ctors): constructors go there too */
 +    if (sym->type.ref->f.func_ctor)
-+        add_array (tcc_state, ".ctors", sym->c);
++        add_array (tcc_state, ".init_array", sym->c);
 +    if (sym->type.ref->f.func_dtor)
 +        add_array (tcc_state, ".dtors", sym->c);
 +#else
@@ -269,7 +309,7 @@ index d9721a5..8591b05 100644
      /* put debug symbol */
      tcc_debug_funcstart(tcc_state, sym);
 diff --git a/tccpp.c b/tccpp.c
-index 214e9cd..7069832 100644
+index 214e9cd..c938ad5 100644
 --- a/tccpp.c
 +++ b/tccpp.c
 @@ -3559,6 +3559,14 @@ static const char * const target_os_defs =
@@ -299,7 +339,7 @@ index 214e9cd..7069832 100644
      ;
  
 diff --git a/x86_64-link.c b/x86_64-link.c
-index 5229f3e..6be18b0 100644
+index 5229f3e..d33c0c5 100644
 --- a/x86_64-link.c
 +++ b/x86_64-link.c
 @@ -12,7 +12,16 @@
@@ -319,41 +359,3 @@ index 5229f3e..6be18b0 100644
  #define ELF_PAGE_SIZE  0x1000
  
  #define PCRELATIVE_DLLPLT 1
-diff --git a/arm64-link.c b/arm64-link.c
---- a/arm64-link.c
-+++ b/arm64-link.c
-@@ -35,6 +35,7 @@ ST_FUNC int code_reloc (int reloc_type)
-         case R_AARCH64_MOVW_UABS_G2_NC:
-         case R_AARCH64_MOVW_UABS_G3:
-         case R_AARCH64_ADR_PREL_PG_HI21:
-+        case R_AARCH64_ADR_PREL_LO21:
-         case R_AARCH64_ADD_ABS_LO12_NC:
-         case R_AARCH64_ADR_GOT_PAGE:
-         case R_AARCH64_LD64_GOT_LO12_NC:
-@@ -71,6 +72,7 @@ ST_FUNC int gotplt_entry_type (int reloc_type)
-         case R_AARCH64_MOVW_UABS_G2_NC:
-         case R_AARCH64_MOVW_UABS_G3:
-         case R_AARCH64_ADR_PREL_PG_HI21:
-+        case R_AARCH64_ADR_PREL_LO21:
-         case R_AARCH64_ADD_ABS_LO12_NC:
-         case R_AARCH64_LDST128_ABS_LO12_NC:
-         case R_AARCH64_LDST64_ABS_LO12_NC:
-@@ -245,6 +247,18 @@ ST_FUNC void relocate(TCCState *s1, ElfW_Rel *rel, int type, unsigned char *ptr,
-             write32le(ptr, ((read32le(ptr) & 0xffe0001f) |
-                             (val >> 48 & 0xffff) << 5));
-             return;
-+        case R_AARCH64_ADR_PREL_LO21: {
-+            /* gcc's small-model `adr x0, main` (aarch64 crt0.o): the whole
-+               PC-relative offset is encoded, not a page like in ADRP.  The
-+               immediate layout is the same (immlo bits 30:29, immhi 23:5),
-+               only the opcode differs, and the mask below keeps it. */
-+            int64_t off = val - addr;
-+            if ((uint64_t)(off + ((uint64_t)1 << 20)) >> 21)
-+                tcc_error_noabort("R_AARCH64_ADR_PREL_LO21 relocation failed");
-+            write32le(ptr, ((read32le(ptr) & 0x9f00001f) |
-+                            (off & 0x1ffffc) << 3 | (off & 3) << 29));
-+            return;
-+        }
-         case R_AARCH64_ADR_PREL_PG_HI21: {
-             uint64_t off = (val >> 12) - (addr >> 12);
- #ifdef TCC_TARGET_PE
