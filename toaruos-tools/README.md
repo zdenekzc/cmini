@@ -140,7 +140,7 @@ ToaruOS 2.3.2 in QEMU (KVM); details in sections 1-5c.
 ## 0c. Headers: include/ is now cmini/ownheaders/ (2026-11-14)
 
 The main tree has the parser headers in `cmini/ownheaders/` (formerly `include/` in the root).
-The packages (`mkguest.sh`, `en/mkguest.sh`, `mkcross.sh`) copy them from
+The packages (`mkguest.sh`, `mkcross.sh`) copy them from
 `cmini/ownheaders/` and in the package they are still called `include/` — the scripts running
 in ToaruOS (`-I include`) are not changed. `guest/regenerate/gen*.sh` read trees with `include/`
 (the earlier development tree) and are not changed either.

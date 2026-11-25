@@ -12,8 +12,7 @@
 #
 # Na rozdil od files.py:
 #   - Makefile se vynecha, jen kdyz ho vygeneroval cmini-makefiles.py;
-#     rucne psane se jmenuji makefile (male m, napr. gccplugin/makefile) a zalohuji se,
-#   - parsery vygenerovane z cmm/cmm.g a pas/pas.g (cmm_*.cpp, ...) se vynechaji,
+#     rucne psane se jmenuji makefile (male m, napr. tiny-ide/makefile) a zalohuji se,
 #   - .cpp, .hpp, .tpp se zalohuji,
 #   - adresare ze subdir_keep_list se zalohuji cele, i soubory .bin, .o, ...
 #     (seznam je prazdny - vzory testu tests/examples/expected jsou jen .txt)
@@ -69,15 +68,6 @@ file_clean_list = (
 
 # long file names for cleaning (relative to project directory)
 file_remove_list = (
-   "gram/gram-p.cpp",     # make -C gram test-p
-   ) + tuple (
-   # parsery z gramatik (cmini-makefiles.py: gram je vygeneruje primo do cmm/ a pas/)
-   d + "/" + d + "_" + part + ext
-   for d in ("cmm", "pas")
-   for part in ("lexer", "parser", "data", "product")
-   for ext in (".cpp", ".hpp")
-   ) + (
-   "cmm/cmm_description.tpp",
    )
 
 # file extensions for cleaning
@@ -91,7 +81,7 @@ ext_clean_list = (
    ".la",
    ".a",
    ".so",
-   ".bin",        # cmini/test_instr.bin, cmini/cmini.bin -C, asm/pasm.bin, gram/gram-*.bin, cmm/cmm.bin
+   ".bin",        # cmini/test_instr.bin, cmini/cmini.bin -C, asm/pasm.bin
 
    ".gch",
    ".pch",

@@ -5,7 +5,7 @@ CFLAGS += -std=gnu99 -lncursesw -D_LARGEFILE_SOURCE -D_LARGEFILE64_SOURCE -D_FIL
 SOURCES = mc.c cmd.c operations.c dialog.c filelist.c init.c panel.c ui.c view_edit.c progress.c
 
 # mc: the program built by gcc (original build).
-mc: *.c *.h Makefile
+mc: *.c *.h makefile
 	$(CC) mc.c cmd.c operations.c dialog.c filelist.c init.c panel.c ui.c view_edit.c progress.c $(CFLAGS) -o mc
 
 # mc-cmini: the same sources compiled by cmini (../cmini/cmini.bin) and linked with

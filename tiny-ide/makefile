@@ -19,7 +19,7 @@ CMINI ?= ../cmini/cmini.bin
 
 all: $(TARGET)
 
-$(TARGET): $(SOURCES) $(HEADERS) Makefile
+$(TARGET): $(SOURCES) $(HEADERS) makefile
 	$(CC) $(CFLAGS) $(NCURSES_CFLAGS) -o $@ $(SOURCES) $(LDFLAGS) $(LDLIBS)
 
 run: $(TARGET) cmini

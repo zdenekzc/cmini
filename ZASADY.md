@@ -8,8 +8,8 @@ Tyto zásady platí pro celý strom (`cmini`, `asm`, `mini-commander`, `tiny-ide
 - `Makefile` s velkým M je **generovaný** — obvykle skriptem `*-makefiles.py`
   (`cmini-makefiles.py` generuje `Makefile`, `asm/Makefile`, `cmini/Makefile`).
   Ručně se needituje; změna se dělá v generátoru a pak se spustí znovu.
-- `makefile` s malým m je **ručně psaný** (např. `mini-commander/Makefile`,
-  `tiny-ide/Makefile`, pokud nemají hlavičku „generated“).
+- `makefile` s malým m je **ručně psaný** (např. `mini-commander/makefile`,
+  `tiny-ide/makefile`).
 - Výjimka v rámci tohoto stromu: `cmini/Makefile` a `asm/Makefile` jsou generované
   (`cmini-makefiles.py`), i když jsou v gitu.
 
@@ -63,26 +63,28 @@ Pravidla pro `_output/`:
   bootstrap pro TinyCC/chibicc je jen samostatný cíl `test-tcc`. Automatický výběr
   podle pořadí ještě není implementovaný.
 
-## Překladač cmm (C--, Cmm)
+## Překladač cmm (C--, Cmm) a CDL - pro všechny projekty
 
-- Je v navazujících projektech, v adresáři `cmm/`, řízený gramatikou `cmm.g`.
+- Překladač **cmm** (C--) je řízený gramatikou `cmm.g`, v adresáři `cmm/`.
 - Napsaný v jazyce, který zvládne CMini. Výjimka: moduly, které používají AsmJit,
   LLVM IR, Qt a podobné rozsáhlé knihovny, se píšou v C++ a překládají GCC C++ nebo Clangem.
 - Generování parserů, datových struktur pro AST a tree walkeru, který vytváří původní
   zdrojový text (soubory `*product*`), zajišťuje generátor v Pythonu v adresářích `grm/` a `code/`.
 - Později bude existovat také generátor parserů napsaný v CMini v adresáři `gram/`
   a `utils/` (adresář `utils` se už objevuje v `cstencils`).
+- **CDL** (Compiler Definition Language, také `cdl`) nesmí záviset na parser generátoru.
+  Proto se do projektu cecko zatím kopírují všechny potřebné soubory parser generátoru
+  do adresáře `gram/`, aby `gram/` byl stabilní.
+- V tomto projektu (`cmini`) se cmm, grm, gram ani CDL **nepoužívají** a nepatří sem:
+  nepřidávají se soubory, skripty ani testy, které na ně závisí.
 
-## cstencils a CDL (Compiler Definition Language)
+## cstencils
 
-- `cstencils/` je experiment napsaný v CMini. Z deklarací tříd generuje například
-  spojové seznamy.
-- `cstencils/code.h` obsahuje třídy `Class`, `Func`, ..., které tvoří základ pro
-  generování zdrojových textů v parser generátoru napsaném v C-- (`gram/`).
-- Z tohoto experimentu má vzniknout základ pro **CDL** (Compiler Definition Language,
-  také `cdl`). Plán je zmíněný v projektu arm64-compiler.
-- CDL nesmí záviset na parser generátoru. Proto se do projektu cecko zatím kopírují
-  všechny potřebné soubory parser generátoru do adresáře `gram/`, aby `gram/` byl stabilní.
+- `cstencils/` je experiment napsaný v CMini. Z deklarací tříd generuje například spojové seznamy.
+  Je součástí tohoto projektu (testy 04 a 05).
+- `cstencils/code.h` obsahuje třídy `Class`, `Func`, ..., které tvoří základ pro generování
+  zdrojových textů v parser generátoru napsaném v C-- (`gram/`). Z tohoto experimentu má
+  vzniknout základ pro CDL (viz výše).
 
 ## Varianty back-endu CMini
 
