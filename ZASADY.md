@@ -84,6 +84,16 @@ Pravidla pro `_output/`:
 - CDL nesmí záviset na parser generátoru. Proto se do projektu cecko zatím kopírují
   všechny potřebné soubory parser generátoru do adresáře `gram/`, aby `gram/` byl stabilní.
 
+## Varianty back-endu CMini
+
+- **a) pasm**: `asm/*` a `cmini/instr.c`. CMini generuje text pro assembler PAsm, který
+  zapisuje ELF64 / PE / COFF. Na x86_64 Linux je to **preferovaná varianta**.
+- **b) translate**: `cmini/translate.c`. CMini přeloží zdroj na prostý C. Používá se na
+  jiných architekturách a OS (např. ToaruOS pro Arm64). Na x86_64 Linux se používá jen
+  v testech této varianty.
+- **c) AsmJit**: `cmini/instr1.cc` … `instr5.cc`. Zůstává jen jako ilustrace vývoje
+  CMini. **Netestuje se.**
+
 ## Stav kódu vůči těmto zásadám
 
 - `toaruos-tools/mkramdisk.sh` kontroluje `fakeroot` a po sestavení archivu kontroluje,
