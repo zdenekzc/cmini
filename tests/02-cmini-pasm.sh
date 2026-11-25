@@ -3,7 +3,7 @@
 # u prekladu programu, s vlastni knihovnou; glibc jen tam, kde se linkuje gcc)
 #
 # CESTA PREKLADU (kazdy krok je v tomto souboru, pod nim je jeho vystup):
-#   0. make -C cmini: test_instr.bin, test_instr_lexer.bin, cmini.bin (i s prekladem do C, -C);
+#   0. make -C cmini: test_instr.bin, test_instr_lexer.bin, cmini.bin (varianta pasm);
 #      asm/libpasm.a (pasm jako knihovna). Bez toho se nic nesestavi.
 #   1. cmini-pasm-libc (examples/): tests/examples/<p>.cc => cmini/test_instr.bin -0 -o
 #      - instr.c vygeneruje seznam uzlu programu, pasm z nej udela .asm a .lst;
@@ -16,8 +16,8 @@
 #   3. zdroje cmini po souborech (SOURCES v common.sh: cmini/*.cc|*.c, asm/*.c): cmini_pasm =
 #      test_instr_lexer.bin -0 -c -S (preprocesor cparseru, -I ownheaders)
 #      => objekt .o (ukladá se do $T) a text pro assembler $V/cmini-pasm/<dir>/<zdroj>.asm.
-#   4. cmini sam sebou: cmini.bin z pasm (instr_drv.c translate.c front-end instr.c libpasm.a)
-#      => shoda .asm s referencnim cmini z gcc (dama, instr.c); translate.c => C shodne.
+#   4. cmini sam sebou: cmini.bin z pasm (instr_drv.c, front-end, instr.c, libpasm.a)
+#      => shoda .asm s referencnim cmini (test_instr_lexer.bin) pro dama.cc a instr.c.
 #   5. asm/pasm.bin z pasm zdroju (asm/*.c) => testy asm/tests/run.sh (pasm z gcc a z pasm).
 #   6. cmini.bin -S soubor.asm (prepinac -S): ulozeni vygenerovaneho .asm (dama-S.asm).
 #
@@ -25,7 +25,7 @@
 # POZOR: jeden NN-*.sh se nesmi spustit dvakrat soucasne (sdileji _output a _build/vystup).
 
 . "$(dirname "$0")/common.sh"
-# preklad cmini (test_instr, test_instr_lexer, translate, cmini.bin; make si preklad libpasm.a sam)
+# preklad cmini (test_instr, test_instr_lexer, cmini.bin; make si preklad libpasm.a sam)
 make -s -C "$TOP/cmini" || exit 1
 begin cmini-pasm
 
@@ -58,8 +58,9 @@ cmini_pasm ()   # zdroj prekladace => objekt (cparser s preprocesorem, -c) a tex
       [ -s $T/src.o ] && cp $T/src.asm $2.asm
 }
 sources cmini-pasm cmini_pasm
-# c-mini sam sebou: prekladac cmini.bin (instr_drv.c + translate.c + front-end + instr.c + asm/libpasm.a)
-# - cmini.bin -C (preklad do C) prelozeny pasmem se shoduje s cmini.bin z gcc
+# c-mini sam sebou: prekladac cmini.bin (instr_drv.c + front-end + instr.c + asm/libpasm.a).
+# translate.c se do linku dava jen kvuli instr_drv.c (TrTranslate, TrIncludeDir pro volbu -C),
+# test volbu -C ani translate.c nepouziva
 D=$V/cmini-pasm/cmini; mkdir -p $D
 (cd cmini && $TOP/cmini/test_instr_lexer.bin -0 -I . -I $TOP/cmini/ownheaders -o $D/cmini.bin \
     instr_drv.c translate.c decl.c expr.c stat.c sem.c util.c lexer.c instr.c $TOP/asm/libpasm.a > /dev/null 2>&1) &&
@@ -68,9 +69,6 @@ D=$V/cmini-pasm/cmini; mkdir -p $D
    cmp -s $T/self-dama.asm $T/ref-dama.asm &&
    $D/cmini.bin -I cmini/ownheaders -I cmini -o $T/self-instr -c $T/self-instr.o cmini/instr.c > /dev/null 2>&1 &&
    cmp -s $T/self-instr.asm $D/instr.asm && echo "cmini" >> $T/ok
-(cd cmini && $D/cmini.bin -C -I ownheaders -o $T/self-tr.c translate.c) &&
-   (cd cmini && $TOP/cmini/cmini.bin -C -I ownheaders -o $T/self-tr0.c translate.c) &&
-   cmp -s $T/self-tr.c $T/self-tr0.c && echo "translate" >> $T/ok
 rm -f $D/*.bin.asm $D/*.bin.lst
 # assembler pasm (asm/*.c) prelozeny c-mini: asm/pasm.bin, testy asm/tests/run.sh jako pasm z gcc
 mkdir -p $V/cmini-pasm/asm
@@ -85,5 +83,5 @@ if $TOP/cmini/cmini.bin -S $V/cmini-pasm/examples/dama-S.asm -I $TOP/cmini/ownhe
 then echo "  OK    cmini.bin -S: $V/cmini-pasm/examples/dama-S.asm"
 else echo "  FAIL  cmini.bin -S (dama)"; FAILED=1
 fi
-report cmini-pasm "c-mini => pasm (.asm), vypis (.lst); cmini.bin (i -C) a asm/pasm.bin (sam sebou)"
+report cmini-pasm "c-mini => pasm (.asm), vypis (.lst); cmini.bin a asm/pasm.bin (sam sebou)"
 finish
