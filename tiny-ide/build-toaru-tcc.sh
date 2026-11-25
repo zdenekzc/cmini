@@ -1,9 +1,9 @@
 #!/bin/bash
-# build-toaru.sh — builds Tiny IDE FOR TOARUOS with the cross compiler from
-# ../scripts/mktcc.sh, i.e. without QEMU and without compiling inside the guest.
+# build-toaru-tcc.sh — builds Tiny IDE FOR TOARUOS with the cross compiler from
+# ../toaruos-tools/mktcc.sh, i.e. without QEMU and without compiling inside the guest.
 #
-#   ./build-toaru.sh            tiny-ide for ToaruOS x86_64 => _build/output/tiny-ide
-#   ./build-toaru.sh clean      deletes _build/output
+#   ./build-toaru-tcc.sh        tiny-ide for ToaruOS x86_64 => _build/output/tiny-ide
+#   ./build-toaru-tcc.sh clean      deletes _build/output
 #
 # Sources: this directory (the Linux sources are used unchanged).  The
 # ToaruOS-specific layer is:
@@ -26,8 +26,8 @@ SHIM=$TOP/mc-toaru/toaru
 ELFPAD=$TOP/scripts/toaru-elfpad.py
 
 die() { echo "error: $*" >&2; exit 1; }
-[[ -x $TCC ]] || die "missing cross compiler $TCC — run ../scripts/mktcc.sh"
-[[ -d $SYSROOT/include ]] || die "missing sysroot $SYSROOT — run ../scripts/mktcc.sh"
+[[ -x $TCC ]] || die "missing cross compiler $TCC — run ../toaruos-tools/mktcc.sh"
+[[ -d $SYSROOT/include ]] || die "missing sysroot $SYSROOT — run ../toaruos-tools/mktcc.sh"
 [[ -f $SHIM/curses.c ]] || die "missing the shared curses shim $SHIM"
 
 CC="$TCC -B$SYSROOT -I$HERE/toaru -I$SHIM"

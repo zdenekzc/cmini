@@ -184,8 +184,8 @@ runtime. Linuxová verze používá pouze `ncursesw` a POSIX.
 
 ## ToaruOS port
 
-Port pro ToaruOS (x86_64) staví `build-toaru.sh` se křížovým TinyCC ze
-`scripts/mktcc.sh`. Zdrojové soubory Linuxu se používají nezměněné; rozdíl je
+Port pro ToaruOS (x86_64) staví `build-toaru-tcc.sh` se křížovým TinyCC ze
+`toaruos-tools/mktcc.sh`. Zdrojové soubory Linuxu se používají nezměněné; rozdíl je
 jen v kompatibilní vrstvě:
 
 - `toaru/wctype.h` a `toaru/compat.c` — UTF-8 konverze a klasifikace
@@ -198,8 +198,8 @@ jen v kompatibilní vrstvě:
 Build:
 
 ```sh
-./scripts/mktcc.sh          # křížový tcc + sysroot z release ISO (jednou)
-tiny-ide/build-toaru.sh     # => _build/output/tiny-ide (ELF pro ToaruOS)
+./toaruos-tools/mktcc.sh          # křížový tcc + sysroot z release ISO (jednou)
+tiny-ide/build-toaru-tcc.sh # => _build/output/tiny-ide (ELF pro ToaruOS)
 ```
 
 Do ramdisku obrazu se Tiny IDE dostává přes `tests/build-toaru.sh` jako

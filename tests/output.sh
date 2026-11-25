@@ -67,7 +67,7 @@ cmini-pasm/        c-mini (cmini/instr.c): text pro assembler pasm (.asm),
 cmini-translate/          c-mini => C (cmini/translate.c), behova knihovna cmini/cminirt.c
                   cmini/cmini.bin -C - translate.c prelozeny sam sebou;
                                     na svych zdrojich da stejny C (pevny bod)
-toaruos-tcc/      cmini a pasm v ToaruOS (tests/05-toaru.sh): programy
+toaruos/      cmini a pasm v ToaruOS (tests/05-toaru.sh): programy
                   prelozene v ToaruOS, vystup se porovna se vzorem
 EOT
 
