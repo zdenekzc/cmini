@@ -22,6 +22,8 @@
 # preklad pasm (make je inkrementalni: nic nedela, kdyz je pasm.bin aktualni)
 make -s -C "$TOP/asm" || exit 1
 begin asm
+need gcc "libc64, sse64 se nesliti (gcc -no-pie) - .bin nevznikne" || true
+need wine "win32, win64: .exe se nespusti (sudo dnf install wine)" || true
 
 D=$V/asm/examples; mkdir -p $D
 for f in asm/tests/*.asm
@@ -43,6 +45,7 @@ do
    [ $n = win64 ] && (cd $D && $TOP/asm/pasm.bin -m $n.asm > /dev/null 2>&1)
    [ -f $D/$n.exe ] && command -v wine > /dev/null &&
       (cd $D && WINEDEBUG=-all timeout 60 wine ./$n.exe > $n.out 2> /dev/null; echo "rc=$?" >> $n.out)
+   [ -s $D/$n.out ] && echo "$n" >> $T/ok     # program se spustil (zadny vzor: asm nema tests/examples/expected)
 done
 report asm "pasm: priklady .asm, vypis (.lst), ELF (.bin), objekt OMF (.obj), inline (.inl), PE (.exe), COFF (.obj)"
 finish

@@ -632,5 +632,5 @@ it reports it itself `SKIP asm/Makefile (the directory has a hand-written makefi
 because GNU make prefers the smaller `makefile`. The sources `prod.c` /
 `prod.cc` are therefore written where they are really used: `asm/makefile`
 (`LIBSRC`), `cmini-makefiles.py` (in case someone deleted the hand-written one),
-`tests/build-translate.sh` and `tests/02-cmini-asm.sh` (the path "assembler
+`tests/build-translate.sh` and `tests/02-cmini-pasm.sh` (the path "assembler
 translated by c-mini").

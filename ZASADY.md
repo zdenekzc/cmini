@@ -32,8 +32,11 @@ Pravidla pro `_output/`:
 
 - Kopírovat i zdrojové texty příkladů (`.cc`, `.asm`), aby byly vidět spolu s výstupem.
 - Přidat jednoduchý skript, který přeložené příklady **smaže a znovu zkompiluje**.
-- `_output` musí fungovat bez složitých závislostí a bez stahování (jen to, co je
-  v `_build`, a nástroje, které uživatel má).
+- Skripty v `_output` **nekontrolují** závislosti ani existenci našich překladačů.
+  Jen znovu spustí překladače, které jsou v adresářích `asm/` a `cmini/`, stejně jako
+  to dělají testy `tests/0*.sh` (varianta pasm: `cmini/instr.c` + `asm/asmlist.h`,
+  fáze 2). Překladače musí být přeložené předem (`make`).
+- Žádné stahování.
 
 ## Testy
 
@@ -86,8 +89,11 @@ Pravidla pro `_output/`:
 
 ## Varianty back-endu CMini
 
-- **a) pasm**: `asm/*` a `cmini/instr.c`. CMini generuje text pro assembler PAsm, který
-  zapisuje ELF64 / PE / COFF. Na x86_64 Linux je to **preferovaná varianta**.
+- **a) pasm**: `asm/*` a `cmini/instr.c`. CMini skládá program jako seznam uzlů
+  z `asm/asmlist.h` (`AsmProgram`, `AsmIns2`, `AsmLabel`, ...) a pasm ho přečte přímo
+  (`AsmAssemble`, fáze 2). Text pro assembler (`AsmPrint`, `-o x.asm`, `-S`) je jen
+  výstup navíc. Pro srovnání existuje fáze 1: `CPARSER_ASMLIST=text` (`AsmAssembleText`).
+  Na x86_64 Linux je to **preferovaná varianta**.
 - **b) translate**: `cmini/translate.c`. CMini přeloží zdroj na prostý C. Používá se na
   jiných architekturách a OS (např. ToaruOS pro Arm64). Na x86_64 Linux se používá jen
   v testech této varianty.

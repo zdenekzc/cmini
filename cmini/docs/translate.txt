@@ -253,7 +253,7 @@ translator; the output goes through the BUF sections instead.
     changing a loop or jump                  St, FindLoop, RangeForStat
     changing the header list                 Translate, AddHeader, SystemHeader
     changing names in the C text             ClsName, MethodName, FuncName, FName
-    testing                                  tests/03-cmini-c.sh, tests/examples/*.cc
+    testing                                  tests/03-cmini-translate.sh, tests/examples/*.cc
                                              (translated to C, compiled, compared
                                              with tests/examples/expected/)
 

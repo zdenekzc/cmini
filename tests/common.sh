@@ -66,6 +66,13 @@ run ()   # run <adresar> <program> - spusti <adresar>/<program>.bin => .out, por
    check "$1/$2.out" $2
 }
 
+need ()   # need <prikaz> <dusledek> - chybi-li prikaz, vypise upozorneni (vraci 1)
+{
+   command -v "$1" > /dev/null 2>&1 && return 0
+   echo "  !!! CHYBI $1: $2"
+   return 1
+}
+
 report ()   # report <adresar> <popis>
 {
    d=$V/$1
@@ -74,7 +81,7 @@ report ()   # report <adresar> <popis>
    b=$(find $d -name '*.bin' | wc -l)
    ok=$(cat $T/ok 2>/dev/null | wc -l); bad=$(cat $T/bad 2>/dev/null | sort | tr '\n' ' ')
    subs=$(cd $d && ls -d */ 2>/dev/null | tr -d / | tr '\n' ' ')
-   printf "  %-17s %3d souboru, %2d spustitelnych, vystup = vzor: %2d  [%s]  %s\n" "$1/" $n $b $ok "$subs" "$2"
+   printf "  %-17s %3d souboru, %2d spustitelnych, vystup OK: %2d  [%s]  %s\n" "$1/" $n $b $ok "$subs" "$2"
    [ -n "$bad" ] && { printf "  %-17s     vystup se lisi od vzoru: %s\n" "" "$bad"; FAILED=1; }
    rm -f $T/ok $T/bad
 }

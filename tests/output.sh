@@ -6,8 +6,8 @@
 # bez okna QEMU: output.sh nastavi TOARU_GUI=0.
 #
 #   a) 01-asm          asm/tests/*.asm - assembler pasm
-#   b) 02-cmini-asm    c-mini => pasm (cmini/instr.c): priklady, asm, cmini (sam sebou)
-#   c) 03-cmini-c      totez pres C (cmini/translate.c)
+#   b) 02-cmini-pasm    c-mini => pasm (cmini/instr.c): priklady, asm, cmini (sam sebou)
+#   c) 03-cmini-translate      totez pres C (cmini/translate.c)
 #   d) 04-cstencils    cstencils prelozeny cmini (glibc, pasm) = g++ build
 #   e) 05-toaru         cmini a pasm v ToaruOS (VM, bez okna); bez QEMU/ISO se preskoci
 #
@@ -40,7 +40,7 @@ done
 
 cat > $TOP/_output/README.txt <<'EOT'
 Vznikle soubory - vytvari tests/output.sh (make vystup) pomoci skriptu
-tests/01-asm.sh, 02-cmini-asm.sh, 03-cmini-c.sh, 04-cstencils.sh, 05-toaru.sh (kazdy lze
+tests/01-asm.sh, 02-cmini-pasm.sh, 03-cmini-translate.sh, 04-cstencils.sh, 05-toaru.sh (kazdy lze
 spustit i samostatne - prepise jen svuj podadresar); adresar se nezalohuje,
 kdykoli se vytvori znovu.
 
@@ -56,7 +56,7 @@ Kazdy generator ma podadresare:
 
 asm/examples/     priklady pro assembler pasm (asm/tests): .lst vypis,
                   .bin ELF (hello32, hello64; libc64, sse64 slinkovane gcc)
-cmini-asm/        c-mini (cmini/instr.c): text pro assembler pasm (.asm),
+cmini-pasm/        c-mini (cmini/instr.c): text pro assembler pasm (.asm),
                   vypis se strojovym kodem (.lst)
                   cmini/cmini.bin - prekladac c-mini (instr_drv.c, front-end, instr.c)
                                   prelozeny sam sebou: stejny text pro assembler
@@ -64,7 +64,7 @@ cmini-asm/        c-mini (cmini/instr.c): text pro assembler pasm (.asm),
                   cmini/cmini.bin -C - translate.c + front-end prelozeny c-mini
                   cmini/, asm/ - po souborech (test_instr_lexer.bin -0 -c -S, objekt
                                  prelozi pasm); asm/pasm.bin - assembler prelozeny c-mini
-cmini-c/          c-mini => C (cmini/translate.c), behova knihovna cmini/cminirt.c
+cmini-translate/          c-mini => C (cmini/translate.c), behova knihovna cmini/cminirt.c
                   cmini/cmini.bin -C - translate.c prelozeny sam sebou;
                                     na svych zdrojich da stejny C (pevny bod)
 toaruos-tcc/      cmini a pasm v ToaruOS (tests/05-toaru.sh): programy

@@ -19,6 +19,9 @@
 . "$(dirname "$0")/common.sh"
 make -s -C "$TOP/cmini" || exit 1
 begin cstencils
+need g++ "referencni build (g++ -std=c++17) nebude, vystup nelze porovnat" || FAILED=1
+need gcc "linkovani cmini objektu (gcc -no-pie) nebude" || FAILED=1
+need cmp "porovnani vystupu" || FAILED=1
 
 CST=$TOP/cstencils
 CMINI=$TOP/cmini/cmini.bin
@@ -55,6 +58,7 @@ mkdir -p $T/ref
 for t in $CST/example/*.t
 do
    n=$(basename $t .t)
+   cp $t $V/cstencils/                              # zdroj prikladu vedle vystupu
    if [ -x $T/code-cmini ] && $T/code-cmini --output-dir $V/cstencils $t > $T/$n-cmini.log 2>&1 &&
       [ -s $V/cstencils/$n.hpp ] && [ -s $V/cstencils/$n.cpp ] &&
       $T/code-gpp --output-dir $T/ref $t > $T/$n-gpp.log 2>&1 &&

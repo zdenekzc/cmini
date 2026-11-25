@@ -2,7 +2,7 @@
    with two modes (see usage):
      -C        => translation to C (translate.c): output -o file.c or stdout
      no -C     => generator instr.cc: assembler pasm (program, object, ToaruOS, ToaruOS libc)
-   used by: tests/build-translate.sh, tests/02-cmini-asm.sh, tests/03-cmini-c.sh */
+   used by: tests/build-translate.sh, tests/02-cmini-pasm.sh, tests/03-cmini-translate.sh */
 
 #include "decl.h"
 #include "lexer.h"
