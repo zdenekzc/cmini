@@ -31,11 +31,8 @@ Tyto zásady platí pro celý strom (`cmini`, `asm`, `mini-commander`, `tiny-ide
 Pravidla pro `_output/`:
 
 - Kopírovat i zdrojové texty příkladů (`.cc`, `.asm`), aby byly vidět spolu s výstupem.
-- Přidat jednoduchý skript, který přeložené příklady **smaže a znovu zkompiluje**.
-- Skripty v `_output` **nekontrolují** závislosti ani existenci našich překladačů.
-  Jen znovu spustí překladače, které jsou v adresářích `asm/` a `cmini/`, stejně jako
-  to dělají testy `tests/0*.sh` (varianta pasm: `cmini/instr.c` + `asm/asmlist.h`,
-  fáze 2). Překladače musí být přeložené předem (`make`).
+- Žádné skripty v `_output` nejsou. Pro nové přeložení stačí smazat `_output` a spustit
+  testy (`make vystup`, nebo jednotlivé `tests/0*.sh`), které ho vytvoří znovu.
 - Žádné stahování.
 
 ## Testy
