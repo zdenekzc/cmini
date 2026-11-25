@@ -50,6 +50,29 @@ Pravidla pro `_output/`:
   (bloky z `!!!`/`WARNING`, na stderr), protože nevíme, zda půjde ve školních
   učebnách fakeroot doinstalovat.
 
+## Jazyky a překladače
+
+- **CMini** (také „CMini“) je jednoduché C s třídami. Zdrojové soubory jsou `.cc` a `.h`.
+  Slouží třem účelům:
+  a) ukázka překladače bez použití gramatik,
+  b) reference pro podmnožinu C++, kterou používají navazující projekty, které nemusíme psát v čistém C,
+  c) překladač, který zajišťuje nezávislost našich projektů na plném C++.
+- **Bootstrap** (první překlad CMini bez předchozího CMini) použije jeden z C překladačů,
+  první nalezený v tomto pořadí: **TinyCC**, **ChibiCC**, **GCC** (jen C).
+- Stav kódu: `cmini-makefiles.py` a `Makefile` zatím používají `gcc` napevno a
+  bootstrap pro TinyCC/chibicc je jen samostatný cíl `test-tcc`. Automatický výběr
+  podle pořadí ještě není implementovaný.
+
+## Překladač cmm (C--, Cmm)
+
+- Je v navazujících projektech, v adresáři `cmm/`, řízený gramatikou `cmm.g`.
+- Napsaný v jazyce, který zvládne CMini. Výjimka: moduly, které používají AsmJit,
+  LLVM IR, Qt a podobné rozsáhlé knihovny, se píšou v C++ a překládají GCC C++ nebo Clangem.
+- Generování parserů, datových struktur pro AST a tree walkeru, který vytváří původní
+  zdrojový text (soubory `*product*`), zajišťuje generátor v Pythonu v adresářích `grm/` a `code/`.
+- Později bude existovat také generátor parserů napsaný v CMini v adresáři `gram/`
+  a `utils/` (adresář `utils` se už objevuje v `cstencils`).
+
 ## Stav kódu vůči těmto zásadám
 
 - `toaruos-tools/mkramdisk.sh` kontroluje `fakeroot` a po sestavení archivu kontroluje,
