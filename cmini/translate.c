@@ -1828,7 +1828,10 @@ static void Ex (ExprPtr e)
         break;
 
      case CHR:
-        PutQuoted (e->id, '\'');
+        /* '\0' is stored as an empty text (NUL ends the string): the only character
+           constant with an empty text is the zero character */
+        if (e->id == NULL || e->id [0] == 0) Put ("'\\0'");
+        else PutQuoted (e->id, '\'');
         break;
 
      case STR:
