@@ -22,6 +22,8 @@ CMINI_OK=false
 # programy cross-prelozene na hostiteli (mkcross.sh => /extras/cmini-toaru/examples-bin); cout ne:
 # ToaruOS libc nema dprintf (cerr)
 CROSS_PROGRAMS="dama classes avl btree jezdec veze heapsort quicksort"
+# /extras/examples + /extras/build-examples.sh (toaruos-tools/mkexamples.sh): stejne programy jako tests/06
+EX_PROGRAMS="dama classes avl btree jezdec veze heapsort quicksort strings dyncast rc_check"
 CROSS_NAMES="cross-dama cross-classes cross-avl cross-btree cross-jezdec cross-veze cross-heapsort cross-quicksort"
 
 cmini_prepare ()
@@ -42,6 +44,8 @@ cmini_prepare ()
       # dalsi prikazy: cmini -L (libc ToaruOS) - vzor tests/examples/expected/<p>.txt, heapsort a quicksort jen O.K.
       for p in avl btree jezdec veze; do cp $EX/expected/$p.txt $T/exp/guest-cmini-L-$p.txt; done
       for p in $CROSS_PROGRAMS; do cp $EX/expected/$p.txt $T/exp/cross-$p.txt 2> /dev/null; done
+      for p in $EX_PROGRAMS; do [ -f $EX/expected/$p.txt ] && cp $EX/expected/$p.txt $T/exp/ex-$p.txt; done
+      : > $T/exp/ex-rc_check.txt      # rc_check nema vystup; jeho navratovy kod se kontroluje zvlast
       # -v: tiny-ide a mini-commander (version, ocekavany radek)
       echo "Tiny IDE 1.0" > $T/exp/cross-tiny-ide-v.txt; cp $T/exp/cross-tiny-ide-v.txt $T/exp/guest-tiny-ide-v.txt
       echo "Version 2.0" > $T/exp/cross-mc-v.txt; cp $T/exp/cross-mc-v.txt $T/exp/guest-mc-v.txt
@@ -134,8 +138,17 @@ cmini_guest ()
    cmini_run guest-tiny-ide-v "cd /extras" "/extras/new-tiny-ide/tiny-ide-toaru.bin -v"
    RUN_WAIT=1200 cmini_run build-new-mc "cd /extras" "sh /extras/build-new-mc.sh"
    cmini_run guest-mc-v "cd /extras" "/extras/new-mc/mc-toaru.bin -v"
+   # /extras/build-examples.sh: cmini v ToaruOS prelozi /extras/examples a spusti je (vystup ==BEG-p== .. ==END-p==)
+   RUN_WAIT=1800 cmini_run build-examples "cd /extras" "sh /extras/build-examples.sh"
    cmini_cstencils $G
    $VM log 1000000 > $T/cmini.log
+   for p in $EX_PROGRAMS
+   do
+      awk -v b="==BEG-$p==" -v e="==END-$p==" '$0==b{f=1;next} $0==e{f=0} f' $T/cmini.log | grep -v '^RC=' > $G/ex-$p.out
+      rc=$(awk -v b="==BEG-$p==" -v e="==END-$p==" '$0==b{f=1;next} $0==e{f=0} f && /^RC=/' $T/cmini.log | head -1)
+      want=RC=0; [ $p = rc_check ] && want=RC=7
+      if [ "$rc" = "$want" ]; then check $G/ex-$p.out ex-$p; else echo "ex-$p" >> $T/bad; echo "  ex-$p: navratovy kod '$rc' (ocekavano $want)" >&2; fi
+   done
    for p in $CROSS_NAMES cross-tiny-ide-v cross-mc-v guest-tiny-ide-v guest-mc-v build-new-tiny-ide build-new-mc; do
       awk -v b="==BEG-$p-$RUN==" -v e="==END-$p-$RUN==" '$0==b{f=1;next} $0==e{f=0} f && !/^root@/' \
          $T/cmini.log | sed '$ { /^$/ d }' > $G/$p.out

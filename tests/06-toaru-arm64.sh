@@ -5,8 +5,8 @@
 #   1. release ToaruOS 2.3.2 aarch64 (_import/download/aarch64-virt.zip, stahne se)
 #   2. cross TinyCC pro aarch64 (_build/tcc-aarch64), guest tcc (/extras/tcc/bin/tcc)
 #   3. cmini -C (translate) tests/examples/*.cc => C; cminirt.o pro aarch64
-#      => ramdisk _build/arm64/ramdisk.tgz (/extras/cmini-c)
-#   4. QEMU bez okna, seriova linka: VM se prelozi a spusti /extras/cmini-c/run_examples.sh
+#      => ramdisk _build/ramdisk-a64.tgz (/extras/examples, /extras/build-examples.sh)
+#   4. QEMU bez okna, seriova linka: VM se prelozi a spusti /extras/build-examples.sh
 #      (tcc v ToaruOS prelozi kazdy .c s cminirt.o a program se spusti)
 #   5. vystup kazdeho programu se porovna se vzorem tests/examples/expected (quicksort,
 #      heapsort jen posledni radek O.K.); navratovy kod musi byt 0
@@ -56,7 +56,7 @@ then
    a64_stop; FAILED=1; finish
 fi
 
-a64_send "sh /extras/cmini-c/run_examples.sh"
+a64_send "sh /extras/build-examples.sh"
 last=rc_check
 a64_wait "==END-$last==" 900 || echo "  toaruos-arm64: run_examples.sh neskoncil (cast $last)" >&2
 a64_log 200000 > $V/toaruos-arm64/serial.txt 2> /dev/null || true

@@ -8,6 +8,7 @@
 #                 rozbalene adresare /extras/cmini-toaru (z cmini-toaru.tar.gz) a
 #                 /extras/cmini-src (z cmini-src.tar.gz); archivy se nekopiruji
 #                 a /extras/cstencils (zdroje generatoru + unity.cc pro cmini),
+#                 /extras/examples + /extras/build-examples.sh (mkexamples.sh),
 #                 /extras/cmini-tests.sh (kroky testu pro terminal ToaruOS)
 #   kernel.mb     kernel z ISO, v multiboot hlavicce vypnuty pozadavek na VBE (QEMU
 #                 multiboot loader by jinak odmitl "multiboot knows VBE")
@@ -143,6 +144,9 @@ for s in build-new-mc.sh build-new-tiny-ide.sh; do
     cp "$DIR/guest/$s" "$WORK/ramdisk/extras/$s"
     chmod 755 "$WORK/ramdisk/extras/$s"
 done
+
+# /extras/examples (cmini sources of the examples) and /extras/build-examples.sh (cmini inside ToaruOS)
+"$DIR/mkexamples.sh" "$WORK/ramdisk/extras" x86 > /dev/null
 
 echo "== repacking ramdisk.tgz"
 if [[ -n ${MKRAMDISK_UNDER_FAKEROOT:-} ]]; then

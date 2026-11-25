@@ -52,8 +52,8 @@ a64_start ()   # a64_start <visible 0|1> <logfile>
    fi
    qemu-system-aarch64 -M virt -cpu cortex-a72 -m 4G -smp 4 -no-reboot "$@" \
         -kernel "$A64_B/arm64/bootstub-a64" \
-        -fw_cfg name=opt/org.toaruos.initrd,file="$A64_B/arm64/ramdisk.tgz" \
-        -fw_cfg name=opt/org.toaruos.kernel,file="$A64_B/arm64/kernel-a64" \
+        -fw_cfg name=opt/org.toaruos.initrd,file="$A64_B/ramdisk-a64.tgz" \
+        -fw_cfg name=opt/org.toaruos.kernel,file="$A64_B/kernel-a64" \
         -serial pipe:"$A64_WORK/serial" > "$log" 2>&1 &
    A64_QEMU_PID=$!
    # the FIFO needs a permanent reader: the guest output goes to a plain file

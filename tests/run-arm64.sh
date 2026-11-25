@@ -4,7 +4,7 @@
 #   tests/run-arm64.sh          priprava (zip, cross TinyCC, payload) a VM v okne; VM zustava bezet
 #   VISIBLE=0 tests/run-arm64.sh   bez okna (seriova linka), skript skonci, VM bezi na pozadi
 #
-# V guestovi: /extras/cmini-c/run_examples.sh (prelozi a spusti priklady z cmini -C),
+# V guestovi: /extras/build-examples.sh (prelozi a spusti priklady z cmini -C),
 # /extras/tcc/bin/tcc (TinyCC v ToaruOS), /bin/tcc.
 # Zastaveni:  pkill -f qemu-system-aarch64
 # Test:       tests/06-toaru-arm64.sh
@@ -24,5 +24,5 @@ export A64_TOP
 a64_prepare || { echo "error: priprava ToaruOS aarch64 selhala" >&2; exit 1; }
 mkdir -p "$A64_WORK"
 a64_start "${VISIBLE:-1}" "$A64_WORK/qemu.log"
-echo "ToaruOS aarch64 bezi (QEMU pid $A64_QEMU_PID). Po startu: sh /extras/cmini-c/run_examples.sh"
+echo "ToaruOS aarch64 bezi (QEMU pid $A64_QEMU_PID). Po startu: sh /extras/build-examples.sh"
 echo "Zastaveni: pkill -f qemu-system-aarch64"
