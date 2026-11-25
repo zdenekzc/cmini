@@ -9,7 +9,7 @@
 set -e
 D=$(cd "$(dirname "$0")/.." && pwd)              # cstencils directory
 CMINI=${CMINI:-$D/../cmini/cmini.bin}
-CMINIRT=$D/../cmini/cminirt.c
+CMINIRT=$D/../cminirt/cminirt.c
 OUT=${1:-${TMPDIR:-/tmp}/cstencils-own}
 mkdir -p "$OUT"
 cd "$D"

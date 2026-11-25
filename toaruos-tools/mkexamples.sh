@@ -43,8 +43,8 @@ then
    do
       "$CMINI" -C -I "$TOP/cmini/ownheaders" -o "$E/$p.c" "$E/$p.cc" || die "cmini -C $p"
    done
-   cp "$TOP/cmini/cminirt.h" "$E/"
-   "$TCC" -B"$TCCLIB" -I "$TOP/cmini" -c "$TOP/cmini/cminirt.c" -o "$E/cminirt.o" 2> /dev/null \
+   cp "$TOP/cminirt/cminirt.h" "$E/"
+   "$TCC" -B"$TCCLIB" -I "$TOP/cminirt" -c "$TOP/cminirt/cminirt.c" -o "$E/cminirt.o" 2> /dev/null \
       || die "cross tcc cminirt.c"
 fi
 

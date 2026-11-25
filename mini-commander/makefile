@@ -17,8 +17,8 @@ CMINI_OBJS = $(SOURCES:.c=.cmini.o)
 cmini-compiler:
 	@test -x "$(CMINI)" || $(MAKE) -C ../cmini/cmini cmini.bin
 
-cminirt.o: ../cmini/cminirt.c
-	$(CC) -std=gnu11 -w -c ../cmini/cminirt.c -o $@
+cminirt.o: ../cminirt/cminirt.c
+	$(CC) -std=gnu11 -w -I ../cminirt -c ../cminirt/cminirt.c -o $@
 
 %.cmini.o: %.c *.h cmini/cmini_libc.h
 	$(CMINI) -I cmini -c $@ $<

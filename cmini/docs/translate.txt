@@ -257,6 +257,6 @@ translator; the output goes through the BUF sections instead.
                                              (translated to C, compiled, compared
                                              with tests/examples/expected/)
 
-Related documents: cmini/docs/instr.txt (the code generator), cmini/cminirt.h
+Related documents: cmini/docs/instr.txt (the code generator), cminirt/cminirt.h
 (the runtime macros and functions used in the output), CHANGELOG.txt (history of
 the translator, chapters 25, 27, 32 and 37).

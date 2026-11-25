@@ -31,7 +31,7 @@ then
 fi
 make -s -C cmini cmini.bin > /dev/null || exit 1   # referencni cmini.bin z gcc
 
-CMINI_SRC="cmini/instr_drv.c cmini/translate.c cmini/decl.c cmini/expr.c cmini/stat.c cmini/sem.c cmini/util.c cmini/lexer.c cmini/instr.c cmini/cminirt.c"
+CMINI_SRC="cmini/instr_drv.c cmini/translate.c cmini/decl.c cmini/expr.c cmini/stat.c cmini/sem.c cmini/util.c cmini/lexer.c cmini/instr.c cminirt/cminirt.c"
 PASM_SRC="pasmlib code def expr inst key oth asmlist"
 SELF_SRC="instr_drv.c translate.c decl.c expr.c stat.c sem.c util.c lexer.c instr.c"
 
@@ -86,7 +86,7 @@ do
    $TCC -w -I asm -c asm/$f.c -o $TMP/asm_$f.o || status=1
 done
 $TCC -ar rcs $TMP/libpasm.a $TMP/asm_*.o
-$TCC -w -DUSE_LEXER -I cmini -I asm $CMINI_SRC $TMP/libpasm.a -o $TMP/cmini-tcc.bin
+$TCC -w -DUSE_LEXER -I cmini -I cminirt -I asm $CMINI_SRC $TMP/libpasm.a -o $TMP/cmini-tcc.bin
 result "tcc: cmini.bin a libpasm.a (asm/*.c)" $?
 [ -x $TMP/cmini-tcc.bin ] || exit 1
 
@@ -112,7 +112,7 @@ then
    ok=0
    for f in $CMINI_SRC $(for a in $PASM_SRC; do echo asm/$a.c; done)
    do
-      (cd $TMP/chibi && $CHIBICC -I/usr/include/chibicc -DUSE_LEXER -I$TOP/cmini -I$TOP/asm \
+      (cd $TMP/chibi && $CHIBICC -I/usr/include/chibicc -DUSE_LEXER -I$TOP/cmini -I$TOP/cminirt -I$TOP/asm \
          -c $TOP/$f -o $TMP/chibi/$(echo $f | tr / _).o > $TMP/chibi/err.log 2>&1) ||
          { echo "        $f: $(head -1 $TMP/chibi/err.log)"; ok=1; }
    done

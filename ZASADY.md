@@ -78,6 +78,13 @@ Pravidla pro `_output/`:
 - V tomto projektu (`cmini`) se cmm, grm, gram ani CDL **nepoužívají** a nepatří sem:
   nepřidávají se soubory, skripty ani testy, které na ně závisí.
 
+## cminirt (behova knihovna)
+
+- Adresar `cminirt/` v hlavnim adresari: `cminirt.c` a `cminirt.h`. Pouziva ho cmini (programy
+  z `-C`, `cmini.bin` s `-C`) i prekladac cmm v navazujicich projektech.
+- Prekladace a skripty ho berou z `cminirt/`; `-I cminirt` je nutne, kdekoli se prekladaji programy
+  z `-C` (`#include "cminirt.h"`).
+
 ## cstencils
 
 - `cstencils/` je experiment napsaný v CMini. Z deklarací tříd generuje například spojové seznamy.

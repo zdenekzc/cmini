@@ -494,9 +494,9 @@ def source_modules (base_dir) :
    d.prog_lib ("$(top_srcdir)/asm/libpasm.a")
 
    # cmini.bin - prekladac c-mini: vystup pasm (vychozi) i C (-C, translate.c) - jeden program
-   # (ovladac instr_drv.c, front-end, translate.c, instr.c, behova knihovna cminirt.c, asm/libpasm.a)
+   # (ovladac instr_drv.c, front-end, translate.c, instr.c, behova knihovna cminirt/cminirt.c, asm/libpasm.a)
    d.program ("cmini.bin")
-   d.prog_source ("instr_drv.c", "translate.c", "decl.c", "expr.c", "stat.c", "sem.c", "util.c", "lexer.c", "instr.c", "cminirt.c")
+   d.prog_source ("instr_drv.c", "translate.c", "decl.c", "expr.c", "stat.c", "sem.c", "util.c", "lexer.c", "instr.c", "$(top_srcdir)/cminirt/cminirt.c")
    d.prog_cflags ("-DUSE_LEXER")
    d.prog_lib ("$(top_srcdir)/asm/libpasm.a")
 

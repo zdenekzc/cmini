@@ -64,7 +64,7 @@ for f in instr_drv translate decl expr stat sem util lexer instr cminirt; do
 done
 
 # runtime library of programs from cmini (and gcc on the host)
-cc -I"$TOP/cmini" -c "$TOP/cmini/cminirt.c" -o "$OUT/cmini/lib/cminirt.o"
+cc -I"$TOP/cminirt" -c "$TOP/cminirt/cminirt.c" -o "$OUT/cmini/lib/cminirt.o"
 
 link() { local out=$1; shift; "$PASM" -k "$out" "$L/crt0.o" "$L/crti.o" "$@" "$L/libc.a" "$L/crtn.o" || die "pasm -k $out"; }
 link "$OUT/cmini/bin/pasm.bin" "$O/a_pasm.o" $PASMLIB

@@ -37,7 +37,7 @@ gcc -O1 -std=gnu11 -w -DUSE_LEXER -Icmini -Iasm -c cmini/sem.c -o obj/c_sem.o
 gcc -O1 -std=gnu11 -w -DUSE_LEXER -Icmini -Iasm -c cmini/util.c -o obj/c_util.o
 gcc -O1 -std=gnu11 -w -DUSE_LEXER -Icmini -Iasm -c cmini/lexer.c -o obj/c_lexer.o
 gcc -O1 -std=gnu11 -w -DUSE_LEXER -Icmini -Iasm -c cmini/instr.c -o obj/c_instr.o
-gcc -O1 -std=gnu11 -w -DUSE_LEXER -Icmini -Iasm -c cmini/cminirt.c -o obj/c_cminirt.o
+gcc -O1 -std=gnu11 -w -DUSE_LEXER -Icmini -Iasm -c cminirt/cminirt.c -o obj/c_cminirt.o
 
 gcc obj/c_instr_drv.o obj/c_translate.o obj/c_decl.o obj/c_expr.o obj/c_stat.o obj/c_sem.o obj/c_util.o obj/c_lexer.o obj/c_instr.o obj/c_cminirt.o libpasm.a -o cmini.bin -lm
 ls -l cmini.bin

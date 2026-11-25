@@ -27,14 +27,14 @@ PROGRAMS="dama jezdec avl btree veze classes strings defaults chars dtors floats
 
 # prekladac (front-end + translate.c, ciste C - jako cmini/Makefile)
 make -s -C cmini cmini.bin || exit 1      # cmini.bin = front-end + translate.c + generator (gcc)
-gcc -std=gnu11 -Wall -c cmini/cminirt.c -o "$TMP/cminirt.o" || exit 1
+gcc -std=gnu11 -Wall -c cminirt/cminirt.c -o "$TMP/cminirt.o" || exit 1
 
 echo "=== tests/examples/*.cc => C"
 for p in $PROGRAMS
 do
     g++ -x c++ -w tests/examples/$p.cc -o "$TMP/$p.gpp" -lm && "$TMP/$p.gpp" > "$TMP/$p.exp" 2>&1
     if ./cmini/cmini.bin -C -I cmini/ownheaders -o "$TMP/$p.c" tests/examples/$p.cc 2> "$TMP/$p.err" &&
-       gcc -std=gnu11 -Wall -Werror -Wno-unused -I cmini "$TMP/$p.c" "$TMP/cminirt.o" -o "$TMP/$p" -lm 2>> "$TMP/$p.err" &&
+       gcc -std=gnu11 -Wall -Werror -Wno-unused -I cmini -I cminirt "$TMP/$p.c" "$TMP/cminirt.o" -o "$TMP/$p" -lm 2>> "$TMP/$p.err" &&
        "$TMP/$p" 2>&1 | cmp -s - "$TMP/$p.exp"
     then echo "  OK    tests/examples/$p.cc"
     else echo "  FAIL  tests/examples/$p.cc"; head -3 "$TMP/$p.err"; status=1
@@ -86,7 +86,7 @@ ok=true
 for f in $SELF
 do
     ./cmini/cmini.bin -C -I cmini/ownheaders -o "$TMP/self/$f.c" cmini/$f.c &&
-    gcc -std=gnu11 -Wall -Wno-unused -Wno-switch -Wno-dangling-else -Werror -I cmini -c "$TMP/self/$f.c" \
+    gcc -std=gnu11 -Wall -Wno-unused -Wno-switch -Wno-dangling-else -Werror -I cmini -I cminirt -c "$TMP/self/$f.c" \
         -o "$TMP/self/$f.o" || { echo "  FAIL  $f.c => C"; ok=false; }
 done
 # main (instr_drv.c) a generator (instr.c) prelozene gcc; libpasm.a

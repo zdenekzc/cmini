@@ -46,7 +46,7 @@ echo "== tiny-ide and mini-commander: cmini -C (translate), compiled by the cros
 # uintmax_t: cmini_libc.h (mini-commander) declares it as long unsigned int, the sysroot as tcc's type
 CTCC="$TCC/bin/aarch64-toaru-tcc"
 CMINI=$TOP/cmini/cmini.bin
-TCCFLAGS=(-B"$TCC/lib" -w -I "$TOP/cmini" -include "$TOP/toaruos-tools/tcc/cmini-compat.h" "-D__UINTMAX_TYPE__=long unsigned int" -D TOARU_CMINI=1 -D calloc=cm_calloc)
+TCCFLAGS=(-B"$TCC/lib" -w -I "$TOP/cminirt" -include "$TOP/toaruos-tools/tcc/cmini-compat.h" "-D__UINTMAX_TYPE__=long unsigned int" -D TOARU_CMINI=1 -D calloc=cm_calloc)
 A=$B/arm64/apps
 rm -rf "$A"; mkdir -p "$A/tide" "$A/mc"
 SHIM=$TOP/toaruos-tools/cmini-curses
@@ -68,7 +68,7 @@ for f in curses8 glue
 do "$CTCC" "${TCCFLAGS[@]}" -I "$SHIM" -c "$SHIM/$f.c" -o "$A/tide/$f.o" || { echo "error: tcc $f.c" >&2; exit 1; }
 done
 "$CTCC" -B"$TCC/lib" -w -c "$TOP/toaruos-tools/selfhost/calloc_zero.c" -o "$A/tide/calloc_zero.o" || exit 1
-"$CTCC" -B"$TCC/lib" -w -c "$TOP/cmini/cminirt.c" -I "$TOP/cmini" -o "$A/tide/cminirt.o" || exit 1
+"$CTCC" -B"$TCC/lib" -w -c "$TOP/cminirt/cminirt.c" -I "$TOP/cminirt" -o "$A/tide/cminirt.o" || exit 1
 for f in main app editor runner ui dialogs
 do "$CTCC" "${TCCFLAGS[@]}" -I "$SHIM" -I "$TOP/tiny-ide/toaru-cmini" -c "$A/tide/$f.c" -o "$A/tide/$f.o" || { echo "error: tcc tiny-ide/$f.c" >&2; exit 1; }
 done

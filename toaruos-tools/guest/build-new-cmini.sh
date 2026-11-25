@@ -33,7 +33,7 @@ echo "== 2. cmini: compiler sources (cmini -L /lib -c)"
 /extras/cmini-toaru/bin/cmini.bin -L /lib -I include -I cmini -I asm -D calloc=cm_calloc -c /extras/new-cmini/obj/c_util.o cmini/util.c
 /extras/cmini-toaru/bin/cmini.bin -L /lib -I include -I cmini -I asm -D calloc=cm_calloc -c /extras/new-cmini/obj/c_lexer.o cmini/lexer.c
 /extras/cmini-toaru/bin/cmini.bin -L /lib -I include -I cmini -I asm -D calloc=cm_calloc -c /extras/new-cmini/obj/c_instr.o cmini/instr.c
-/extras/cmini-toaru/bin/cmini.bin -L /lib -I include -I cmini -I asm -D calloc=cm_calloc -c /extras/new-cmini/obj/c_cminirt.o cmini/cminirt.c
+/extras/cmini-toaru/bin/cmini.bin -L /lib -I include -I cmini -I asm -D calloc=cm_calloc -c /extras/new-cmini/obj/c_cminirt.o cminirt/cminirt.c
 
 echo "== 3. cmini: pasm sources (cmini -L /lib -c)"
 /extras/cmini-toaru/bin/cmini.bin -L /lib -I include -I cmini -I asm -D calloc=cm_calloc -c /extras/new-cmini/obj/a_pasmlib.o asm/pasmlib.c

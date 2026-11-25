@@ -27,7 +27,7 @@ EX=tests/examples
 PROGRAMS="dama jezdec avl btree veze classes strings defaults chars dtors floats objcopy pointers sequence dictionary dyncast quicksort heapsort initsize structtag"
 # zdroje prekladace (cmini a pasm); cmini.bin preklada sam sebe po souborech
 SOURCES="$(ls cmini/*.cc cmini/*.c) $(ls asm/*.c 2> /dev/null)"
-CMINI_CFLAGS="-std=gnu11 -w -I $TOP/cmini"
+CMINI_CFLAGS="-std=gnu11 -w -I $TOP/cmini -I $TOP/cminirt"
 
 begin ()   # begin <generator> - novy _output/<generator>, pracovni adresar $T, vzory, behova knihovna
 {
@@ -35,7 +35,7 @@ begin ()   # begin <generator> - novy _output/<generator>, pracovni adresar $T, 
    rm -rf "$V/$1" "$T"
    mkdir -p "$V/$1" "$T" || exit 1
    TMPDIR=$T; export TMPDIR
-   gcc -std=gnu11 -w -c cmini/cminirt.c -o $T/cminirt.o || exit 1
+   gcc -std=gnu11 -w -c cminirt/cminirt.c -o $T/cminirt.o || exit 1
    # vzorovy vystup: tests/examples/expected/p.txt;
    # quicksort, heapsort (nahodna data, srand (time (NULL))) - posledni radek O.K.
    mkdir -p $T/exp

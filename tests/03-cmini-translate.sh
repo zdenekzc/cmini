@@ -44,5 +44,5 @@ for f in instr_drv decl expr stat sem util lexer translate instr; do o=$T/tr-cmi
 $ok && gcc $objs $T/cminirt.o $TOP/asm/libpasm.a -o $V/cmini-translate/cmini/cmini.bin &&
    (cd cmini && $V/cmini-translate/cmini/cmini.bin -C -I ownheaders -o $T/self.c translate.c) &&
    cmp -s $T/self.c $V/cmini-translate/cmini/translate.c && echo "translate" >> $T/ok
-report cmini-translate "c-mini => C (gcc s cmini/cminirt.c); cmini.bin -C (sam sebou)"
+report cmini-translate "c-mini => C (gcc s cminirt/cminirt.c); cmini.bin -C (sam sebou)"
 finish

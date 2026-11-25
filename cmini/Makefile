@@ -205,7 +205,7 @@ $(BUILD)/cmini/instr.o: instr.c
 	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) $(cmini_FLAGS) -MMD -MP -c $< -o $@
 
-$(BUILD)/cmini/cminirt.o: cminirt.c
+$(BUILD)/cmini/cminirt.o: $(top_srcdir)/cminirt/cminirt.c
 	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) $(cmini_FLAGS) -MMD -MP -c $< -o $@
 
