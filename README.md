@@ -168,6 +168,7 @@ Full list of switches: `./cmini/cmini.bin -h`.
 
 ## More
 
+- [ZASADY.md](ZASADY.md) - project rules: generated vs hand-written Makefiles, `_import` / `_build` / `_output`, tests, ISO and fakeroot
 - [CHANGELOG.txt](CHANGELOG.txt) - history of changes, chapter by chapter
 - [asm/README.txt](asm/README.txt) - the assembler PAsm (16/32/64 bit, PE, COFF, ELF)
 - [toaruos-tools/README.md](toaruos-tools/README.md) - the ToaruOS version

@@ -15,6 +15,16 @@
 # Spusteni (toaru-vm.sh): INITRD=_build/ramdisk.tgz KERNEL=_build/kernel.mb ./toaru-vm.sh start
 set -euo pipefail
 
+# Dobre viditelne varovani (ZASADY.md: fakeroot a setuid bit sudo)
+warn_box() {
+    local line
+    echo "" >&2
+    echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" >&2
+    for line in "$@"; do echo "!!!  $line" >&2; done
+    echo "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" >&2
+    echo "" >&2
+}
+
 # The whole script runs in ONE fakeroot session (fakeroot keeps its owner database per
 # invocation): the stock owners and setuid bits of the ramdisk survive the unpack and
 # repack, so /bin/sudo stays setuid root (otherwise "effective uid is not 0") and
@@ -23,7 +33,9 @@ if [[ -z ${MKRAMDISK_UNDER_FAKEROOT:-} ]]; then
     if command -v fakeroot > /dev/null 2>&1; then
         exec fakeroot -- env MKRAMDISK_UNDER_FAKEROOT=1 bash "$0" "$@"
     fi
-    echo "warning: fakeroot missing - sudo in ToaruOS loses its setuid bit (sudo dnf install fakeroot)" >&2
+    warn_box "FAKEROOT CHYBI - sudo v ToaruOS ztrati setuid bit" \
+             "Nainstalujte: sudo dnf install fakeroot (nebo apt install fakeroot)" \
+             "Bez nej se vlastnici souboru zploští na uid 1000 a sudo nebude fungovat."
 fi
 
 DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -148,6 +160,19 @@ fi
     find . -mindepth 1 -maxdepth 1 -printf '%P\0' |
         tar --null "${OWNER[@]}" -cf - -T -
 ) | gzip -9 -n > "$B/ramdisk.tgz"
+
+# Kontrola setuid bitu sudo v hotovem archivu: mod s (setuid) a vlastnik root (uid 0)
+SUDO_LINE=$(tar -tvzf "$B/ramdisk.tgz" | awk '$NF ~ /(^|\/)bin\/sudo$/ { print; exit }')
+if [[ -z $SUDO_LINE ]]; then
+    warn_box "/bin/sudo v ramdisku CHYBI" "ToaruOS nebude mit sudo."
+elif [[ ! $SUDO_LINE =~ ^-[rwx-]{2}s ]] || [[ ! $SUDO_LINE =~ [[:space:]](root/root|0/0|root/0|0/root)[[:space:]] ]]; then
+    warn_box "SUDO NEMA SETUID BIT (nebo neni vlastnik root)" \
+             "Radek: $SUDO_LINE" \
+             "Ocekavano: -rwsr-xr-x root/root. Bez toho ToaruOS hlasi 'effective uid is not 0'." \
+             "Zkontrolujte fakeroot (viz varovani nahore) a spustte skript znovu."
+else
+    echo "== sudo ok: setuid, owner root ($SUDO_LINE)"
+fi
 
 echo "== writing kernel.mb"
 python3 -I - "$WORK/base/kernel" "$B/kernel.mb" <<'PY'
