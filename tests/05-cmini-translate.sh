@@ -22,6 +22,9 @@ begin cmini-translate
 
 # the translator is not part of "make all": build it only for this test
 make -s -C "$TOP/cmini" cmini-translate.bin || exit 1
+# every <...> must have a replacement in ownheaders (nothing silently ignored)
+CMINI_MISSING_HEADERS=error
+export CMINI_MISSING_HEADERS
 
 D=$V/cmini-translate/examples; mkdir -p $D
 for p in $PROGRAMS

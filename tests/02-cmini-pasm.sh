@@ -61,7 +61,8 @@ sources cmini-pasm cmini_pasm
 # c-mini sam sebou: prekladac cmini.bin (instr_drv.c + front.c + front-end + instr.c +
 # asm/libpasm.a); translate.c je jen v cmini-translate.bin, tady se nepouziva
 D=$V/cmini-pasm/cmini; mkdir -p $D
-(cd cmini && $TOP/cmini/test_instr_lexer.bin -0 -I . -I $TOP/cmini/ownheaders -o $D/cmini.bin \
+# CMINI_MISSING_HEADERS=error: every <...> must have a replacement in ownheaders
+(cd cmini && CMINI_MISSING_HEADERS=error $TOP/cmini/test_instr_lexer.bin -0 -I . -I $TOP/cmini/ownheaders -o $D/cmini.bin \
     instr_drv.c front.c decl.c expr.c stat.c sem.c util.c lexer.c instr.c $TOP/asm/libpasm.a > /dev/null 2>&1) &&
    $D/cmini.bin -I cmini/ownheaders -o $T/self-dama $EX/dama.cc > /dev/null 2>&1 &&
    ./cmini/test_instr_lexer.bin -0 -I cmini/ownheaders -o $T/ref-dama $EX/dama.cc > /dev/null 2>&1 &&

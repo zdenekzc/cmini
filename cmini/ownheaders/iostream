@@ -1,0 +1,9 @@
+/* iostream - cparser: std::cout, std::cerr and std::endl are built into
+   c-mini (expr.c, StreamName); translate.c writes printf / dprintf for them.
+   The file is here so that #include <iostream> is not silently ignored
+   (CMINI_MISSING_HEADERS); it declares nothing. */
+
+#ifndef CPARSER_IOSTREAM
+#define CPARSER_IOSTREAM
+
+#endif

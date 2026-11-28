@@ -17,9 +17,10 @@
       #elif, #else, #endif          conditional compilation, expressions with defined
       #include "file"               searches in the directory of the source file
                                     and in the directories from LexIncludeDir
-      #include <file>               only in the directories from LexIncludeDir,
-                                    files not found are ignored
-                                    (e.g. <stdio.h>, as in lex.c)
+      #include <file>               only in the directories from LexIncludeDir;
+                                    files not found are ignored (e.g. <stdio.h>,
+                                    as in lex.c) unless CMINI_MISSING_HEADERS is
+                                    report (names to stderr) or error
       #error                        compilation error
       #pragma, #line, #warning      ignored
 

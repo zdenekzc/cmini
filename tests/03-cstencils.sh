@@ -33,7 +33,7 @@ objs=""; ok_cmini=true
 for u in $UNITS
 do
    b=$(echo $u | tr / _)
-   if (cd $CST && $CMINI $INC -I $TOP/cmini/ownheaders -c $T/cm-$b.o -S $T/cm-$b.asm $u.cc > $T/cm-$b.log 2>&1)
+   if (cd $CST && CMINI_MISSING_HEADERS=error $CMINI $INC -I $TOP/cmini/ownheaders -c $T/cm-$b.o -S $T/cm-$b.asm $u.cc > $T/cm-$b.log 2>&1)
    then objs="$objs $T/cm-$b.o"
    else ok_cmini=false; echo "  cmini: $u.cc selhal: $(grep -m1 -i error $T/cm-$b.log | cut -c1-120)"
    fi

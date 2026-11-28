@@ -1245,7 +1245,26 @@ static void DirInclude (void)
      LexErrorArg ("Cannot open include file", msg);
   }
 
-  /* system files not found (<stdio.h>, ...) are ignored */
+  /* system files not found (<stdio.h>, ...) are ignored; with
+     CMINI_MISSING_HEADERS=error the compilation fails and with =report the
+     names are printed (verification that every <...> has a replacement) */
+  if (! found && system)
+  {
+     const char * how = getenv ("CMINI_MISSING_HEADERS");
+     if (how != NULL && strcmp (how, "error") == 0)
+     {
+        char msg [PATH_SIZE];
+        snprintf (msg, sizeof (msg), "%s", TextStr (&name));
+        TextFree (&name);
+        LexErrorArg ("Cannot open system include file", msg);
+     }
+     if (how != NULL && strcmp (how, "report") == 0)
+     {
+        char msg [PATH_SIZE];
+        snprintf (msg, sizeof (msg), "cmini: header not found: <%s>\n", TextStr (&name));
+        fputs (msg, stderr);
+     }
+  }
 
   TextFree (&name);
 }

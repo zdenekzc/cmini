@@ -23,6 +23,9 @@ SRC=$PWD
 TMP=$(mktemp -d) || exit 1
 trap 'rm -rf "$TMP"' EXIT
 status=0
+# every <...> must have a replacement in cmini/ownheaders
+CMINI_MISSING_HEADERS=error
+export CMINI_MISSING_HEADERS
 
 PROGRAMS="dama jezdec avl btree veze classes strings defaults chars dtors floats objcopy pointers sequence dictionary dyncast"
 

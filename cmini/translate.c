@@ -257,7 +257,7 @@ static void AddHeader (const char * name)
      "cstdint", "stdint.h",   "climits", "limits.h",   "cmath", "math.h",
      "cassert", "assert.h",   "cstddef", "stddef.h",   "csetjmp", "setjmp.h",
      "csignal", "signal.h",   "ctime", "time.h",       "cctype", "ctype.h",
-     "string", NULL,          "containers.h", NULL,
+     "string", NULL,          "iostream", NULL,        "containers.h", NULL,
      NULL
   };
   for (int i = 0; map [i] != NULL; i += 2)
