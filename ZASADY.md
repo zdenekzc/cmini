@@ -106,6 +106,15 @@ Pravidla pro `_output/`:
 - **c) AsmJit**: `cmini/instr1.cc` … `instr5.cc`. Zůstává jen jako ilustrace vývoje
   CMini. **Netestuje se.**
 
+## Attribution v commitech a PR
+
+- Do commit zpráv **neuvádět** `Co-Authored-By: Claude Code`.
+- Místo toho uvést řádek `Assisted-by:` s názvem použitého modelu nebo nástroje, např.:
+  - `Assisted-by: DeepSeek Thinking (LLM.ai e-INFRA CZ)`
+  - `Assisted-by: <jiný název modelu> (LLM.ai e-INFRA CZ)`
+  - `Assisted-by: Claude Code`
+- Řádek se píše na konec zprávy commitu (a na konec popisu PR), po prázdném řádku.
+
 ## Stav kódu vůči těmto zásadám
 
 - `toaruos-tools/mkramdisk.sh` kontroluje `fakeroot` a po sestavení archivu kontroluje,
