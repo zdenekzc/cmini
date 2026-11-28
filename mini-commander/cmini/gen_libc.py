@@ -22,7 +22,7 @@ DROP_PREFIXES = ("/usr/include/linux", "/usr/include/asm", "/usr/lib/gcc", "/usr
 KEEP_ANYWAY = ("errno",)   # errno constants come through asm-generic/errno*.h
 OUT_NAME = "cmini_libc.h"
 
-# ToaruOS mode: the headers of the ToaruOS system (toaruos-tools/_build/toaru-include, from the
+# ToaruOS mode: the headers of the ToaruOS system (_build/toaru-include in the main directory, from the
 # release ISO) and the project's ncurses shim header.  Set by the environment:
 #   GEN_TOARU_INC=<toaru include dir>  GEN_SHIM_INC=<dir with ncurses.h>  GEN_OUT=<output file>
 TOARU_INC = os.environ.get("GEN_TOARU_INC")

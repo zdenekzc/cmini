@@ -368,7 +368,7 @@ ToaruOS (-T) - JUMP BEFORE DATA, .o OBJECTS (2026-11-11)
 LINKER FOR ToaruOS (pasm -x, PasmLink) - STATIC WITH THE ToaruOS LIBC (2026-11-11)
 ==================================================================================
 
-        PASM_LIBDIR=../toaruos-tools/_build/toaru-lib pasm -x prog.asm
+        PASM_LIBDIR=../_build/toaru-lib pasm -x prog.asm
                 => prog.o (as -c) and prog.bin: ELF64 linked statically
                    crt0.o crti.o prog.o libc.a crtn.o  (ToaruOS libc)
         cmini -L DIR -o prog.bin prog.c     the same from c-mini (cmini/instr.cc linkToaru)

@@ -14,7 +14,7 @@
 # The tests of cmini and cstencils (the steps of tests/05-toaru.sh) are in the ToaruOS
 # terminal:   /extras/cmini-tests.sh   (the results go to /extras/tmp).
 #
-# Stop the VM:  WORK=toaruos-tools/_build/vm-run toaruos-tools/toaru-vm.sh stop
+# Stop the VM:  WORK=_build/vm-run toaruos-tools/toaru-vm.sh stop
 
 set -eu
 

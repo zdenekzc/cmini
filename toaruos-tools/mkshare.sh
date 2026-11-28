@@ -1,5 +1,5 @@
 #!/bin/bash
-# mkshare.sh — builds _build/share.img (ext2) from the contents of the _build/push/ directory.
+# mkshare.sh — builds _build/share/share.img (ext2) from the contents of the _build/push/ directory.
 #
 #   ./mkshare.sh                 # image from _build/push/
 #   SRC=/elsewhere ./mkshare.sh

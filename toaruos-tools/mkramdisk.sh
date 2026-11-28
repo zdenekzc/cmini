@@ -3,7 +3,7 @@
 #
 #   ./mkramdisk.sh        (potrebuje _import/toaruos-2.3.2.iso a _build/push/ z mkcross.sh)
 #
-# Vystup (toaruos-tools/_build/):
+# Vystup (_build/ v hlavnim adresari, vedle toaruos-tools/):
 #   ramdisk.tgz   ramdisk.igz ze ISO se vsim pod /extras; z _build/push/ se pridaji
 #                 rozbalene adresare /extras/cmini-toaru (z cmini-toaru.tar.gz) a
 #                 /extras/cmini-src (z cmini-src.tar.gz); archivy se nekopiruji

@@ -15,7 +15,7 @@ toaru-vm.sh             start/stop/log of QEMU, control via the serial line (no 
 mkguest.sh              _build/guest-src/ = asm/, cmini/ (20 files in C), include/ from the main
                         tree + guest/ - COMPILATION FOR ToaruOS, buildable inside the guest
 mkpkg.sh                mkguest.sh and _build/guest-src/ => _build/push/cmini-src.tar.gz (deterministic tar)
-mkshare.sh              builds _build/share.img (ext2) from the contents of the _build/push/ directory
+mkshare.sh              builds _build/share/share.img (ext2) from the contents of the _build/push/ directory
 guest-run.sh            programs from c-mini (cmini -T) run in the running VM and are compared with Linux
 guest-cmini.sh          cmini is built DIRECTLY IN ToaruOS and compiles tests/examples there (§5e)
 mklibc.sh               crt0.o crti.o crtn.o libc.a and /usr/include of ToaruOS from the ISO (§5g)
@@ -37,14 +37,15 @@ probe/                  the smallest possible ELF64 with which we verify the Toa
                         for check.sh T1b and make test-toaru
   counterexample/       images at 0x400000 = CONTRAST, which will NOT run in the host
 
-_import/                ../_import/ in the cecko tree: DOWNLOADED files, outside _build (not part
-                        of a backup, make clean does not delete them)
+_import/                PROJECT ROOT (one level above this directory): DOWNLOADED files,
+                        outside _build (not part of a backup, make clean does not delete them)
   toaruos-2.3.2.iso     release ISO of ToaruOS v2.3.2 (7.5 MB, downloaded from the
                         v2.3.2 release of the klange/toaruos project on GitHub;
                         md5 0043dba93a361b908814a03be2ba7ab2; tests/04 downloads it itself)
 
-_build/                 GENERATED files (not part of a backup, see §0a)
-  share.img             ext2 disk, which the host offers to the guest (64 MB, mkshare.sh)
+_build/                 PROJECT ROOT (one level above this directory), GENERATED files
+                        (not part of a backup, see §0a; never toaruos-tools/_build/)
+  share/share.img       ext2 disk, which the host offers to the guest (64 MB, mkshare.sh)
   push/                 what should get inside:
     cmini-src.tar.gz    mkpkg.sh
     probe1.elf probe2.elf  probe/build.sh
@@ -274,7 +275,7 @@ Consequences to keep in mind:
 
 ## 1. File transfer inside (verified)
 ```
-cp MY_FILE _build/push/ ; ./mkshare.sh  # fills _build/share.img
+cp MY_FILE _build/push/ ; ./mkshare.sh  # fills _build/share/share.img
 ./toaru-vm.sh start
 ./toaru-vm.sh start
 # on the host (getty on ttyS1 logs in as root automatically):

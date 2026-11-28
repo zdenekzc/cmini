@@ -20,7 +20,7 @@
 #   T5  toaru-vm.sh can be controlled even without a running VM (help, status, send refusal)
 #       and _build/work/ contains no stray *.pid (kill on a recycled PID!)
 #
-# T4 deliberately does not touch _build/share.img — QEMU holds a write lock on it.
+# T4 deliberately does not touch _build/share/share.img — QEMU holds a write lock on it.
 set -uo pipefail
 
 DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -251,8 +251,8 @@ if [[ ${QEMU:-0} == 1 ]]; then
     echo "== T6 QEMU (enabled by QEMU=1) =="
     [[ -r /dev/kvm && -w /dev/kvm ]] || skip "no /dev/kvm"
     [[ -f $DIR/../_import/toaruos-2.3.2.iso ]] || skip "missing ISO"
-    # deliberately we start nothing ourselves: starting the VM is left to a person (the VM holds a lock on _build/share.img)
-    skip "starting the VM is left to a person (lock on _build/share.img)"
+    # deliberately we start nothing ourselves: starting the VM is left to a person (the VM holds a lock on _build/share/share.img)
+    skip "starting the VM is left to a person (lock on _build/share/share.img)"
 else
     echo "== T6 QEMU: SKIPPED (QEMU=1 enables it) =="
     skip "VM start"

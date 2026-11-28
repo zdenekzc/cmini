@@ -4,9 +4,9 @@
 #   subset, glue.c, calloc that zeroes memory (toaruos-tools/selfhost), then pasm -k
 #   with ToaruOS crt0/crti/libc.a/crtn.
 #
-#   ./build-toaru-cmini.sh        => _build/cmini-toaru/tiny-ide-toaru.bin
+#   ./build-toaru-cmini.sh        => _build/tiny-ide/cmini-toaru/tiny-ide-toaru.bin
 #
-# Needs: ../cmini/cmini.bin, ../asm/pasm.bin (make), toaruos-tools/_build/toaru-lib (mklibc.sh).
+# Needs: ../cmini/cmini.bin, ../asm/pasm.bin (make), _build/toaru-lib (toaruos-tools/mklibc.sh).
 set -euo pipefail
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 TOP=$(cd "$HERE/.." && pwd)
