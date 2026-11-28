@@ -8,7 +8,8 @@
 #   a64_wait <line> [s]  wait until a serial output line is exactly <line>
 #   a64_stop             stop QEMU and the serial reader
 #
-# Needs: qemu-system-aarch64, unzip, fakeroot, gzip, python3 (scripts/need.sh gives the hints).
+# Needs: qemu-system-aarch64, unzip, gzip, python3 (scripts/need.sh gives the hints);
+# fakeroot is optional - mkarm64.sh warns and falls back to flattened owners.
 
 A64_TOP=${A64_TOP:?set A64_TOP (the project root) before sourcing this file}
 A64_B=$A64_TOP/_build

@@ -34,7 +34,7 @@ if [[ -z ${MKRAMDISK_UNDER_FAKEROOT:-} ]]; then
     if command -v fakeroot > /dev/null 2>&1; then
         exec fakeroot -- env MKRAMDISK_UNDER_FAKEROOT=1 bash "$0" "$@"
     fi
-    warn_box "FAKEROOT CHYBI - sudo v ToaruOS ztrati setuid bit" \
+    warn_box "CHYBI fakeroot - sudo v ToaruOS ztrati setuid bit" \
              "Nainstalujte: sudo dnf install fakeroot (nebo apt install fakeroot)" \
              "Bez nej se vlastnici souboru zploští na uid 1000 a sudo nebude fungovat."
 fi

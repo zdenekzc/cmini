@@ -36,7 +36,7 @@ die () { echo "run-toaru: $*" >&2; exit 1; }
 mkdir -p "$TOP/_build"
 
 [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ] || die "no graphical display (DISPLAY is not set)"
-command -v qemu-system-x86_64 > /dev/null || die "missing qemu-system-x86_64"
+command -v qemu-system-x86_64 > /dev/null || die "missing qemu-system-x86_64 (package qemu-system-x86: sudo dnf install qemu-system-x86)"
 
 # 1) ISO
 if [ ! -f "$ISO" ]; then
@@ -61,7 +61,7 @@ if [ ! -f "$TIDE_BIN" ]; then
    "$TOP/tiny-ide/build-toaru-cmini.sh" > "$TOP/_build/tiny-ide-toaru.log" 2>&1 || die "tiny-ide build failed (see $TOP/_build/tiny-ide-toaru.log)"
 fi
 echo "== building the ramdisk (mkramdisk.sh) ..."
-"$TOOLS/mkramdisk.sh" > "$TOP/_build/mkramdisk.log" 2>&1 || die "mkramdisk.sh failed (see $TOP/_build/mkramdisk.log)"
+"$TOOLS/mkramdisk.sh" > "$TOP/_build/mkramdisk.log" || die "mkramdisk.sh failed (see $TOP/_build/mkramdisk.log)"
 
 # 3) the VM with the desktop
 mkdir -p "$WORK"

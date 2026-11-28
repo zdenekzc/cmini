@@ -73,7 +73,7 @@ do_start() {
     else
         [[ -f "$ISO" ]] || die "missing ISO: $ISO (rename it or use ISO=/path)"
     fi
-    command -v qemu-system-x86_64 >/dev/null || die "missing qemu-system-x86_64"
+    command -v qemu-system-x86_64 >/dev/null || die "missing qemu-system-x86_64 (package qemu-system-x86: sudo dnf install qemu-system-x86)"
     running && die "QEMU is already running (pid $(cat "${PIDF}")) — ./toaru-vm.sh stop"
 
     mkdir -p "$WORK"

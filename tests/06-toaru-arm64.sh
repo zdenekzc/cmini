@@ -13,7 +13,8 @@
 #
 # tiny-ide a mini-commander zatim netestujeme (az po prvnim kroku).
 # Vystupy: _output/toaruos-arm64/{<program>.out,serial.txt,qemu.log}
-# Vyzaduje qemu-system-aarch64, unzip, fakeroot, curl (stazeni zipu); bez nich se preskoci.
+# Vyzaduje qemu-system-aarch64, unzip, curl (stazeni zipu); bez nich se test vynecha.
+# fakeroot je volitelny: bez nej se jen varuje a pokracuje (vlastnici se zplosti).
 
 . "$(dirname "$0")/common.sh"
 A64_TOP=$TOP
@@ -23,10 +24,13 @@ begin toaruos-arm64
 # programy v payloadu (toaruos-tools/mkarm64.sh: PROGRAMS); ostatni testy tests/examples se tu netestuji
 ARM_PROGRAMS="dama classes avl btree jezdec veze heapsort quicksort strings dyncast"
 
-for c in qemu-system-aarch64 unzip fakeroot gzip python3
+for c in qemu-system-aarch64 unzip gzip python3
 do
-   command -v $c > /dev/null || { echo "  toaruos-arm64: chybi $c - preskoceno" >&2; finish; }
+   command -v $c > /dev/null || { echo "  toaruos-arm64: chybi $c - vynechano" >&2; finish; }
 done
+# optional: only a warning, the test continues with flattened owners
+command -v fakeroot > /dev/null 2>&1 ||
+   echo "  toaruos-arm64: CHYBI fakeroot - varovani, test pokracuje (sudo v ToaruOS nebude fungovat)" >&2
 # cmini-translate.bin -C and the checked patterns; the exit status is compared with RC=0
 for p in $ARM_PROGRAMS; do echo "RC=0" > $T/exp/rc-$p.txt; done
 echo "RC=7" > $T/exp/rc-rc_check.txt

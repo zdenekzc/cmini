@@ -8,9 +8,9 @@
 #   a) 01-asm          asm/tests/*.asm - assembler pasm
 #   b) 02-cmini-pasm    c-mini => pasm (cmini/instr.c): priklady, asm, cmini (sam sebou)
 #   c) 03-cstencils    cstencils prelozeny cmini (glibc, pasm) = g++ build
-#   d) 04-toaru         cmini a pasm v ToaruOS (VM, bez okna); bez QEMU/ISO se preskoci
+#   d) 04-toaru         cmini a pasm v ToaruOS (VM, bez okna); bez QEMU/ISO se vynecha
 #   e) 05-cmini-translate      totez pres C (cmini/translate.c)
-#   f) 06-toaru-arm64  cmini translate v ToaruOS aarch64 (bez okna); bez nastroju se preskoci
+#   f) 06-toaru-arm64  cmini translate v ToaruOS aarch64 (bez okna); bez nastroju se vynecha
 #
 # Adresar se nezalohuje - kdykoli se vytvori znovu.
 

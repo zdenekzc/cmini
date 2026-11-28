@@ -26,8 +26,8 @@
 # cmini.bin je jen prekladac s pasm backendem.
 # cout se neprekladá krizove: ToaruOS libc nema dprintf (cerr).
 # Pro ToaruOS ARM64 je tests/06-toaru-arm64.sh.
-# Vyzaduje qemu-system-x86_64, ISO ToaruOS (_import/) a
-# toaru-vm.sh. Bez nich se test jen preskoci (vypise se proc).
+# Vyzaduje qemu-system-x86_64 (balicek qemu-system-x86), ISO ToaruOS (_import/) a
+# toaru-vm.sh. Bez nich se test jen vynecha (vypise se proc).
 # POZOR: jeden NN-*.sh se nesmi spustit dvakrat soucasne (sdileji _output a _build/vystup).
 
 HERE=$(cd "$(dirname "$0")" && pwd)   # common.sh changes the directory, so remember the script's own
@@ -58,7 +58,7 @@ fi
 
 if ! { command -v qemu-system-x86_64 > /dev/null && [ -f "$ISO" ] && command -v python3 > /dev/null; }
 then
-   echo "  toaruos: chybi qemu-system-x86_64 nebo $ISO - preskoceno" >&2
+   echo "  toaruos: chybi qemu-system-x86_64 (balicek qemu-system-x86: sudo dnf install qemu-system-x86) nebo $ISO - vynechano" >&2
    finish
 fi
 

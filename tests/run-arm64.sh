@@ -14,8 +14,8 @@ TOP=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 . "$TOP/scripts/need.sh"
 need qemu-system-aarch64
 need unzip
-need fakeroot
 need curl
+# fakeroot is optional - mkarm64.sh warns and falls back to flat owners
 
 A64_TOP=$TOP
 export A64_TOP

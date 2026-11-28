@@ -10,15 +10,23 @@
 #
 # Needs: _build/tcc-aarch64 (toaruos-tools/mktcc-aarch64.sh),
 #        ./cmini/cmini-translate.bin (make -C cmini cmini-translate.bin),
-#        fakeroot (owners and setuid bits of the release ramdisk stay as they are).
+#        fakeroot (optional: owners and setuid bits of the release ramdisk stay as
+#        they are; without it the owners are flattened and a warning is printed).
 set -euo pipefail
 
 DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 TOP=$(cd "$DIR/.." && pwd)
 . "$TOP/scripts/need.sh"
-need fakeroot
 need gzip
 need python3
+# fakeroot is optional here: without it the repack flattens the owners to 1000:1000
+# and /bin/sudo loses its setuid bit, but the payload can still be built.
+HAVE_FAKEROOT=true
+if ! command -v fakeroot > /dev/null 2>&1; then
+    HAVE_FAKEROOT=false
+    echo "!!! CHYBI fakeroot - vlastnici souboru se zplosti na 1000, sudo v ToaruOS nebude fungovat" >&2
+    echo "!!!   nainstalujte: sudo dnf install fakeroot (nebo apt install fakeroot)" >&2
+fi
 
 B=$TOP/_build
 TCC=$B/tcc-aarch64
@@ -84,17 +92,27 @@ done
 mkdir -p "$W/extras/tiny-ide"; install -m 755 "$A/tide/tiny-ide-toaru.bin" "$W/extras/tiny-ide/tiny-ide-toaru.bin"
 mkdir -p "$W/extras/mini-commander"; install -m 755 "$A/mc/mc-toaru.bin" "$W/extras/mini-commander/mc-toaru.bin"
 
-echo "== repacking the release ramdisk under fakeroot"
 UNPACK=$(mktemp -d "$OUT/unpack.XXXXXX")
-fakeroot -- bash -c '
-    set -eu
-    W="$1"; BASE="$2"; PUSH="$3"; OUT="$4"
-    gzip -dc "$BASE" | tar --same-owner -xf - -C "$W"
-    cp -a "$PUSH/." "$W/"
-    find "$W/extras" -exec chown 1000:1000 {} +
-    ( cd "$W" && find . -mindepth 1 -maxdepth 1 -printf "%P\0" |
-        tar --null --numeric-owner -cf - -T - ) | gzip -9 -n > "$OUT"
-' repack "$UNPACK" "$BASE" "$W" "$B/ramdisk-a64.tgz"
+if $HAVE_FAKEROOT
+then
+    echo "== repacking the release ramdisk under fakeroot"
+    fakeroot -- bash -c '
+        set -eu
+        W="$1"; BASE="$2"; PUSH="$3"; OUT="$4"
+        gzip -dc "$BASE" | tar --same-owner -xf - -C "$W"
+        cp -a "$PUSH/." "$W/"
+        find "$W/extras" -exec chown 1000:1000 {} +
+        ( cd "$W" && find . -mindepth 1 -maxdepth 1 -printf "%P\0" |
+            tar --null --numeric-owner -cf - -T - ) | gzip -9 -n > "$OUT"
+    ' repack "$UNPACK" "$BASE" "$W" "$B/ramdisk-a64.tgz"
+else
+    # the same fallback as /abc/tiny/tests/run-arm64.sh: flat owners, sudo stays broken
+    echo "== repacking the release ramdisk without fakeroot (owners flattened)"
+    gzip -dc "$BASE" | tar --same-owner -xf - -C "$UNPACK"
+    cp -a "$W/." "$UNPACK/"
+    ( cd "$UNPACK" && find . -mindepth 1 -maxdepth 1 -printf "%P\0" |
+        tar --null --owner=1000 --group=1000 -cf - -T - ) | gzip -9 -n > "$B/ramdisk-a64.tgz"
+fi
 rm -rf "$UNPACK"
 
 install -m 644 "$REL/misaka-kernel" "$B/kernel-a64"

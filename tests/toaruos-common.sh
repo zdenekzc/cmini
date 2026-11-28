@@ -32,7 +32,7 @@ cmini_prepare ()
    if "$TOP/toaruos-tools/mkcross.sh" > $T/mkcross.log 2>&1 &&
       "$TOP/mini-commander/build-toaru-cmini.sh" > $T/mc-toaru.log 2>&1 &&
       "$TOP/tiny-ide/build-toaru-cmini.sh" > $T/tide-toaru.log 2>&1 &&
-      "$TOP/toaruos-tools/mkramdisk.sh" > $T/mkramdisk.log 2>&1; then
+      "$TOP/toaruos-tools/mkramdisk.sh" > $T/mkramdisk.log; then
       CMINI_OK=true
       # vzor pro libc64.asm: tentyz program na Linuxu (pasm -c, gcc, glibc)
       mkdir -p $T/cmini-ref
