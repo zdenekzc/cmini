@@ -410,7 +410,7 @@ def source_modules (base_dir) :
            "$(MAKE) test-lexer",
            "VYSTUP_TOARU=0 sh tests/output.sh", phony = True)
    # ToaruOS v QEMU (test 04 a check.sh) - jen po zmene cmini, asm nebo toaruos-tools
-   d.rule ("test-toaru-all", "all", "sh tests/05-toaru.sh", "toaruos-tools/check.sh", phony = True)
+   d.rule ("test-toaru-all", "all", "sh tests/04-toaru.sh", "toaruos-tools/check.sh", phony = True)
 
    d.clean_dir ("$(top_srcdir)/_build", "$(top_srcdir)/_output")  # vystupy testu, tests/output.sh
 
@@ -493,12 +493,20 @@ def source_modules (base_dir) :
    d.prog_cflags ("-DNO_ASMJIT", "-DUSE_LEXER")
    d.prog_lib ("$(top_srcdir)/asm/libpasm.a")
 
-   # cmini.bin - prekladac c-mini: vystup pasm (vychozi) i C (-C, translate.c) - jeden program
-   # (ovladac instr_drv.c, front-end, translate.c, instr.c, behova knihovna cminirt/cminirt.c, asm/libpasm.a)
+   # cmini.bin - the compiler with the pasm/asmlist back end only
+   # (driver instr_drv.c, shared front.c, front-end, instr.c, runtime cminirt/cminirt.c,
+   # asm/libpasm.a)
    d.program ("cmini.bin")
-   d.prog_source ("instr_drv.c", "translate.c", "decl.c", "expr.c", "stat.c", "sem.c", "util.c", "lexer.c", "instr.c", "$(top_srcdir)/cminirt/cminirt.c")
+   d.prog_source ("instr_drv.c", "front.c", "decl.c", "expr.c", "stat.c", "sem.c", "util.c", "lexer.c", "instr.c", "$(top_srcdir)/cminirt/cminirt.c")
    d.prog_cflags ("-DUSE_LEXER")
    d.prog_lib ("$(top_srcdir)/asm/libpasm.a")
+
+   # cmini-translate.bin - translation to C (translate.c); NOT part of all,
+   # tests that need it build it with "make -C cmini cmini-translate.bin"
+   d.program ("cmini-translate.bin")
+   d.prog_source ("translate_drv.c", "front.c", "translate.c", "decl.c", "expr.c", "stat.c", "sem.c", "util.c", "lexer.c")
+   d.prog_cflags ("-DUSE_LEXER")
+   d.prog_not_in_all ()
 
 # ------------------------------ main program ------------------------------
 

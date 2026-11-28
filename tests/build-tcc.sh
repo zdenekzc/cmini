@@ -4,7 +4,7 @@
 #   tests/build-tcc.sh                TCC=/opt/tinycc/bin/tcc, CHIBICC=chibicc (kdyz jsou)
 #   TCC=... CHIBICC=... tests/build-tcc.sh
 #
-#   1. TinyCC prelozi cmini.bin (instr_drv.c, translate.c, front-end, instr.c, cminirt.c) a assembler
+#   1. TinyCC prelozi cmini.bin (instr_drv.c, front.c, front-end, instr.c, cminirt.c) a assembler
 #      pasm jako knihovnu (asm/*.c) - vse ciste C bez .eh_frame
 #   2. cmini.bin z TinyCC prelozi tests/examples/*.cc: stejny text pro assembler jako
 #      cmini/cmini.bin z gcc, vystup programu proti vzoru
@@ -31,9 +31,9 @@ then
 fi
 make -s -C cmini cmini.bin > /dev/null || exit 1   # referencni cmini.bin z gcc
 
-CMINI_SRC="cmini/instr_drv.c cmini/translate.c cmini/decl.c cmini/expr.c cmini/stat.c cmini/sem.c cmini/util.c cmini/lexer.c cmini/instr.c cminirt/cminirt.c"
+CMINI_SRC="cmini/instr_drv.c cmini/front.c cmini/decl.c cmini/expr.c cmini/stat.c cmini/sem.c cmini/util.c cmini/lexer.c cmini/instr.c cminirt/cminirt.c"
 PASM_SRC="pasmlib code def expr inst key oth asmlist"
-SELF_SRC="instr_drv.c translate.c decl.c expr.c stat.c sem.c util.c lexer.c instr.c"
+SELF_SRC="instr_drv.c front.c decl.c expr.c stat.c sem.c util.c lexer.c instr.c"
 
 result ()   # $1 = popis, $2 = 0 / 1
 {

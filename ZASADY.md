@@ -63,6 +63,15 @@ Pravidla pro `_output/`:
   bootstrap pro TinyCC/chibicc je jen samostatný cíl `test-tcc`. Automatický výběr
   podle pořadí ještě není implementovaný.
 
+## Jazyk komentářů a textů
+
+- **Nové komentáře a texty** v kódu píšeme **anglicky**: komentáře v `.c`/`.h`/`.cc`/`.py`/`.sh`,
+  hlavičky souborů, chybové a nápovědné zprávy skriptů i testů, dokumentace skriptů.
+- Platí pro celý strom (`cmini`, `asm`, `mini-commander`, `tiny-ide`, `toaruos-tools`,
+  `cstencils`, `tests`) bez výjimek.
+- Česky zůstávají jen texty, které už existují (historické části README, `CHANGELOG.txt`,
+  tyto zásady).
+
 ## Překladač cmm (C--, Cmm) a CDL - pro všechny projekty
 
 - Překladač **cmm** (C--) je řízený gramatikou `cmm.g`, v adresáři `cmm/`.
@@ -81,14 +90,14 @@ Pravidla pro `_output/`:
 ## cminirt (behova knihovna)
 
 - Adresar `cminirt/` v hlavnim adresari: `cminirt.c` a `cminirt.h`. Pouziva ho cmini (programy
-  z `-C`, `cmini.bin` s `-C`) i prekladac cmm v navazujicich projektech.
+  z `-C`, `cmini-translate.bin` s `-C`) i prekladac cmm v navazujicich projektech.
 - Prekladace a skripty ho berou z `cminirt/`; `-I cminirt` je nutne, kdekoli se prekladaji programy
   z `-C` (`#include "cminirt.h"`).
 
 ## cstencils
 
 - `cstencils/` je experiment napsaný v CMini. Z deklarací tříd generuje například spojové seznamy.
-  Je součástí tohoto projektu (testy 04 a 05).
+  Je součástí tohoto projektu (testy 03 a 04).
 - `cstencils/code.h` obsahuje třídy `Class`, `Func`, ..., které tvoří základ pro generování
   zdrojových textů v parser generátoru napsaném v C-- (`gram/`). Z tohoto experimentu má
   vzniknout základ pro CDL (viz výše).
@@ -99,10 +108,13 @@ Pravidla pro `_output/`:
   z `asm/asmlist.h` (`AsmProgram`, `AsmIns2`, `AsmLabel`, ...) a pasm ho přečte přímo
   (`AsmAssemble`, fáze 2). Text pro assembler (`AsmPrint`, `-o x.asm`, `-S`) je jen
   výstup navíc. Pro srovnání existuje fáze 1: `CPARSER_ASMLIST=text` (`AsmAssembleText`).
-  Na x86_64 Linux je to **preferovaná varianta**.
-- **b) translate**: `cmini/translate.c`. CMini přeloží zdroj na prostý C. Používá se na
+  Na x86_64 Linux je to **preferovaná varianta**. `cmini.bin` je **vždy** tato varianta
+  (asm/asmlist); `-C` v něm není.
+- **b) translate**: `cmini/translate.c`, samostatný program `cmini-translate.bin`
+  (ovladač `translate_drv.c`). CMini přeloží zdroj na prostý C. Používá se na
   jiných architekturách a OS (např. ToaruOS pro Arm64). Na x86_64 Linux se používá jen
-  v testech této varianty.
+  v testech této varianty. Není součástí `make all`; přeloží ho až testy, které ho
+  skutečně potřebují (`make -C cmini cmini-translate.bin`).
 - **c) AsmJit**: `cmini/instr1.cc` … `instr5.cc`. Zůstává jen jako ilustrace vývoje
   CMini. **Netestuje se.**
 

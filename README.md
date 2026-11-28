@@ -8,7 +8,7 @@ CMini is a compiler for a subset of C++:
 - predefined types `Sequence<T>`, `Dictionary<K,V>` and `std::string`
 
 - Generates x86-64 code.
-- Translates the source text to plain C (`-C`).
+- Translates the source text to plain C (`cmini-translate.bin -C`).
 
 - ToaruOS: CMini and PAsm run inside the ToaruOS hobby operating system. `toaruos-tools/selfhost.sh`
   cross-compiles them with CMini itself, with no TinyCC and no `-C` translation.
@@ -22,7 +22,7 @@ CMini is a compiler for a subset of C++:
   (The former crash "`TextAdd` after `realloc`" was a code generator bug: a local initializer
   `{ ... }` stored `int` members as 8 bytes and cleared the neighbouring variable.)
 
-The code generator `instr.c` produces the x86-64 code, and `translate.c` translates the source to plain C. Both files were written by AI.
+The code generator `instr.c` produces the x86-64 code (`cmini.bin`), and `translate.c` translates the source to plain C (`cmini-translate.bin`). Both files were written by AI.
 
 It is written in C and compiles itself (self-hosting).
 
@@ -151,7 +151,8 @@ Full list of switches: `./cmini/cmini.bin -h`.
 ```sh
 ./cmini/cmini.bin -o prog prog.cc      # executable prog, assembler text prog.asm, listing prog.lst
 ./cmini/cmini.bin -c prog.o prog.cc    # ELF64 object file (for gcc / glibc)
-./cmini/cmini.bin -C prog.cc           # translate CMini to C (output to stdout, -o out.c)
+make -C cmini cmini-translate.bin      # the translator is not part of "make all"
+./cmini/cmini-translate.bin -C prog.cc # translate CMini to C (output to stdout, -o out.c)
 ./asm/pasm.bin -e prog.asm             # assemble an assembler file to an executable
 ```
 
@@ -159,9 +160,9 @@ Full list of switches: `./cmini/cmini.bin -h`.
 
 | Directory | Contents |
 |---|---|
-| `cmini/` | the compiler: lexer, parser (`decl.c`, `expr.c`, `sem.c`), generator `instr.c`, translator to C (`translate.c`), runtime (`cminirt.c`) |
+| `cmini/` | the compiler: lexer, parser (`decl.c`, `expr.c`, `sem.c`), generator `instr.c` (`cmini.bin`), translator to C (`translate.c`, `cmini-translate.bin`), runtime (`cminirt.c`) |
 | `asm/` | the assembler PAsm and its library `libpasm.a`, tests in `asm/tests` |
-| `tests/` | test scripts (`01-04`, `build-*.sh`, `output.sh`), `tests/examples/*.cc` with expected outputs in `tests/examples/expected/` |
+| `tests/` | test scripts (`01-06`, `build-*.sh`, `output.sh`), `tests/examples/*.cc` with expected outputs in `tests/examples/expected/` |
 | `toaruos-tools/` | CMini and PAsm for the ToaruOS operating system (guest sources, `check.sh`) |
 | `_output/` | files for students, created by `make vystup` (not in backups) |
 | `_build/` | object files and test outputs (created by `make`, removed by `make clean`) |

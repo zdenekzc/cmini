@@ -35,7 +35,7 @@ test-all: all
 	VYSTUP_TOARU=0 sh tests/output.sh
 
 test-toaru-all: all
-	sh tests/05-toaru.sh
+	sh tests/04-toaru.sh
 	toaruos-tools/check.sh
 
 # CLEAN

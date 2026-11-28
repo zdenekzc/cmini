@@ -12,10 +12,11 @@ the comments next to each function; this text gives the overview.
 
 translate.c is the second back end of CMini. Instead of machine code (instr.c)
 it writes a C program (C99) that uses the runtime library cminirt.h and
-cminirt.c. It is started with the -C switch of cmini.bin:
+cminirt.c. It is the separate program cmini-translate.bin (the -C switch is
+accepted for compatibility and has no effect):
 
-    cmini.bin -C [-I directory] [-iquote directory] [-D name[=value]]
-              [-o output.c] file.cc
+    cmini-translate.bin [-C] [-I directory] [-iquote directory] [-D name[=value]]
+                        [-o output.c] file.cc
 
 Without -o the C text goes to standard output. The result is compiled with gcc
 or TinyCC; cminirt.c must be linked with it.
@@ -253,7 +254,7 @@ translator; the output goes through the BUF sections instead.
     changing a loop or jump                  St, FindLoop, RangeForStat
     changing the header list                 Translate, AddHeader, SystemHeader
     changing names in the C text             ClsName, MethodName, FuncName, FName
-    testing                                  tests/03-cmini-translate.sh, tests/examples/*.cc
+    testing                                  tests/05-cmini-translate.sh, tests/examples/*.cc
                                              (translated to C, compiled, compared
                                              with tests/examples/expected/)
 

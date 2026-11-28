@@ -1,5 +1,5 @@
 #!/bin/sh
-# cmini-tests.sh - tests of cmini and cstencils inside ToaruOS (the same steps as tests/05-toaru.sh)
+# cmini-tests.sh - tests of cmini and cstencils inside ToaruOS (the same steps as tests/04-toaru.sh)
 #
 #   in the terminal of ToaruOS:   /extras/cmini-tests.sh   (or: sh /extras/cmini-tests.sh)
 #

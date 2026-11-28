@@ -4,7 +4,7 @@
 # CESTA (hostitel: toaruos-tools/mktcc-aarch64.sh, mkarm64.sh; VM: toaruos-tools/arm64-common.sh):
 #   1. release ToaruOS 2.3.2 aarch64 (_import/download/aarch64-virt.zip, stahne se)
 #   2. cross TinyCC pro aarch64 (_build/tcc-aarch64), guest tcc (/extras/tcc/bin/tcc)
-#   3. cmini -C (translate) tests/examples/*.cc => C; cminirt.o pro aarch64
+#   3. cmini-translate.bin -C tests/examples/*.cc => C; cminirt.o pro aarch64
 #      => ramdisk _build/ramdisk-a64.tgz (/extras/examples, /extras/build-examples.sh)
 #   4. QEMU bez okna, seriova linka: VM se prelozi a spusti /extras/build-examples.sh
 #      (tcc v ToaruOS prelozi kazdy .c s cminirt.o a program se spusti)
@@ -27,9 +27,11 @@ for c in qemu-system-aarch64 unzip fakeroot gzip python3
 do
    command -v $c > /dev/null || { echo "  toaruos-arm64: chybi $c - preskoceno" >&2; finish; }
 done
-# cmini -C (translate) a zkontrolovane vzory; navratovy kod programu se porovna s RC=0
+# cmini-translate.bin -C and the checked patterns; the exit status is compared with RC=0
 for p in $ARM_PROGRAMS; do echo "RC=0" > $T/exp/rc-$p.txt; done
 echo "RC=7" > $T/exp/rc-rc_check.txt
+# the translator is not part of "make all": aarch64 translation needs it
+make -s -C "$TOP/cmini" cmini-translate.bin || { echo "  toaruos-arm64: cmini-translate.bin failed to build" >&2; FAILED=1; finish; }
 
 if ! a64_prepare
 then

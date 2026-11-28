@@ -4,7 +4,7 @@
 #   tests/run-arm64.sh          priprava (zip, cross TinyCC, payload) a VM v okne; VM zustava bezet
 #   VISIBLE=0 tests/run-arm64.sh   bez okna (seriova linka), skript skonci, VM bezi na pozadi
 #
-# V guestovi: /extras/build-examples.sh (prelozi a spusti priklady z cmini -C),
+# V guestovi: /extras/build-examples.sh (prelozi a spusti priklady z cmini-translate.bin -C),
 # /extras/tcc/bin/tcc (TinyCC v ToaruOS), /bin/tcc.
 # Zastaveni:  pkill -f qemu-system-aarch64
 # Test:       tests/06-toaru-arm64.sh
@@ -21,6 +21,7 @@ A64_TOP=$TOP
 export A64_TOP
 . "$TOP/toaruos-tools/arm64-common.sh"
 
+make -s -C "$TOP/cmini" cmini-translate.bin || { echo "error: cmini-translate.bin selhal" >&2; exit 1; }
 a64_prepare || { echo "error: priprava ToaruOS aarch64 selhala" >&2; exit 1; }
 mkdir -p "$A64_WORK"
 a64_start "${VISIBLE:-1}" "$A64_WORK/qemu.log"

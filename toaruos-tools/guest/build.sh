@@ -29,7 +29,7 @@ ar rcs libpasm.a obj/a_pasmlib.o obj/a_code.o obj/a_def.o obj/a_expr.o obj/a_ins
 
 # 2) cmini compiler: driver, front-end, instruction generator, own runtime
 gcc -O1 -std=gnu11 -w -DUSE_LEXER -Icmini -Iasm -c cmini/instr_drv.c -o obj/c_instr_drv.o
-gcc -O1 -std=gnu11 -w -DUSE_LEXER -Icmini -Iasm -c cmini/translate.c -o obj/c_translate.o
+gcc -O1 -std=gnu11 -w -DUSE_LEXER -Icmini -Iasm -c cmini/front.c -o obj/c_front.o
 gcc -O1 -std=gnu11 -w -DUSE_LEXER -Icmini -Iasm -c cmini/decl.c -o obj/c_decl.o
 gcc -O1 -std=gnu11 -w -DUSE_LEXER -Icmini -Iasm -c cmini/expr.c -o obj/c_expr.o
 gcc -O1 -std=gnu11 -w -DUSE_LEXER -Icmini -Iasm -c cmini/stat.c -o obj/c_stat.o
@@ -39,7 +39,7 @@ gcc -O1 -std=gnu11 -w -DUSE_LEXER -Icmini -Iasm -c cmini/lexer.c -o obj/c_lexer.
 gcc -O1 -std=gnu11 -w -DUSE_LEXER -Icmini -Iasm -c cmini/instr.c -o obj/c_instr.o
 gcc -O1 -std=gnu11 -w -DUSE_LEXER -Icmini -Iasm -c cminirt/cminirt.c -o obj/c_cminirt.o
 
-gcc obj/c_instr_drv.o obj/c_translate.o obj/c_decl.o obj/c_expr.o obj/c_stat.o obj/c_sem.o obj/c_util.o obj/c_lexer.o obj/c_instr.o obj/c_cminirt.o libpasm.a -o cmini.bin -lm
+gcc obj/c_instr_drv.o obj/c_front.o obj/c_decl.o obj/c_expr.o obj/c_stat.o obj/c_sem.o obj/c_util.o obj/c_lexer.o obj/c_instr.o obj/c_cminirt.o libpasm.a -o cmini.bin -lm
 ls -l cmini.bin
 
 # 3) pasm assembler as a standalone program (switches -e, -l, -c and -T)

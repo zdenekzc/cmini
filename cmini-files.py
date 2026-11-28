@@ -81,7 +81,7 @@ ext_clean_list = (
    ".la",
    ".a",
    ".so",
-   ".bin",        # cmini/test_instr.bin, cmini/cmini.bin -C, asm/pasm.bin
+   ".bin",        # cmini/test_instr.bin, cmini/cmini-translate.bin -C, asm/pasm.bin
 
    ".gch",
    ".pch",

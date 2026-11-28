@@ -73,7 +73,7 @@ for f in "$PUSH"/*; do
         *) cp -a "$f" "$WORK/ramdisk/extras/" ;;
     esac
 done
-# /extras/cmini-tests.sh: the steps of tests/05-toaru.sh for the ToaruOS terminal
+# /extras/cmini-tests.sh: the steps of tests/04-toaru.sh for the ToaruOS terminal
 # (executable with #!/bin/sh, so it runs as /extras/cmini-tests.sh)
 cp "$DIR/guest/cmini-tests.sh" "$WORK/ramdisk/extras/cmini-tests.sh"
 chmod 755 "$WORK/ramdisk/extras/cmini-tests.sh"

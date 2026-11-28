@@ -1,5 +1,5 @@
 #!/bin/sh
-# 05-toaru.sh - _output/toaruos/: cmini (varianta pasm) v ToaruOS x86_64 (bez gcc, v bezici VM)
+# 04-toaru.sh - _output/toaruos/: cmini (varianta pasm) v ToaruOS x86_64 (bez gcc, v bezici VM)
 #
 # CESTA (kroky 1-2 na hostiteli, 3-4 v bezici VM ToaruOS 2.3.2; funkce cmini_* v toaruos-common.sh):
 #   1. na hostiteli (_build/ v hlavnim adresari):
@@ -22,9 +22,10 @@
 #   4. VM se zastavi (s oknem, DISPLAY nastaveno, zustava bezet); vystupy:
 #      _output/toaruos/{guest-*.out,cross-*.out,build-new-*.out,cst-*.out,guest.log}
 #
-# Translate (cmini -C) se netestuje; translate.c je v cmini.bin jen kvuli volbe -C v instr_drv.c.
+# Translate (cmini-translate.bin -C) se tu netestuje - patri k tests/05-cmini-translate.sh;
+# cmini.bin je jen prekladac s pasm backendem.
 # cout se neprekladá krizove: ToaruOS libc nema dprintf (cerr).
-# Pro ToaruOS ARM64 bude tests/06-toaru-arm64 (zatim neexistuje).
+# Pro ToaruOS ARM64 je tests/06-toaru-arm64.sh.
 # Vyzaduje qemu-system-x86_64, ISO ToaruOS (_import/) a
 # toaru-vm.sh. Bez nich se test jen preskoci (vypise se proc).
 # POZOR: jeden NN-*.sh se nesmi spustit dvakrat soucasne (sdileji _output a _build/vystup).

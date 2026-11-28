@@ -31,9 +31,9 @@ cp -a "$TOP"/asm/*.c "$TOP"/asm/*.h "$TOP"/asm/*.txt "$TOP"/asm/Makefile "$OUT/a
 cp -a "$TOP/asm/tests" "$OUT/asm/"
 rm -rf "$OUT/asm/tests/_"*                 # any test outputs
 
-# cmini compiler in C (build.sh compiles instr_drv decl expr stat sem lexer instr cminirt)
-for f in decl.c decl.h expr.c ifc.h inp.c inp.h instr.c instr_drv.c translate.c \
-         instr.h lex.c lexer.c lexer.h lex.h out.c out.h sem.c stat.c translate.c util.c util.h; do
+# cmini compiler in C (build.sh compiles instr_drv front decl expr stat sem lexer instr cminirt)
+for f in decl.c decl.h expr.c front.c front.h ifc.h inp.c inp.h instr.c instr_drv.c \
+         instr.h lex.c lexer.c lexer.h lex.h out.c out.h sem.c stat.c translate.c translate_drv.c util.c util.h; do
     cp -a "$TOP/cmini/$f" "$OUT/cmini/"
 done
 # the runtime library of the translated programs lives in cminirt/ (same place in the package)

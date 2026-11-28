@@ -1,5 +1,5 @@
 #!/bin/sh
-# 04-cstencils.sh - _output/cstencils/: generator cstencils (.t => .hpp, .cpp) prelozeny cmini
+# 03-cstencils.sh - _output/cstencils/: generator cstencils (.t => .hpp, .cpp) prelozeny cmini
 #   (cmini -c => objekt pres pasm, glibc, gcc slinkuje s cminirt/cminirt.c);
 #   vystup cmini se porovna bajtove s vystupem stejneho generatoru prelozeneho g++
 #

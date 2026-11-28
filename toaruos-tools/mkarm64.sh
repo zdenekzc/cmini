@@ -8,7 +8,8 @@
 #   /extras/tcc/lib, include    its sysroot (crt0.o, crti.o, crtn.o, libc.a, libtcc1.a)
 #   /extras/examples, /extras/build-examples.sh   (toaruos-tools/mkexamples.sh a64)
 #
-# Needs: _build/tcc-aarch64 (toaruos-tools/mktcc-aarch64.sh), ./cmini/cmini.bin (make),
+# Needs: _build/tcc-aarch64 (toaruos-tools/mktcc-aarch64.sh),
+#        ./cmini/cmini-translate.bin (make -C cmini cmini-translate.bin),
 #        fakeroot (owners and setuid bits of the release ramdisk stay as they are).
 set -euo pipefail
 
@@ -38,14 +39,14 @@ install -m 644 "$TCC/lib/crt0.o" "$TCC/lib/crti.o" "$TCC/lib/crtn.o" \
                "$TCC/lib/libc.a" "$TCC/lib/libtcc1.a" "$W/extras/tcc/lib/"
 cp -a "$TCC/lib/include" "$W/extras/tcc/include"
 
-echo "== /extras/examples (cmini -C, cminirt.o for aarch64) and /extras/build-examples.sh"
+echo "== /extras/examples (cmini-translate.bin -C, cminirt.o for aarch64) and /extras/build-examples.sh"
 TCC="$TCC/bin/aarch64-toaru-tcc" "$TOP/toaruos-tools/mkexamples.sh" "$W/extras" a64 > /dev/null
 
-echo "== tiny-ide and mini-commander: cmini -C (translate), compiled by the cross TinyCC"
+echo "== tiny-ide and mini-commander: cmini-translate.bin -C, compiled by the cross TinyCC"
 # the same sources and the same curses layer (toaruos-tools/cmini-curses) as the x86_64 builds;
 # uintmax_t: cmini_libc.h (mini-commander) declares it as long unsigned int, the sysroot as tcc's type
 CTCC="$TCC/bin/aarch64-toaru-tcc"
-CMINI=$TOP/cmini/cmini.bin
+CMINI=$TOP/cmini/cmini-translate.bin
 TCCFLAGS=(-B"$TCC/lib" -w -I "$TOP/cminirt" -include "$TOP/toaruos-tools/tcc/cmini-compat.h" "-D__UINTMAX_TYPE__=long unsigned int" -D TOARU_CMINI=1 -D calloc=cm_calloc)
 A=$B/arm64/apps
 rm -rf "$A"; mkdir -p "$A/tide" "$A/mc"
@@ -54,14 +55,14 @@ SHIM=$TOP/toaruos-tools/cmini-curses
     cd "$TOP/tiny-ide"
     for f in main app editor runner ui dialogs
     do "$CMINI" -C -I "$TOP/cmini/ownheaders" -I "$SHIM" -D TOARU_CMINI=1 -D calloc=cm_calloc -o "$A/tide/$f.c" "$f.c" \
-          || { echo "error: cmini -C tiny-ide/$f.c" >&2; exit 1; }
+          || { echo "error: cmini-translate.bin -C tiny-ide/$f.c" >&2; exit 1; }
     done
 )
 (
     cd "$TOP/mini-commander"
     for f in mc cmd operations dialog filelist init panel ui view_edit progress
     do "$CMINI" -C -I "$TOP/mini-commander/cmini-toaru" -I "$SHIM" -D TOARU_CMINI=1 -D calloc=cm_calloc -o "$A/mc/$f.c" "$f.c" \
-          || { echo "error: cmini -C mini-commander/$f.c" >&2; exit 1; }
+          || { echo "error: cmini-translate.bin -C mini-commander/$f.c" >&2; exit 1; }
     done
 )
 for f in curses8 glue

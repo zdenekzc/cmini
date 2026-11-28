@@ -12,7 +12,7 @@
    and prints a program in C (C99), which uses the runtime library cminirt.h / cminirt.c.
 
    Usage:
-      cmini.bin -C [-I directory] [-D name[=value]] [-o output.c] file.cc
+      cmini-translate.bin -C [-I directory] [-D name[=value]] [-o output.c] file.cc
 
       -I  directory with replacement system headers (cmini/ownheaders/); declarations
           from these files are not written to the output, instead
@@ -40,6 +40,7 @@
 */
 
 #include "decl.h"
+#include "front.h"  /* TrStart (input and declarations, front.c) */
 #include "lexer.h"
 #include "util.h"   /* Dict, StrEq, ReadFile (shared with instr.c) */
 
@@ -3275,79 +3276,13 @@ static void Translate (FILE * f, const char * src_name)
      }
 }
 
-/*************************** INPUT AND OUTPUT *****************************/
-
-/* input and error reporting for cparser (inp.h, out.h) - separate program;
-   (part of cmini.bin; input and output for -C and for the pasm generator) */
-
-
-char ch;
-int  InpPos;
-int  InpColNum;
-int  InpLineNum;
-
-static char * InpText = NULL;
-static int    InpLen = 0;
-static const char * InpName = "";
-
-void OpenInp (void)
-{
-  InpPos = 0;
-  InpColNum = 0;
-  InpLineNum = 1;
-  NextChar ();
-}
-
-void CloseInp (void)
-{
-}
-
-void NextChar (void)
-{
-  if (InpPos < InpLen)
-  {
-     ch = InpText [InpPos ++];
-     InpColNum ++;
-     if (ch == '\n')
-     {
-        InpLineNum ++;
-        InpColNum = 0;
-     }
-  }
-  else
-  {
-     ch = 0;
-     InpPos ++;
-  }
-}
-
-void Error (char * msg)
-{
-  if (ReplaySymbol != NULL && ReplayFile != NULL)
-     fprintf (stderr, "%s:%d: error: %s\n", ReplayFile, ReplayLine, msg);
-  else if (LexCurrentFile () != NULL)
-     fprintf (stderr, "%s:%d: error: %s\n", LexCurrentFile (), LexCurrentLine (), msg);
-  else
-     fprintf (stderr, "%s:%d:%d: error: %s\n", InpName, InpLineNum, InpColNum, msg);
-  exit (1);
-}
-
-void OpenOut (void)   { }
-void CloseOut (void)  { }
-void Indent (void)    { }
-void Unindent (void)  { }
-void PutChr (char c)  { (void) c; }
-void PutStr (char * txt) { (void) txt; }
-void PutEol (void)    { }
-
-
 /********************************** API **********************************/
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/* called from cmini.bin (instr_drv.c): -I, -iquote, -D and -C (translation to C) */
+/* called from translate_drv.c: -I (replacement system headers) */
 
 void TrIncludeDir (char * dir)
 {
@@ -3355,40 +3290,11 @@ void TrIncludeDir (char * dir)
   if (IncCnt < 32) IncDirs [IncCnt ++] = dir;
 }
 
-void TrDefine (char * arg)
-{
-  char * def = Fmt ("%s", arg);
-  char * eq = strchr (def, '=');
-  if (eq != NULL) *eq = 0;
-  LexDefine (def, eq != NULL ? eq + 1 : "1");
-}
-
-/* loads source src and prepares lexer and declarations; 0 = ok */
-int TrStart (const char * src)
-{
-  long len = 0;
-  InpText = ReadFile (src, &len, true);   /* without null bytes */
-  InpLen = (int) len;
-  if (InpText == NULL)
-  {
-     fprintf (stderr, "cannot open %s\n", src);
-     return 2;
-  }
-  InpName = src;
-  LexFileName (src);
-  LexDefine ("__CPARSER__", "1");
-  Out = &SecFuncs;
-  OpenInp ();
-  OpenOut ();
-  InitLex ();
-  InitDecl ();
-  return 0;
-}
-
 /* -C: whole source src => C to out_name (NULL = stdout); 0 = ok */
 int TrTranslate (const char * src, const char * out_name)
 {
   if (TrStart (src) != 0) return 2;
+  Out = &SecFuncs;
 
   while (sy != EOS)
   {

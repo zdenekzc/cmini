@@ -151,7 +151,7 @@ $(BUILD)/test_instr_lexer/instr.o: instr.c
 
 cmini_OBJECTS = \
    $(BUILD)/cmini/instr_drv.o \
-   $(BUILD)/cmini/translate.o \
+   $(BUILD)/cmini/front.o \
    $(BUILD)/cmini/decl.o \
    $(BUILD)/cmini/expr.o \
    $(BUILD)/cmini/stat.o \
@@ -173,7 +173,7 @@ $(BUILD)/cmini/instr_drv.o: instr_drv.c
 	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) $(cmini_FLAGS) -MMD -MP -c $< -o $@
 
-$(BUILD)/cmini/translate.o: translate.c
+$(BUILD)/cmini/front.o: front.c
 	@mkdir -p $(@D)
 	$(CC) $(CFLAGS) $(cmini_FLAGS) -MMD -MP -c $< -o $@
 
@@ -211,12 +211,70 @@ $(BUILD)/cmini/cminirt.o: $(top_srcdir)/cminirt/cminirt.c
 
 -include $(cmini_OBJECTS:.o=.d)
 
+cmini_translate_OBJECTS = \
+   $(BUILD)/cmini-translate/translate_drv.o \
+   $(BUILD)/cmini-translate/front.o \
+   $(BUILD)/cmini-translate/translate.o \
+   $(BUILD)/cmini-translate/decl.o \
+   $(BUILD)/cmini-translate/expr.o \
+   $(BUILD)/cmini-translate/stat.o \
+   $(BUILD)/cmini-translate/sem.o \
+   $(BUILD)/cmini-translate/util.o \
+   $(BUILD)/cmini-translate/lexer.o
+
+cmini_translate_FLAGS = \
+   -DUSE_LEXER
+
+cmini_translate_LDFLAGS =
+
+cmini-translate.bin: $(cmini_translate_OBJECTS)
+	$(CC) $(CFLAGS) $(cmini_translate_OBJECTS) $(cmini_translate_LDFLAGS) -o $@
+
+$(BUILD)/cmini-translate/translate_drv.o: translate_drv.c
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) $(cmini_translate_FLAGS) -MMD -MP -c $< -o $@
+
+$(BUILD)/cmini-translate/front.o: front.c
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) $(cmini_translate_FLAGS) -MMD -MP -c $< -o $@
+
+$(BUILD)/cmini-translate/translate.o: translate.c
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) $(cmini_translate_FLAGS) -MMD -MP -c $< -o $@
+
+$(BUILD)/cmini-translate/decl.o: decl.c
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) $(cmini_translate_FLAGS) -MMD -MP -c $< -o $@
+
+$(BUILD)/cmini-translate/expr.o: expr.c
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) $(cmini_translate_FLAGS) -MMD -MP -c $< -o $@
+
+$(BUILD)/cmini-translate/stat.o: stat.c
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) $(cmini_translate_FLAGS) -MMD -MP -c $< -o $@
+
+$(BUILD)/cmini-translate/sem.o: sem.c
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) $(cmini_translate_FLAGS) -MMD -MP -c $< -o $@
+
+$(BUILD)/cmini-translate/util.o: util.c
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) $(cmini_translate_FLAGS) -MMD -MP -c $< -o $@
+
+$(BUILD)/cmini-translate/lexer.o: lexer.c
+	@mkdir -p $(@D)
+	$(CC) $(CFLAGS) $(cmini_translate_FLAGS) -MMD -MP -c $< -o $@
+
+-include $(cmini_translate_OBJECTS:.o=.d)
+
 # CLEAN
 
 CLEAN_FILES = \
    test_instr.bin \
    test_instr_lexer.bin \
-   cmini.bin
+   cmini.bin \
+   cmini-translate.bin
 
 clean:
 	- rm -rf $(BUILD)

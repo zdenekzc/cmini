@@ -25,7 +25,7 @@ export PASM_LIBDIR=/lib
 
 echo "== 2. cmini: compiler sources (cmini -L /lib -c)"
 /extras/cmini-toaru/bin/cmini.bin -L /lib -I include -I cmini -I asm -D calloc=cm_calloc -c /extras/new-cmini/obj/c_instr_drv.o cmini/instr_drv.c
-/extras/cmini-toaru/bin/cmini.bin -L /lib -I include -I cmini -I asm -D calloc=cm_calloc -c /extras/new-cmini/obj/c_translate.o cmini/translate.c
+/extras/cmini-toaru/bin/cmini.bin -L /lib -I include -I cmini -I asm -D calloc=cm_calloc -c /extras/new-cmini/obj/c_front.o cmini/front.c
 /extras/cmini-toaru/bin/cmini.bin -L /lib -I include -I cmini -I asm -D calloc=cm_calloc -c /extras/new-cmini/obj/c_decl.o cmini/decl.c
 /extras/cmini-toaru/bin/cmini.bin -L /lib -I include -I cmini -I asm -D calloc=cm_calloc -c /extras/new-cmini/obj/c_expr.o cmini/expr.c
 /extras/cmini-toaru/bin/cmini.bin -L /lib -I include -I cmini -I asm -D calloc=cm_calloc -c /extras/new-cmini/obj/c_stat.o cmini/stat.c
@@ -53,7 +53,7 @@ cd /extras/new-cmini/obj
 /extras/cmini-toaru/bin/pasm.bin -c setjmp_alias.asm
 
 echo "== 5. link (pasm -k, ToaruOS crt0/crti/libc.a/crtn)"
-/extras/cmini-toaru/bin/pasm.bin -k /extras/new-cmini/bin/cmini.bin /lib/crt0.o /lib/crti.o c_instr_drv.o c_translate.o c_decl.o c_expr.o c_stat.o c_sem.o c_util.o c_lexer.o c_instr.o a_pasmlib.o a_code.o a_def.o a_expr.o a_inst.o a_key.o a_oth.o a_asmlist.o setjmp_alias.o calloc_zero.o /lib/libc.a /lib/crtn.o
+/extras/cmini-toaru/bin/pasm.bin -k /extras/new-cmini/bin/cmini.bin /lib/crt0.o /lib/crti.o c_instr_drv.o c_front.o c_decl.o c_expr.o c_stat.o c_sem.o c_util.o c_lexer.o c_instr.o a_pasmlib.o a_code.o a_def.o a_expr.o a_inst.o a_key.o a_oth.o a_asmlist.o setjmp_alias.o calloc_zero.o /lib/libc.a /lib/crtn.o
 /extras/cmini-toaru/bin/pasm.bin -k /extras/new-cmini/bin/pasm.bin /lib/crt0.o /lib/crti.o a_pasm.o a_pasmlib.o a_code.o a_def.o a_expr.o a_inst.o a_key.o a_oth.o a_asmlist.o setjmp_alias.o calloc_zero.o /lib/libc.a /lib/crtn.o
 cp c_cminirt.o /extras/new-cmini/lib/cminirt.o
 cp -r /extras/cmini-src/include /extras/new-cmini/include

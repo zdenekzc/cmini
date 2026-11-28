@@ -58,12 +58,11 @@ cmini_pasm ()   # zdroj prekladace => objekt (cparser s preprocesorem, -c) a tex
       [ -s $T/src.o ] && cp $T/src.asm $2.asm
 }
 sources cmini-pasm cmini_pasm
-# c-mini sam sebou: prekladac cmini.bin (instr_drv.c + front-end + instr.c + asm/libpasm.a).
-# translate.c se do linku dava jen kvuli instr_drv.c (TrTranslate, TrIncludeDir pro volbu -C),
-# test volbu -C ani translate.c nepouziva
+# c-mini sam sebou: prekladac cmini.bin (instr_drv.c + front.c + front-end + instr.c +
+# asm/libpasm.a); translate.c je jen v cmini-translate.bin, tady se nepouziva
 D=$V/cmini-pasm/cmini; mkdir -p $D
 (cd cmini && $TOP/cmini/test_instr_lexer.bin -0 -I . -I $TOP/cmini/ownheaders -o $D/cmini.bin \
-    instr_drv.c translate.c decl.c expr.c stat.c sem.c util.c lexer.c instr.c $TOP/asm/libpasm.a > /dev/null 2>&1) &&
+    instr_drv.c front.c decl.c expr.c stat.c sem.c util.c lexer.c instr.c $TOP/asm/libpasm.a > /dev/null 2>&1) &&
    $D/cmini.bin -I cmini/ownheaders -o $T/self-dama $EX/dama.cc > /dev/null 2>&1 &&
    ./cmini/test_instr_lexer.bin -0 -I cmini/ownheaders -o $T/ref-dama $EX/dama.cc > /dev/null 2>&1 &&
    cmp -s $T/self-dama.asm $T/ref-dama.asm &&

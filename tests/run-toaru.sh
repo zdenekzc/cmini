@@ -11,7 +11,7 @@
 #
 # Needs a graphical display (DISPLAY or WAYLAND_DISPLAY). The tools are in
 # /extras of the ramdisk (/extras/cmini-toaru, /extras/cmini-src, /extras/cstencils).
-# The tests of cmini and cstencils (the steps of tests/05-toaru.sh) are in the ToaruOS
+# The tests of cmini and cstencils (the steps of tests/04-toaru.sh) are in the ToaruOS
 # terminal:   /extras/cmini-tests.sh   (the results go to /extras/tmp).
 #
 # Stop the VM:  WORK=_build/vm-run toaruos-tools/toaru-vm.sh stop

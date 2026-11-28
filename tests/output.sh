@@ -7,9 +7,10 @@
 #
 #   a) 01-asm          asm/tests/*.asm - assembler pasm
 #   b) 02-cmini-pasm    c-mini => pasm (cmini/instr.c): priklady, asm, cmini (sam sebou)
-#   c) 03-cmini-translate      totez pres C (cmini/translate.c)
-#   d) 04-cstencils    cstencils prelozeny cmini (glibc, pasm) = g++ build
-#   e) 05-toaru         cmini a pasm v ToaruOS (VM, bez okna); bez QEMU/ISO se preskoci
+#   c) 03-cstencils    cstencils prelozeny cmini (glibc, pasm) = g++ build
+#   d) 04-toaru         cmini a pasm v ToaruOS (VM, bez okna); bez QEMU/ISO se preskoci
+#   e) 05-cmini-translate      totez pres C (cmini/translate.c)
+#   f) 06-toaru-arm64  cmini translate v ToaruOS aarch64 (bez okna); bez nastroju se preskoci
 #
 # Adresar se nezalohuje - kdykoli se vytvori znovu.
 
@@ -33,14 +34,15 @@ chyby=""
 for s in tests/[0-9][0-9]-*.sh
 do
    case "${VYSTUP_TOARU:-1}:$s" in
-      0:tests/05-toaru*) echo "  (vynechano: $s - VYSTUP_TOARU=0)"; continue ;;
+      0:tests/04-toaru*|0:tests/06-toaru*) echo "  (vynechano: $s - VYSTUP_TOARU=0)"; continue ;;
    esac
    sh $s || { echo "  CHYBA  $s"; chyby="$chyby $(basename $s .sh)"; }
 done
 
 cat > $TOP/_output/README.txt <<'EOT'
 Vznikle soubory - vytvari tests/output.sh (make vystup) pomoci skriptu
-tests/01-asm.sh, 02-cmini-pasm.sh, 03-cmini-translate.sh, 04-cstencils.sh, 05-toaru.sh (kazdy lze
+tests/01-asm.sh, 02-cmini-pasm.sh, 03-cstencils.sh, 04-toaru.sh, 05-cmini-translate.sh,
+06-toaru-arm64.sh (kazdy lze
 spustit i samostatne - prepise jen svuj podadresar); adresar se nezalohuje,
 kdykoli se vytvori znovu.
 
@@ -61,13 +63,12 @@ cmini-pasm/        c-mini (cmini/instr.c): text pro assembler pasm (.asm),
                   cmini/cmini.bin - prekladac c-mini (instr_drv.c, front-end, instr.c)
                                   prelozeny sam sebou: stejny text pro assembler
                                   jako verze z g++ (i na svych zdrojich - pevny bod)
-                  cmini/cmini.bin -C - translate.c + front-end prelozeny c-mini
                   cmini/, asm/ - po souborech (test_instr_lexer.bin -0 -c -S, objekt
                                  prelozi pasm); asm/pasm.bin - assembler prelozeny c-mini
 cmini-translate/          c-mini => C (cmini/translate.c), behova knihovna cminirt/cminirt.c
-                  cmini/cmini.bin -C - translate.c prelozeny sam sebou;
+                  cmini/cmini-translate.bin -C - translate.c prelozeny sam sebou;
                                     na svych zdrojich da stejny C (pevny bod)
-toaruos/      cmini a pasm v ToaruOS (tests/05-toaru.sh): programy
+toaruos/      cmini a pasm v ToaruOS (tests/04-toaru.sh): programy
                   prelozene v ToaruOS, vystup se porovna se vzorem
 EOT
 

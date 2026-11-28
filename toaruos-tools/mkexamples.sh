@@ -5,7 +5,7 @@
 #
 # The same ten programs on both architectures (PROGRAMS), plus rc_check (main returns 7):
 #   <extras>/examples/<p>.cc       the cmini sources (for reading and for cmini inside ToaruOS)
-#   <extras>/examples/<p>.c        a64 only: cmini -C (translate) of <p>.cc, compiled by the guest tcc
+#   <extras>/examples/<p>.c        a64 only: cmini-translate.bin -C of <p>.cc, compiled by the guest tcc
 #   <extras>/examples/cminirt.h    a64 only: runtime header of the translated programs
 #   <extras>/examples/cminirt.o    a64 only: runtime for aarch64 (cross TinyCC)
 #   <extras>/build-examples.sh     compiles and runs them inside ToaruOS, output framed by
@@ -13,14 +13,15 @@
 #     x86:  /extras/cmini-toaru/bin/cmini.bin -L /lib (cmini and pasm inside ToaruOS)
 #     a64:  /extras/tcc/bin/tcc (TinyCC inside ToaruOS) on the translated C
 #
-# a64 needs: ./cmini/cmini.bin (make), TCC=<cross aarch64 tcc> (toaruos-tools/mktcc-aarch64.sh).
+# a64 needs: ./cmini/cmini-translate.bin (make -C cmini cmini-translate.bin),
+#            TCC=<cross aarch64 tcc> (toaruos-tools/mktcc-aarch64.sh).
 set -euo pipefail
 
 DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 TOP=$(cd "$DIR/.." && pwd)
 EXTRAS=${1:?usage: mkexamples.sh <extras-dir> x86|a64}
 FLAVOUR=${2:?usage: mkexamples.sh <extras-dir> x86|a64}
-CMINI=$TOP/cmini/cmini.bin
+CMINI=$TOP/cmini/cmini-translate.bin
 TCC=${TCC:-$TOP/_build/tcc-aarch64/bin/aarch64-toaru-tcc}
 TCCLIB=$(dirname "$(dirname "$TCC")")/lib
 PROGRAMS="dama classes avl btree jezdec veze heapsort quicksort strings dyncast"
@@ -37,11 +38,11 @@ printf '/* rc_check.cc - main returns 7: the exit status must come back to the s
 
 if [ "$FLAVOUR" = a64 ]
 then
-   [ -x "$CMINI" ] || die "missing $CMINI (make -C cmini)"
+   [ -x "$CMINI" ] || die "missing $CMINI (make -C cmini cmini-translate.bin)"
    [ -x "$TCC" ] || die "missing $TCC (toaruos-tools/mktcc-aarch64.sh)"
    for p in $PROGRAMS rc_check
    do
-      "$CMINI" -C -I "$TOP/cmini/ownheaders" -o "$E/$p.c" "$E/$p.cc" || die "cmini -C $p"
+      "$CMINI" -C -I "$TOP/cmini/ownheaders" -o "$E/$p.c" "$E/$p.cc" || die "cmini-translate -C $p"
    done
    cp "$TOP/cminirt/cminirt.h" "$E/"
    "$TCC" -B"$TCCLIB" -I "$TOP/cminirt" -c "$TOP/cminirt/cminirt.c" -o "$E/cminirt.o" 2> /dev/null \

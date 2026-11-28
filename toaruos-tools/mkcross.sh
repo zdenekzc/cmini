@@ -58,7 +58,7 @@ for f in pasmlib code def expr inst key oth asmlist; do
 done
 cc -I"$G/cmini" -I"$G/asm" -c "$G/asm/pasm.c" -o "$O/a_pasm.o"
 CMINI=""
-for f in instr_drv translate decl expr stat sem util lexer instr cminirt; do
+for f in instr_drv front decl expr stat sem util lexer instr cminirt; do
     cc -DUSE_LEXER -I"$G/cmini" -I"$G/asm" -c "$G/cmini/$f.c" -o "$O/c_$f.o"
     CMINI="$CMINI $O/c_$f.o"
 done

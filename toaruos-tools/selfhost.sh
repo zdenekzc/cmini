@@ -30,7 +30,7 @@ rm -rf "$B"; mkdir -p "$O" "$B/out/cmini/bin" "$B/out/cmini/lib" "$B/out/cmini/t
 # 1. objects for ToaruOS: cmini compiles each source (pasm backend, relocatable, -L /lib headers)
 cc() { "$CMINI" -L "$L" $CINC -I "$TOP/cmini" -I "$TOP/cminirt" -I "$TOP/asm" -D calloc=cm_calloc -c "$1" "$2" || die "cmini -c $1"; }
 CM=""
-for f in instr_drv translate decl expr stat sem util lexer instr; do
+for f in instr_drv front decl expr stat sem util lexer instr; do
     cc "$O/c_$f.o" "$TOP/cmini/$f.c"; CM="$CM $O/c_$f.o"
 done
 cc "$O/c_cminirt.o" "$TOP/cminirt/cminirt.c"

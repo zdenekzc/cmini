@@ -397,7 +397,7 @@ next to each use in the code.
     changing the program layout          startProgram, finishProgram
     changing class layout or vtables     structBytes, memberOffset, codeVtables
     changing the output for -c / -T / -L run, assemble, linkProg, linkToaru
-    checking the generator           tests/03-cmini-translate.sh, make test-quick,
+    checking the generator           tests/05-cmini-translate.sh, make test-quick,
                                      tests/examples/*.cc with tests/examples/expected/
 
 Related documents: CHANGELOG.txt (history of the generator, chapters 15 - 24 and
